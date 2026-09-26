@@ -26,6 +26,9 @@ type Transmitter struct {
 	paths    paths
 	now      func() time.Time
 	log      *slog.Logger
+	client   *http.Client
+	notify   *notifier
+	pushes   *pushState
 	origin   string // scheme://host of the issuer
 }
 
@@ -65,6 +68,15 @@ func New(cfg Config) (*Transmitter, error) {
 	if t.now == nil {
 		t.now = time.Now
 	}
+	t.client = cfg.HTTPClient
+	if t.client == nil {
+		t.client = &http.Client{Timeout: 10 * time.Second}
+	}
+	if t.cfg.LongPollTimeout <= 0 {
+		t.cfg.LongPollTimeout = 20 * time.Second
+	}
+	t.notify = newNotifier()
+	t.pushes = newPushState()
 	t.log = cfg.Logger
 	if t.log == nil {
 		t.log = slog.Default()
@@ -130,6 +142,8 @@ func (t *Transmitter) Handler() http.Handler {
 	mux.Handle("POST "+t.paths.removeSubject, t.authorized(AccessManage, t.removeSubject))
 
 	mux.Handle("POST "+t.paths.verification, t.authorized(AccessManage, t.requestVerification))
+
+	mux.Handle("POST "+t.paths.pollPrefix+"{stream_id}", t.authorized(AccessRead, t.poll))
 	return mux
 }
 

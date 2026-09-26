@@ -591,13 +591,13 @@ func TestSubjects(t *testing.T) {
 	if len(r.body) != 0 {
 		t.Errorf("add subject body = %s, want empty", r.body)
 	}
-	subs, _ := f.store.Subjects(context.Background(), stream.StreamID)
-	if len(subs) != 1 || !ssf.SubjectsEqual(subs[0], ssf.OpaqueSubject{ID: "valid"}) {
-		t.Fatalf("stored subjects = %v", subs)
+	rules, _ := f.store.SubjectRules(context.Background(), stream.StreamID)
+	if len(rules) != 1 || !rules[0].Included || !ssf.SubjectsEqual(rules[0].Subject, ssf.OpaqueSubject{ID: "valid"}) {
+		t.Fatalf("stored rules = %v", rules)
 	}
 	expect(t, f.do("POST", md.RemoveSubjectEndpoint, "alice", map[string]any{"stream_id": stream.StreamID, "subject": subject}), http.StatusNoContent)
-	if subs, _ := f.store.Subjects(context.Background(), stream.StreamID); len(subs) != 0 {
-		t.Errorf("subject not removed: %v", subs)
+	if rules, _ := f.store.SubjectRules(context.Background(), stream.StreamID); len(rules) != 1 || rules[0].Included {
+		t.Errorf("remove should leave an exclude rule: %v", rules)
 	}
 	expect(t, f.do("POST", md.AddSubjectEndpoint, "bob", map[string]any{"stream_id": stream.StreamID, "subject": subject}), http.StatusNotFound)
 }
@@ -609,7 +609,7 @@ func TestVerification(t *testing.T) {
 	ctx := context.Background()
 
 	expect(t, f.do("POST", md.VerificationEndpoint, "bob", map[string]any{"stream_id": stream.StreamID, "state": "abc"}), http.StatusNoContent)
-	queued, err := f.store.PendingEvents(ctx, stream.StreamID, 0)
+	queued, err := f.store.PendingEvents(ctx, stream.StreamID, 0, false)
 	if err != nil || len(queued) != 1 {
 		t.Fatalf("queued = %v, %v", queued, err)
 	}
@@ -646,11 +646,15 @@ func TestVerification(t *testing.T) {
 	f.now = f.now.Add(20 * time.Second)
 	expect(t, f.do("POST", md.VerificationEndpoint, "bob", map[string]any{"stream_id": stream.StreamID}), http.StatusNoContent)
 
-	// A disabled stream accepts the request but holds nothing.
+	// Disabling the stream discards what is queued, and a disabled stream
+	// accepts verification requests but holds nothing.
 	expect(t, f.do("POST", md.StatusEndpoint, "bob", map[string]any{"stream_id": stream.StreamID, "status": "disabled"}), http.StatusOK)
+	if queued, _ := f.store.PendingEvents(ctx, stream.StreamID, 0, false); len(queued) != 0 {
+		t.Errorf("disabling left %d events queued", len(queued))
+	}
 	f.now = f.now.Add(time.Minute)
 	expect(t, f.do("POST", md.VerificationEndpoint, "bob", map[string]any{"stream_id": stream.StreamID}), http.StatusNoContent)
-	if queued, _ := f.store.PendingEvents(ctx, stream.StreamID, 0); len(queued) != 2 {
+	if queued, _ := f.store.PendingEvents(ctx, stream.StreamID, 0, false); len(queued) != 0 {
 		t.Errorf("disabled stream queued an event: %d queued", len(queued))
 	}
 }

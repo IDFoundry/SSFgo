@@ -63,6 +63,18 @@ type QueuedEvent struct {
 	// SET is the signed compact serialization.
 	SET        string
 	EnqueuedAt time.Time
+	// Control marks a stream-updated event: it is delivered even while
+	// the stream is paused or disabled, because SSF 1.0 §8.1.5 requires
+	// the Receiver to be told the stream is stopping.
+	Control bool
+}
+
+// SubjectRule records a Receiver's request to include (Add Subject) or
+// exclude (Remove Subject) a subject from a stream (SSF 1.0 §8.1.3). A
+// subject no rule matches follows the Transmitter's default_subjects.
+type SubjectRule struct {
+	Subject  ssf.Subject
+	Included bool
 }
 
 // StreamStore persists a Transmitter's streams, their subjects, and the
@@ -79,6 +91,10 @@ type StreamStore interface {
 	// StreamsForReceiver returns every stream receiverID owns, oldest
 	// first. It returns an empty slice, not an error, if there are none.
 	StreamsForReceiver(ctx context.Context, receiverID string) ([]Stream, error)
+	// AllStreams returns every stream, oldest first. The Transmitter
+	// uses it to route emitted events and to find streams with SETs to
+	// push.
+	AllStreams(ctx context.Context) ([]Stream, error)
 	// UpdateStream applies update to the stored stream atomically and
 	// returns the result. If update returns an error, nothing is stored
 	// and that error is returned unchanged. update must not change the
@@ -88,18 +104,24 @@ type StreamStore interface {
 	// queued events.
 	DeleteStream(ctx context.Context, id string) error
 
-	// AddSubject adds s to a stream. Adding a subject already present
-	// (by ssf.SubjectsEqual) is not an error and stores no duplicate.
-	AddSubject(ctx context.Context, streamID string, s ssf.Subject) error
-	// RemoveSubject removes s from a stream. Removing a subject that is
-	// not present is not an error.
-	RemoveSubject(ctx context.Context, streamID string, s ssf.Subject) error
-	// Subjects returns a stream's subjects in the order they were added.
-	Subjects(ctx context.Context, streamID string) ([]ssf.Subject, error)
+	// SetSubjectRule records rule on a stream, replacing any earlier rule
+	// for an equal subject (by ssf.SubjectsEqual) rather than adding a
+	// second one.
+	SetSubjectRule(ctx context.Context, streamID string, rule SubjectRule) error
+	// SubjectRules returns a stream's rules, oldest first. A replaced
+	// rule keeps its original position.
+	SubjectRules(ctx context.Context, streamID string) ([]SubjectRule, error)
 
 	// Enqueue appends a SET to a stream's delivery queue.
 	Enqueue(ctx context.Context, streamID string, e QueuedEvent) error
 	// PendingEvents returns up to max queued SETs, oldest first, without
-	// removing them. max <= 0 means no limit.
-	PendingEvents(ctx context.Context, streamID string, max int) ([]QueuedEvent, error)
+	// removing them. max <= 0 means no limit. With controlOnly set it
+	// returns only Control events.
+	PendingEvents(ctx context.Context, streamID string, max int, controlOnly bool) ([]QueuedEvent, error)
+	// AckEvents removes the queued SETs with the given JTIs. Unknown JTIs
+	// are ignored: a Receiver may acknowledge a SET twice.
+	AckEvents(ctx context.Context, streamID string, jtis []string) error
+	// PurgeEvents removes every queued SET, for a stream that has been
+	// disabled (SSF 1.0 §8.1.2.1).
+	PurgeEvents(ctx context.Context, streamID string) error
 }

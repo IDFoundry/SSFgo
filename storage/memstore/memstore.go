@@ -20,10 +20,10 @@ type Store struct {
 }
 
 type entry struct {
-	stream   storage.Stream
-	order    int
-	subjects []ssf.Subject
-	queue    []storage.QueuedEvent
+	stream storage.Stream
+	order  int
+	rules  []storage.SubjectRule
+	queue  []storage.QueuedEvent
 }
 
 var _ storage.StreamStore = (*Store)(nil)
@@ -88,6 +88,22 @@ func (m *Store) StreamsForReceiver(_ context.Context, receiverID string) ([]stor
 	return out, nil
 }
 
+// AllStreams implements storage.StreamStore.
+func (m *Store) AllStreams(_ context.Context) ([]storage.Stream, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	all := make([]*entry, 0, len(m.streams))
+	for _, e := range m.streams {
+		all = append(all, e)
+	}
+	slices.SortFunc(all, func(a, b *entry) int { return a.order - b.order })
+	out := make([]storage.Stream, 0, len(all))
+	for _, e := range all {
+		out = append(out, clone(e.stream))
+	}
+	return out, nil
+}
+
 // UpdateStream implements storage.StreamStore.
 func (m *Store) UpdateStream(_ context.Context, id string, update func(*storage.Stream) error) (storage.Stream, error) {
 	m.mu.Lock()
@@ -116,44 +132,33 @@ func (m *Store) DeleteStream(_ context.Context, id string) error {
 	return nil
 }
 
-// AddSubject implements storage.StreamStore.
-func (m *Store) AddSubject(_ context.Context, streamID string, s ssf.Subject) error {
+// SetSubjectRule implements storage.StreamStore.
+func (m *Store) SetSubjectRule(_ context.Context, streamID string, rule storage.SubjectRule) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.streams[streamID]
 	if !ok {
 		return storage.ErrNotFound
 	}
-	for _, have := range e.subjects {
-		if ssf.SubjectsEqual(have, s) {
+	for i, have := range e.rules {
+		if ssf.SubjectsEqual(have.Subject, rule.Subject) {
+			e.rules[i].Included = rule.Included
 			return nil
 		}
 	}
-	e.subjects = append(e.subjects, s)
+	e.rules = append(e.rules, rule)
 	return nil
 }
 
-// RemoveSubject implements storage.StreamStore.
-func (m *Store) RemoveSubject(_ context.Context, streamID string, s ssf.Subject) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	e, ok := m.streams[streamID]
-	if !ok {
-		return storage.ErrNotFound
-	}
-	e.subjects = slices.DeleteFunc(e.subjects, func(have ssf.Subject) bool { return ssf.SubjectsEqual(have, s) })
-	return nil
-}
-
-// Subjects implements storage.StreamStore.
-func (m *Store) Subjects(_ context.Context, streamID string) ([]ssf.Subject, error) {
+// SubjectRules implements storage.StreamStore.
+func (m *Store) SubjectRules(_ context.Context, streamID string) ([]storage.SubjectRule, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.streams[streamID]
 	if !ok {
 		return nil, storage.ErrNotFound
 	}
-	return slices.Clone(e.subjects), nil
+	return slices.Clone(e.rules), nil
 }
 
 // Enqueue implements storage.StreamStore.
@@ -169,16 +174,45 @@ func (m *Store) Enqueue(_ context.Context, streamID string, q storage.QueuedEven
 }
 
 // PendingEvents implements storage.StreamStore.
-func (m *Store) PendingEvents(_ context.Context, streamID string, max int) ([]storage.QueuedEvent, error) {
+func (m *Store) PendingEvents(_ context.Context, streamID string, max int, controlOnly bool) ([]storage.QueuedEvent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.streams[streamID]
 	if !ok {
 		return nil, storage.ErrNotFound
 	}
-	n := len(e.queue)
-	if max > 0 && max < n {
-		n = max
+	var out []storage.QueuedEvent
+	for _, q := range e.queue {
+		if max > 0 && len(out) == max {
+			break
+		}
+		if !controlOnly || q.Control {
+			out = append(out, q)
+		}
 	}
-	return slices.Clone(e.queue[:n]), nil
+	return out, nil
+}
+
+// AckEvents implements storage.StreamStore.
+func (m *Store) AckEvents(_ context.Context, streamID string, jtis []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.streams[streamID]
+	if !ok {
+		return storage.ErrNotFound
+	}
+	e.queue = slices.DeleteFunc(e.queue, func(q storage.QueuedEvent) bool { return slices.Contains(jtis, q.JTI) })
+	return nil
+}
+
+// PurgeEvents implements storage.StreamStore.
+func (m *Store) PurgeEvents(_ context.Context, streamID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.streams[streamID]
+	if !ok {
+		return storage.ErrNotFound
+	}
+	e.queue = nil
+	return nil
 }

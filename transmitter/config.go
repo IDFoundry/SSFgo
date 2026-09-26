@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"slices"
 	"time"
 
@@ -70,6 +72,28 @@ type Config struct {
 
 	// Now returns the current time. Defaults to time.Now.
 	Now func() time.Time
+
+	// EventValidator, if set, vets every event passed to Emit before it
+	// is signed — for example caep/interop.ValidateEvent, which enforces
+	// the CAEP Interoperability Profile's subject formats and required
+	// claims. Optional.
+	EventValidator func(ssf.Subject, ssf.Event) error
+
+	// AllowPushEndpoint, if set, vets every push endpoint_url a Receiver
+	// supplies before the stream is created or changed. Push delivery
+	// makes the Transmitter send requests to URLs Receivers choose, so a
+	// deployment that must not reach internal hosts should restrict them
+	// here. An error is reported to the Receiver as 400. Optional.
+	AllowPushEndpoint func(rx Receiver, endpoint *url.URL) error
+
+	// HTTPClient sends push deliveries. Defaults to a client with a
+	// 10-second timeout.
+	HTTPClient *http.Client
+
+	// LongPollTimeout is how long a poll request that asks to wait
+	// (returnImmediately false, RFC 8936 §2.5) waits for a SET before
+	// returning none. Defaults to 20 seconds.
+	LongPollTimeout time.Duration
 
 	// Logger receives server-side failures (storage and authorizer
 	// errors) that are reported to the Receiver only as 500. Defaults to

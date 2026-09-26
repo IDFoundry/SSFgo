@@ -31,12 +31,14 @@ func StreamStore(t *testing.T, newStore func(t *testing.T) storage.StreamStore) 
 		{"SingleStreamPerReceiver", testSingleStreamPerReceiver},
 		{"NotFound", testNotFound},
 		{"StreamsForReceiver", testStreamsForReceiver},
+		{"AllStreams", testAllStreams},
 		{"Update", testUpdate},
 		{"UpdateErrorStoresNothing", testUpdateErrorStoresNothing},
 		{"ReturnedValuesAreCopies", testReturnedValuesAreCopies},
 		{"Delete", testDelete},
-		{"Subjects", testSubjects},
+		{"SubjectRules", testSubjectRules},
 		{"Queue", testQueue},
+		{"AckAndPurge", testAckAndPurge},
 		{"ConcurrentUpdates", testConcurrentUpdates},
 	}
 	for _, tc := range tests {
@@ -116,11 +118,12 @@ func testNotFound(t *testing.T, st storage.StreamStore) {
 	_, calls["Stream"] = st.Stream(ctx, "nope")
 	_, calls["UpdateStream"] = st.UpdateStream(ctx, "nope", func(*storage.Stream) error { return nil })
 	calls["DeleteStream"] = st.DeleteStream(ctx, "nope")
-	calls["AddSubject"] = st.AddSubject(ctx, "nope", ssf.OpaqueSubject{ID: "x"})
-	calls["RemoveSubject"] = st.RemoveSubject(ctx, "nope", ssf.OpaqueSubject{ID: "x"})
-	_, calls["Subjects"] = st.Subjects(ctx, "nope")
+	calls["SetSubjectRule"] = st.SetSubjectRule(ctx, "nope", storage.SubjectRule{Subject: ssf.OpaqueSubject{ID: "x"}})
+	_, calls["SubjectRules"] = st.SubjectRules(ctx, "nope")
 	calls["Enqueue"] = st.Enqueue(ctx, "nope", storage.QueuedEvent{JTI: "1", SET: "x"})
-	_, calls["PendingEvents"] = st.PendingEvents(ctx, "nope", 0)
+	_, calls["PendingEvents"] = st.PendingEvents(ctx, "nope", 0, false)
+	calls["AckEvents"] = st.AckEvents(ctx, "nope", []string{"1"})
+	calls["PurgeEvents"] = st.PurgeEvents(ctx, "nope")
 	for name, err := range calls {
 		if !errors.Is(err, storage.ErrNotFound) {
 			t.Errorf("%s(unknown stream) = %v, want ErrNotFound", name, err)
@@ -149,6 +152,18 @@ func testStreamsForReceiver(t *testing.T, st storage.StreamStore) {
 	}
 	if !reflect.DeepEqual(ids, []string{"c", "a", "b"}) {
 		t.Errorf("StreamsForReceiver = %v, want [c a b] (oldest first)", ids)
+	}
+}
+
+func testAllStreams(t *testing.T, st storage.StreamStore) {
+	if all, err := st.AllStreams(ctx); err != nil || len(all) != 0 {
+		t.Fatalf("AllStreams(empty) = %v, %v", all, err)
+	}
+	mustCreate(t, st, sampleStream("b", "r1"))
+	mustCreate(t, st, sampleStream("a", "r2"))
+	all, err := st.AllStreams(ctx)
+	if err != nil || len(all) != 2 || all[0].ID != "b" || all[1].ID != "a" {
+		t.Errorf("AllStreams = %+v, %v; want [b a], oldest first", all, err)
 	}
 }
 
@@ -201,7 +216,7 @@ func testReturnedValuesAreCopies(t *testing.T, st storage.StreamStore) {
 
 func testDelete(t *testing.T, st storage.StreamStore) {
 	mustCreate(t, st, sampleStream("s1", "r1"))
-	if err := st.AddSubject(ctx, "s1", ssf.OpaqueSubject{ID: "x"}); err != nil {
+	if err := st.SetSubjectRule(ctx, "s1", storage.SubjectRule{Subject: ssf.OpaqueSubject{ID: "x"}, Included: true}); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.Enqueue(ctx, "s1", storage.QueuedEvent{JTI: "1", SET: "a.b.c"}); err != nil {
@@ -215,46 +230,48 @@ func testDelete(t *testing.T, st storage.StreamStore) {
 	}
 	// Recreating the ID must not resurrect the old subjects or queue.
 	mustCreate(t, st, sampleStream("s1", "r1"))
-	if subs, _ := st.Subjects(ctx, "s1"); len(subs) != 0 {
-		t.Errorf("subjects survived delete: %v", subs)
+	if rules, _ := st.SubjectRules(ctx, "s1"); len(rules) != 0 {
+		t.Errorf("subject rules survived delete: %v", rules)
 	}
-	if q, _ := st.PendingEvents(ctx, "s1", 0); len(q) != 0 {
+	if q, _ := st.PendingEvents(ctx, "s1", 0, false); len(q) != 0 {
 		t.Errorf("queued events survived delete: %v", q)
 	}
 }
 
-func testSubjects(t *testing.T, st storage.StreamStore) {
+func testSubjectRules(t *testing.T, st storage.StreamStore) {
 	mustCreate(t, st, sampleStream("s1", "r1"))
 	a := ssf.EmailSubject{Email: "a@example.com"}
 	b := ssf.ComplexSubject{User: ssf.OpaqueSubject{ID: "u"}, Tenant: ssf.OpaqueSubject{ID: "t"}}
-	for _, s := range []ssf.Subject{a, b, a, ssf.ComplexSubject{Tenant: ssf.OpaqueSubject{ID: "t"}, User: ssf.OpaqueSubject{ID: "u"}}} {
-		if err := st.AddSubject(ctx, "s1", s); err != nil {
+	bReordered := ssf.ComplexSubject{Tenant: ssf.OpaqueSubject{ID: "t"}, User: ssf.OpaqueSubject{ID: "u"}}
+	for _, r := range []storage.SubjectRule{
+		{Subject: a, Included: true},
+		{Subject: b, Included: true},
+		{Subject: a, Included: false},
+		{Subject: bReordered, Included: true},
+	} {
+		if err := st.SetSubjectRule(ctx, "s1", r); err != nil {
 			t.Fatal(err)
 		}
 	}
-	subs, err := st.Subjects(ctx, "s1")
+	rules, err := st.SubjectRules(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(subs) != 2 || !ssf.SubjectsEqual(subs[0], a) || !ssf.SubjectsEqual(subs[1], b) {
-		t.Fatalf("Subjects = %v, want [a b] with duplicates collapsed", subs)
+	if len(rules) != 2 {
+		t.Fatalf("SubjectRules = %v, want one rule per distinct subject", rules)
 	}
-	if err := st.RemoveSubject(ctx, "s1", ssf.EmailSubject{Email: "absent@example.com"}); err != nil {
-		t.Errorf("removing an absent subject: %v", err)
+	if !ssf.SubjectsEqual(rules[0].Subject, a) || rules[0].Included {
+		t.Errorf("rule 0 = %+v, want a excluded (replaced in place)", rules[0])
 	}
-	if err := st.RemoveSubject(ctx, "s1", a); err != nil {
-		t.Fatal(err)
-	}
-	subs, _ = st.Subjects(ctx, "s1")
-	if len(subs) != 1 || !ssf.SubjectsEqual(subs[0], b) {
-		t.Errorf("after remove: %v", subs)
+	if !ssf.SubjectsEqual(rules[1].Subject, b) || !rules[1].Included {
+		t.Errorf("rule 1 = %+v, want b included", rules[1])
 	}
 }
 
 func testQueue(t *testing.T, st storage.StreamStore) {
 	mustCreate(t, st, sampleStream("s1", "r1"))
 	mustCreate(t, st, sampleStream("s2", "r1"))
-	q, err := st.PendingEvents(ctx, "s1", 0)
+	q, err := st.PendingEvents(ctx, "s1", 0, false)
 	if err != nil || len(q) != 0 {
 		t.Fatalf("empty queue = %v, %v", q, err)
 	}
@@ -264,19 +281,48 @@ func testQueue(t *testing.T, st storage.StreamStore) {
 			t.Fatal(err)
 		}
 	}
-	all, _ := st.PendingEvents(ctx, "s1", 0)
+	all, _ := st.PendingEvents(ctx, "s1", 0, false)
 	if len(all) != 3 || all[0].JTI != "0" || all[2].SET != "set-2" {
 		t.Errorf("PendingEvents = %+v, want three in order", all)
 	}
-	first, _ := st.PendingEvents(ctx, "s1", 2)
+	first, _ := st.PendingEvents(ctx, "s1", 2, false)
 	if len(first) != 2 || first[1].JTI != "1" {
 		t.Errorf("PendingEvents(max 2) = %+v", first)
 	}
-	if again, _ := st.PendingEvents(ctx, "s1", 0); len(again) != 3 {
+	if again, _ := st.PendingEvents(ctx, "s1", 0, false); len(again) != 3 {
 		t.Error("PendingEvents removed events")
 	}
-	if other, _ := st.PendingEvents(ctx, "s2", 0); len(other) != 0 {
+	if other, _ := st.PendingEvents(ctx, "s2", 0, false); len(other) != 0 {
 		t.Errorf("queues are not per stream: %v", other)
+	}
+}
+
+func testAckAndPurge(t *testing.T, st storage.StreamStore) {
+	mustCreate(t, st, sampleStream("s1", "r1"))
+	for i, control := range []bool{false, true, false, true} {
+		e := storage.QueuedEvent{JTI: fmt.Sprint(i), SET: "set", Control: control}
+		if err := st.Enqueue(ctx, "s1", e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	control, _ := st.PendingEvents(ctx, "s1", 0, true)
+	if len(control) != 2 || control[0].JTI != "1" || control[1].JTI != "3" {
+		t.Errorf("PendingEvents(controlOnly) = %+v", control)
+	}
+	if one, _ := st.PendingEvents(ctx, "s1", 1, true); len(one) != 1 || one[0].JTI != "1" {
+		t.Errorf("PendingEvents(max 1, controlOnly) = %+v", one)
+	}
+	if err := st.AckEvents(ctx, "s1", []string{"0", "unknown", "0"}); err != nil {
+		t.Fatal(err)
+	}
+	if q, _ := st.PendingEvents(ctx, "s1", 0, false); len(q) != 3 || q[0].JTI != "1" {
+		t.Errorf("after ack: %+v", q)
+	}
+	if err := st.PurgeEvents(ctx, "s1"); err != nil {
+		t.Fatal(err)
+	}
+	if q, _ := st.PendingEvents(ctx, "s1", 0, false); len(q) != 0 {
+		t.Errorf("after purge: %+v, want an empty queue", q)
 	}
 }
 

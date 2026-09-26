@@ -20,8 +20,8 @@ replay protection.
 
 ```text
 github.com/idfoundry/ssfgo     // package ssf: shared value types only
-├── caep/                      // CAEP 1.0 event types (8) + typed handlers
-│   └── interop/               // CAEP Interoperability Profile preset + startup checker
+├── caep/                      // CAEP 1.0 event types (8)
+│   └── interop/               // CAEP Interoperability Profile config check + event validator
 ├── risc/                      // RISC 1.0 event types (14, sessions-revoked deprecated)
 ├── transmitter/               // Transmitter role
 ├── receiver/                  // Receiver role (v0.4+)
@@ -97,25 +97,46 @@ These are deliberate and cite the requirement they implement.
 | The caller states the accepted signature algorithms; the header `alg` is never trusted as policy | RFC 8725 §3.1 |
 | RS256 is supported (unlike FAPIgo) because CAEP Interop §2.6 requires it | CAEP Interop §2.6 |
 
-## Delivery model (v0.3)
+## Delivery (v0.3)
 
-Delivery is a per-stream durable queue with two drains, not a single
-`Deliver(set)` call. v0.2 introduced the queue (`Enqueue`,
-`PendingEvents`, used by verification requests); v0.3 adds acknowledgement
-and the drains:
+Delivery is a per-stream durable queue of signed SETs with two drains,
+not a single `Deliver(set)` call.
 
-- **Push** (RFC 8935): a worker POSTs queued SETs to the Receiver's
-  `endpoint_url` with the configured `authorization_header`, expects 202,
-  parses RFC 8935 §2.3 error bodies, and retries with backoff.
-- **Poll** (RFC 8936): an `http.Handler` serving `maxEvents`,
-  `returnImmediately`, `ack` and `setErrs`, with long-polling.
+- **Emit.** `Transmitter.Emit(ctx, subject, event)` validates the event
+  (including an optional profile validator such as
+  `caep/interop.ValidateEvent`), then queues one SET per stream that
+  should get it — not disabled, event type in `events_delivered`, subject
+  included — each with its own `aud` and `jti` and a shared `txn`.
+- **Poll** (RFC 8936). Each stream's `endpoint_url` is served by the same
+  handler. A poll acknowledges `ack` and `setErrs` first, then returns up
+  to `maxEvents` SETs with `moreAvailable`; `maxEvents: 0` is
+  acknowledge-only. SETs stay queued, and are returned again, until
+  acknowledged. Without `returnImmediately` the request long-polls, woken
+  when a SET is queued in this process and re-checking storage every
+  second otherwise.
+- **Push** (RFC 8935). `Transmitter.Run(ctx)` — started by the
+  application, never by `New` — pushes each push stream's SETs one at a
+  time, oldest first. 2xx is delivered; a 400 with an RFC 8935 error body
+  means the Receiver rejects that SET, which is logged and dropped; any
+  other failure is retried with exponential backoff (1 s to 5 min).
 
-Stream status acts on the queue: `enabled` delivers, `paused` holds,
-`disabled` drops (SSF §8.1.2).
+**Subjects.** Add and Remove Subject requests are stored as include and
+exclude rules. The last rule whose subject matches the event subject (SSF
+§8.1.3.1) decides; with no match, `default_subjects` does. A rule store is
+needed because under `ALL`, removing a subject must be remembered.
 
-`Transmitter.Emit(ctx, subject, event)` routes one event to every stream
-whose `events_delivered` contains its type and whose subjects match (SSF
-§8.1.3.1), minting a separate SET — own `aud`, own `jti` — per stream.
+**Status.** An enabled stream delivers everything; a paused one holds
+SETs; a disabled one discards its queue and accepts nothing new. The one
+exception is the stream-updated event `SetStreamStatus` sends when the
+Transmitter changes a status itself (§8.1.5): it is a control event,
+delivered even though the stream is no longer enabled, because the spec
+requires the Receiver to be told before the stream stops. Status changes
+the Receiver requests send no event.
+
+**Scale.** `Run` and `Emit` scan `AllStreams`. That is fine for the
+in-memory store and modest stream counts; a large deployment's storage
+backend is where an index belongs, and the contract can grow one without
+changing the Transmitter's behaviour.
 
 ## Stream management (v0.2)
 
