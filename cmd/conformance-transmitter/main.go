@@ -66,7 +66,7 @@ func main() {
 		as.addStaticToken(*staticToken)
 	}
 
-	store := memstore.New()
+	store := memstore.NewStreamStore()
 	pushClient := &http.Client{Timeout: 10 * time.Second}
 	if *insecurePush {
 		pushClient.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec // test harness flag

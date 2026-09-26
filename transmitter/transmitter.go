@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -50,6 +51,12 @@ func New(cfg Config) (*Transmitter, error) {
 		return nil, fmt.Errorf("transmitter: invalid config: issuer path %q must use only unreserved URL characters", u.Path)
 	}
 	base := strings.TrimSuffix(u.Path, "/")
+	// Copy every slice the caller passed, so changing it after New cannot
+	// change what the Transmitter serves or routes.
+	cfg.SigningKeys = slices.Clone(cfg.SigningKeys)
+	cfg.EventsSupported = slices.Clone(cfg.EventsSupported)
+	cfg.DeliveryMethods = slices.Clone(cfg.DeliveryMethods)
+	cfg.CriticalSubjectMembers = slices.Clone(cfg.CriticalSubjectMembers)
 	t := &Transmitter{
 		cfg:    cfg,
 		now:    cfg.Now,
@@ -110,7 +117,7 @@ func New(cfg Config) (*Transmitter, error) {
 		VerificationEndpoint:     t.url(t.paths.verification),
 		CriticalSubjectMembers:   cfg.CriticalSubjectMembers,
 		// The stream management API accepts only OAuth 2.0 bearer tokens.
-		AuthorizationSchemes: []ssf.AuthorizationScheme{ssf.OAuth2AuthorizationScheme},
+		AuthorizationSchemes: []ssf.AuthorizationScheme{{SpecURN: ssf.OAuth2SpecURN}},
 		DefaultSubjects:      cfg.DefaultSubjects,
 	}
 	return t, nil
@@ -118,9 +125,15 @@ func New(cfg Config) (*Transmitter, error) {
 
 func (t *Transmitter) url(path string) string { return t.origin + path }
 
-// Metadata returns the Transmitter Configuration Metadata the Transmitter
-// publishes.
-func (t *Transmitter) Metadata() ssf.TransmitterMetadata { return t.metadata }
+// Metadata returns a copy of the Transmitter Configuration Metadata the
+// Transmitter publishes.
+func (t *Transmitter) Metadata() ssf.TransmitterMetadata {
+	md := t.metadata
+	md.DeliveryMethodsSupported = slices.Clone(md.DeliveryMethodsSupported)
+	md.CriticalSubjectMembers = slices.Clone(md.CriticalSubjectMembers)
+	md.AuthorizationSchemes = slices.Clone(md.AuthorizationSchemes)
+	return md
+}
 
 // Handler returns the http.Handler serving every Transmitter endpoint.
 // Mount it at the root of the issuer's host.

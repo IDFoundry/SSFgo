@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"sync"
 	"time"
 
@@ -46,6 +47,7 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
+	cfg.Algorithms = slices.Clone(cfg.Algorithms)
 	r := &Receiver{
 		cfg:      cfg,
 		handlers: map[ssf.EventType]HandlerFunc{},
@@ -97,8 +99,15 @@ func checkEndpoints(md ssf.TransmitterMetadata) error {
 	return nil
 }
 
-// Metadata returns the Transmitter Configuration Metadata fetched by New.
-func (r *Receiver) Metadata() ssf.TransmitterMetadata { return r.metadata }
+// Metadata returns a copy of the Transmitter Configuration Metadata
+// fetched by New.
+func (r *Receiver) Metadata() ssf.TransmitterMetadata {
+	md := r.metadata
+	md.DeliveryMethodsSupported = slices.Clone(md.DeliveryMethodsSupported)
+	md.CriticalSubjectMembers = slices.Clone(md.CriticalSubjectMembers)
+	md.AuthorizationSchemes = slices.Clone(md.AuthorizationSchemes)
+	return md
+}
 
 // keyRefetchInterval rate-limits JWKS refetches — whether triggered by a
 // SET naming an unknown key or by KeyMaxAge — so neither a stream of forged

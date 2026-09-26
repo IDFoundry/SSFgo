@@ -43,6 +43,7 @@ func Register(r *ssf.Registry) error {
 // InitiatingEntity describes what invoked an event (CAEP 1.0 §2).
 type InitiatingEntity string
 
+// Initiating entities CAEP 1.0 §2 defines.
 const (
 	InitiatedByAdmin  InitiatingEntity = "admin"
 	InitiatedByUser   InitiatingEntity = "user"

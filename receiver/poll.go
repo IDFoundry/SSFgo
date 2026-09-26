@@ -83,8 +83,8 @@ func (r *Receiver) Poll(ctx context.Context, stream ssf.StreamConfiguration, opt
 			got = jti
 		}
 		if rej, ok := isRejection(err); ok {
-			r.cfg.Logger.WarnContext(ctx, "ssf receiver: rejected polled SET", "jti", got, "err", rej.Code, "description", rej.Description)
-			r.queueAck(stream.StreamID, "", got, &setErr{Err: rej.Code, Description: rej.Description})
+			r.cfg.Logger.WarnContext(ctx, "ssf receiver: rejected polled SET", "jti", got, "err", rej.code, "description", rej.description)
+			r.queueAck(stream.StreamID, "", got, &setErr{Err: rej.code, Description: rej.description})
 			continue
 		}
 		if err != nil {

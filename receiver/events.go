@@ -37,30 +37,26 @@ func On[E ssf.Event](r *Receiver, fn func(ctx context.Context, set ssf.SET, even
 	})
 }
 
-// Error codes a Receiver reports for a SET it rejects (RFC 8935 §2.4;
-// SSF 1.0 §8.1.4.1 for invalid_state).
+// Error codes a Receiver reports for a SET it rejects, beyond those
+// setcodec produces (RFC 8935 §2.4; SSF 1.0 §8.1.4.1 for invalid_state).
 const (
-	ErrCodeInvalidRequest       = setcodec.CodeInvalidRequest
-	ErrCodeInvalidKey           = setcodec.CodeInvalidKey
-	ErrCodeInvalidIssuer        = setcodec.CodeInvalidIssuer
-	ErrCodeInvalidAudience      = setcodec.CodeInvalidAudience
-	ErrCodeAuthenticationFailed = "authentication_failed"
-	ErrCodeInvalidState         = "invalid_state"
+	errCodeAuthenticationFailed = "authentication_failed"
+	errCodeInvalidState         = "invalid_state"
 )
 
-// RejectedSET is a SET the Receiver refuses: it is reported to the
-// Transmitter with Code and never handled.
-type RejectedSET struct {
-	Code        string
-	Description string
+// rejectedSET is a SET the Receiver refuses: it is reported to the
+// Transmitter with code and never handled.
+type rejectedSET struct {
+	code        string
+	description string
 }
 
-func (e *RejectedSET) Error() string {
-	return "receiver: rejected SET: " + e.Code + ": " + e.Description
+func (e *rejectedSET) Error() string {
+	return "receiver: rejected SET: " + e.code + ": " + e.description
 }
 
 // process verifies, de-duplicates and dispatches one SET. It returns the
-// SET's jti when known; the error is a *RejectedSET for a SET that must not
+// SET's jti when known; the error is a *rejectedSET for a SET that must not
 // be retried, or any other error for a handler failure that should be.
 func (r *Receiver) process(ctx context.Context, token string) (string, error) {
 	set, err := r.decode(ctx, token)
@@ -111,7 +107,7 @@ func (r *Receiver) decode(ctx context.Context, token string) (ssf.SET, error) {
 		set, err = setcodec.Decode(token, opts)
 	}
 	if de, ok := setcodec.IsDecodeError(err); ok {
-		return ssf.SET{}, &RejectedSET{Code: de.Code, Description: de.Err.Error()}
+		return ssf.SET{}, &rejectedSET{code: de.Code, description: de.Err.Error()}
 	}
 	return set, err
 }
@@ -123,7 +119,7 @@ func (r *Receiver) dispatch(ctx context.Context, set ssf.SET) error {
 		// Transmitter-initiated and always acceptable (§8.1.4).
 		streamID := set.Subject.(ssf.OpaqueSubject).ID
 		if !r.takeState(streamID, v.State) {
-			return &RejectedSET{Code: ErrCodeInvalidState, Description: "the verification state does not match an outstanding request"}
+			return &rejectedSET{code: errCodeInvalidState, description: "the verification state does not match an outstanding request"}
 		}
 	}
 	r.handlersMu.RLock()
@@ -135,8 +131,8 @@ func (r *Receiver) dispatch(ctx context.Context, set ssf.SET) error {
 	return h(ctx, set)
 }
 
-// isRejection reports whether err is a *RejectedSET.
-func isRejection(err error) (*RejectedSET, bool) {
-	var rej *RejectedSET
+// isRejection reports whether err is a *rejectedSET.
+func isRejection(err error) (*rejectedSET, bool) {
+	var rej *rejectedSET
 	return rej, errors.As(err, &rej)
 }

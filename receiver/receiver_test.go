@@ -54,14 +54,14 @@ type env struct {
 	t     *testing.T
 	txSrv *httptest.Server
 	tx    *transmitter.Transmitter
-	store *memstore.Store
+	store *memstore.StreamStore
 	rx    *receiver.Receiver
 	cfg   receiver.Config
 }
 
 func newEnv(t *testing.T, mutate ...func(*receiver.Config)) *env {
 	t.Helper()
-	e := &env{t: t, store: memstore.New()}
+	e := &env{t: t, store: memstore.NewStreamStore()}
 	e.txSrv = httptest.NewUnstartedServer(nil)
 	e.txSrv.StartTLS()
 	t.Cleanup(e.txSrv.Close)
@@ -436,11 +436,11 @@ func TestPushHandlerRejections(t *testing.T) {
 		status     int
 		err        string
 	}{
-		"no authorization":    {"", sign(t, e, nil), 401, receiver.ErrCodeAuthenticationFailed},
-		"wrong authorization": {"Bearer nope", sign(t, e, nil), 401, receiver.ErrCodeAuthenticationFailed},
-		"not a JWT":           {auth, "hello", 400, receiver.ErrCodeInvalidRequest},
-		"wrong audience":      {auth, sign(t, e, func(s *ssf.SET) { s.Audience = []string{"https://other.example"} }), 400, receiver.ErrCodeInvalidAudience},
-		"wrong issuer":        {auth, sign(t, e, func(s *ssf.SET) { s.Issuer = "https://evil.example" }), 400, receiver.ErrCodeInvalidIssuer},
+		"no authorization":    {"", sign(t, e, nil), 401, "authentication_failed"},
+		"wrong authorization": {"Bearer nope", sign(t, e, nil), 401, "authentication_failed"},
+		"not a JWT":           {auth, "hello", 400, "invalid_request"},
+		"wrong audience":      {auth, sign(t, e, func(s *ssf.SET) { s.Audience = []string{"https://other.example"} }), 400, "invalid_audience"},
+		"wrong issuer":        {auth, sign(t, e, func(s *ssf.SET) { s.Issuer = "https://evil.example" }), 400, "invalid_issuer"},
 		"unregistered event": {auth, sign(t, e, func(s *ssf.SET) {
 			s.Event = caep.RiskLevelChange{Principal: caep.PrincipalUser, CurrentLevel: caep.RiskLow}
 			s.Subject = ssf.IssSubSubject{Issuer: "https://i", Subject: "s"}
@@ -448,7 +448,7 @@ func TestPushHandlerRejections(t *testing.T) {
 		"verification with unknown state": {auth, sign(t, e, func(s *ssf.SET) {
 			s.Subject = ssf.OpaqueSubject{ID: "stream-1"}
 			s.Event = ssf.Verification{State: "never-requested"}
-		}), 400, receiver.ErrCodeInvalidState},
+		}), 400, "invalid_state"},
 		"unsolicited verification": {auth, sign(t, e, func(s *ssf.SET) {
 			s.Subject = ssf.OpaqueSubject{ID: "stream-1"}
 			s.Event = ssf.Verification{}
@@ -517,7 +517,7 @@ func TestKeyRotation(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Within a minute of the last fetch the Receiver will not refetch.
-	if got := push(t, h, "", tok); got.status != 400 || got.err != receiver.ErrCodeInvalidKey {
+	if got := push(t, h, "", tok); got.status != 400 || got.err != "invalid_key" {
 		t.Fatalf("before the refetch interval: %d %q", got.status, got.err)
 	}
 	now = now.Add(2 * time.Minute)
@@ -580,7 +580,7 @@ func TestKeyMaxAge(t *testing.T) {
 	}
 	now = now.Add(2 * time.Hour)
 	oldSigned = sign(t, e, func(s *ssf.SET) { s.IssuedAt = now; s.JWTID = "old-2" })
-	if got := push(t, h, "", oldSigned); got.status != 400 || got.err != receiver.ErrCodeInvalidKey {
+	if got := push(t, h, "", oldSigned); got.status != 400 || got.err != "invalid_key" {
 		t.Fatalf("after KeyMaxAge the retired k1 must no longer verify: %d %q", got.status, got.err)
 	}
 
