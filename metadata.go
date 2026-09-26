@@ -35,7 +35,7 @@ type AuthorizationScheme struct {
 // OAuth2SpecURN is the authorization scheme spec_urn for OAuth 2.0
 // (RFC 6749). The CAEP Interoperability Profile §2.3.7 requires
 // Transmitters to advertise it.
-const OAuth2SpecURN = "urn:ietf:rfc:6749"
+const OAuth2SpecURN = "urn:ietf:rfc:6749" // NOSONAR: a public RFC identifier, not a secret
 
 // TransmitterMetadata is the Transmitter Configuration Metadata document
 // (SSF 1.0 §7.1). Array members with no elements are omitted, as §7.2.3
