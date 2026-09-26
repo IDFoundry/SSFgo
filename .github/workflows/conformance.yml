@@ -33,7 +33,7 @@ jobs:
       # Pinned and hash-checked here rather than taken from the suite's own
       # unpinned requirements.txt.
       - name: Install suite script dependencies
-        run: pip install --require-hashes --only-binary :all: -r conformance/scripts/requirements.txt
+        run: "pip install --require-hashes --only-binary :all: -r conformance/scripts/requirements.txt"
 
       - name: Bring up OIDF conformance suite
         working-directory: /tmp/conformance-suite
