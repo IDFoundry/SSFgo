@@ -1,0 +1,16 @@
+{
+    "alias": "ssfgo-tx-static",
+    "description": "SSFgo conformance Transmitter, static access token",
+    "ssf": {
+        "subjects": {
+            "valid": { "format": "email", "email": "valid@example.com" },
+            "invalid": { "format": "email", "email": "invalid@example.com" }
+        },
+        "transmitter": {
+            "issuer": "{ORIGIN}",
+            "metadata_suffix": "{ISSUER_PATH}",
+            "access_token": "{STATIC_TOKEN}",
+            "push_endpoint_authorization_header": "Bearer ssfgo-push-token"
+        }
+    }
+}

@@ -23,17 +23,18 @@ github.com/idfoundry/ssfgo     // package ssf: shared value types only
 ├── caep/                      // CAEP 1.0 event types (8) + typed handlers
 │   └── interop/               // CAEP Interoperability Profile preset + startup checker
 ├── risc/                      // RISC 1.0 event types (14, sessions-revoked deprecated)
-├── transmitter/               // Transmitter role (v0.2+)
+├── transmitter/               // Transmitter role
 ├── receiver/                  // Receiver role (v0.4+)
-├── storage/                   // role storage contracts (v0.2+)
+├── storage/                   // storage contracts
 │   ├── memstore/              // in-memory implementation
 │   └── storagetest/           // exported contract tests for third-party backends
 ├── internal/
 │   ├── jose/                  // minimal JWS: RS256, PS256, ES256, EdDSA; JWK/JWKS
 │   ├── critical/              // RFC 7515 "crit" check
 │   └── setcodec/              // SET encode (sign) / decode (verify) per SSF §4
+├── cmd/conformance-transmitter/ // Transmitter wired up for the OIDF suite
 ├── examples/
-└── conformance/               // OIDF conformance harness and deployment
+└── conformance/               // suite configs, run scripts, recorded results
 ```
 
 ### The root `ssf` package
@@ -54,6 +55,9 @@ Holds only value types that both roles and both event families share:
 - **`SET`**: the verified, decoded view of a Security Event Token that
   handlers receive.
 - **Generic JSON value types**: `NumericDate`, `LocalizedText`.
+- **Management API wire types** shared by both roles:
+  `TransmitterMetadata`, `StreamConfiguration`, `Delivery`, `StreamState`
+  and the subject and verification request bodies, plus `WellKnownURL`.
 
 `ssf` never imports `caep` or `risc`.
 
@@ -95,8 +99,10 @@ These are deliberate and cite the requirement they implement.
 
 ## Delivery model (v0.3)
 
-Delivery is a per-stream durable queue (`Enqueue`, `Lease`, `Ack`, `Fail`)
-with two drains, not a single `Deliver(set)` call:
+Delivery is a per-stream durable queue with two drains, not a single
+`Deliver(set)` call. v0.2 introduced the queue (`Enqueue`,
+`PendingEvents`, used by verification requests); v0.3 adds acknowledgement
+and the drains:
 
 - **Push** (RFC 8935): a worker POSTs queued SETs to the Receiver's
   `endpoint_url` with the configured `authorization_header`, expects 202,
@@ -111,14 +117,43 @@ Stream status acts on the queue: `enabled` delivers, `paused` holds,
 whose `events_delivered` contains its type and whose subjects match (SSF
 §8.1.3.1), minting a separate SET — own `aud`, own `jti` — per stream.
 
-## Stream management authorization (v0.2)
+## Stream management (v0.2)
 
-The Transmitter never interprets access tokens itself. An application
-supplies an `Authorizer` that maps a request's bearer token to a receiver
-identity and a set of granted scopes (`ssf.read`, `ssf.manage`, CAEP
-Interop §2.7.3). Streams are owned by that identity. The conformance
-deployment ships a minimal client-credentials token endpoint under
-`conformance/`; it is not part of the library.
+`transmitter.New(Config)` returns one `http.Handler` serving the metadata
+document, the JWKS and every §8 endpoint. All paths derive from the
+issuer, so the handler is mounted at the host root and several
+Transmitters can share a host through issuer paths.
+
+**Authorization.** The Transmitter never interprets access tokens. It
+takes the bearer token from the `Authorization` header only (never the
+query string, CAEP Interop §2.7.2) and hands it to the application's
+`AuthorizeFunc`, which returns the `Receiver`: an ID, the audience of its
+streams, and an `Access` level (`AccessRead` ≈ `ssf.read`,
+`AccessManage` ≈ `ssf.manage`, CAEP Interop §2.7.3). Streams belong to the
+Receiver that created them; another Receiver's stream is reported as 404,
+so stream IDs cannot be probed.
+
+**Storage.** `storage.StreamStore` holds streams, their subjects and the
+per-stream queue of signed SETs. `UpdateStream` takes a function applied
+atomically, so read-modify-write operations (PATCH, status changes,
+verification rate limiting) cannot lose updates in a durable backend.
+`storagetest.StreamStore` is the contract every backend must pass.
+
+**Decisions the spec leaves open:**
+
+| Question | SSFgo's answer |
+|---|---|
+| Several streams per Receiver? | `Config.MultipleStreamsPerReceiver`; if false, 409 (§8.1.1.1) |
+| Receiver asks for poll with its own `endpoint_url` | Ignored: the Transmitter supplies poll URLs (§6.1.2) |
+| `authorization_header` in read responses | Returned to the owning Receiver, so read-modify-replace (§8.1.1.4) keeps it |
+| Transmitter-supplied property in PATCH/PUT | Must equal the current value, else 400 (§8.1.1.3) |
+| Receiver-requested status change | Applied without a stream-updated event (§8.1.2 requires one only for Transmitter-initiated changes) |
+| Verification on a disabled stream | 204, but nothing is queued (§8.1.2.1: disabled holds no events) |
+| `min_verification_interval` exceeded | 429 with `Retry-After` |
+
+The conformance harness in `cmd/conformance-transmitter` adds a minimal
+client-credentials token endpoint for the suite; it is not part of the
+library.
 
 ## Conformance
 

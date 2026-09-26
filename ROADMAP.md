@@ -4,7 +4,7 @@ Each milestone ends with an exit criterion that can be checked, mostly
 against the OIDF conformance suite. See [ARCHITECTURE.md](ARCHITECTURE.md)
 for the design these milestones build.
 
-## v0.1 — Wire formats
+## v0.1 — Wire formats ✅
 
 - Subject identifiers: every RFC 9493 format, SSF §3.5 formats, complex
   subjects, proprietary formats, and SSF §8.1.3.1 subject matching.
@@ -16,7 +16,7 @@ for the design these milestones build.
 **Exit:** round-trip tests against every example in SSF §5, CAEP §3 and
 RISC §2; fuzz targets on compact JWS, JWKS, subject and SET parsing.
 
-## v0.2 — Transmitter control plane
+## v0.2 — Transmitter control plane ✅
 
 - Transmitter configuration metadata, including the issuer path suffix
   (SSF §7.2) and `authorization_schemes`.
@@ -27,11 +27,13 @@ RISC §2; fuzz targets on compact JWS, JWKS, subject and SET parsing.
 - Conformance harness: client-credentials token issuer, public deployment.
 
 **Exit:** OIDF metadata test and all stream-control negative tests pass.
+Met: every stream-management module passes in all four auth × delivery
+variants — see [conformance/README.md](conformance/README.md).
 
 ## v0.3 — Transmitter delivery
 
-- Per-stream outbound queue; poll handler (RFC 8936); push worker
-  (RFC 8935).
+- Poll handler (RFC 8936) and push worker (RFC 8935) draining the
+  per-stream queue v0.2 introduced, with acknowledgement.
 - `Emit` routing; stream-updated and verification event emission.
 - `caep/interop` preset and startup checker.
 
