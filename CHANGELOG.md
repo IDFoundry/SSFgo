@@ -30,6 +30,14 @@ auth × delivery variants; the Receiver passes every module except
 conformance-suite defect (millisecond `event_timestamp`), documented in
 [conformance/README.md](conformance/README.md).
 
+### Fixed since v0.5
+
+- The Receiver now enforces SSF 1.0 §3.6: a SET whose complex subject
+  carries a member the Transmitter declared critical
+  (`critical_subject_members`) and the Receiver does not process is
+  rejected instead of handled. New `receiver.Config.SubjectMembers` lists
+  non-standard members the application does process.
+
 ### Changed since v0.5
 
 API review before the freeze — all breaking, none behavioural:

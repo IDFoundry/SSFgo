@@ -48,6 +48,7 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 		return nil, err
 	}
 	cfg.Algorithms = slices.Clone(cfg.Algorithms)
+	cfg.SubjectMembers = slices.Clone(cfg.SubjectMembers)
 	r := &Receiver{
 		cfg:      cfg,
 		handlers: map[ssf.EventType]HandlerFunc{},

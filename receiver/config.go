@@ -53,6 +53,16 @@ type Config struct {
 	// Defaults to one minute.
 	MaxClockSkew time.Duration
 
+	// SubjectMembers lists the complex-subject members, beyond those
+	// SSF 1.0 §3.3 defines, that the application processes. A Transmitter
+	// may declare members critical (critical_subject_members); SSF 1.0
+	// §3.6 requires discarding any event whose subject has a critical
+	// member the Receiver cannot process. The §3.3 members — user,
+	// device, session, application, tenant, org_unit, group — are parsed
+	// and handed to handlers, so they always count as processed; list
+	// any other member here only if handlers act on it. Optional.
+	SubjectMembers []string
+
 	// AcceptLegacySubjects opts in to SETs from Transmitters that predate
 	// SSF 1.0: a SET without "sub_id" whose event carries a "subject"
 	// member (SSF 1.0 §3.1.1), and subject identifiers naming their format
