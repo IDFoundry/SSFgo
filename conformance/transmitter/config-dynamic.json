@@ -1,0 +1,23 @@
+{
+    "alias": "ssfgo-tx-dynamic",
+    "description": "SSFgo conformance Transmitter, client credentials access token",
+    "server": {
+        "discoveryUrl": "{ORIGIN}/.well-known/oauth-authorization-server"
+    },
+    "client": {
+        "client_id": "ssf-test-client",
+        "client_secret": "ssf-test-secret",
+        "scope": "ssf.read ssf.manage"
+    },
+    "ssf": {
+        "subjects": {
+            "valid": { "format": "email", "email": "valid@example.com" },
+            "invalid": { "format": "email", "email": "invalid@example.com" }
+        },
+        "transmitter": {
+            "issuer": "{ORIGIN}",
+            "metadata_suffix": "{ISSUER_PATH}",
+            "push_endpoint_authorization_header": "Bearer ssfgo-push-token"
+        }
+    }
+}

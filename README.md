@@ -4,16 +4,17 @@ SSFgo is a lightweight Go implementation of the OpenID Shared Signals
 Framework, CAEP and RISC, providing embeddable Transmitter and Receiver
 capabilities with a focus on standards compliance and interoperability.
 
-> **Status: pre-release (v0.1 in progress).** The wire formats — subject
-> identifiers, Security Event Tokens, and the CAEP and RISC event types —
-> are implemented. The Transmitter and Receiver roles are not yet. See
-> [ROADMAP.md](ROADMAP.md).
+> **Status: pre-release.** The wire formats (v0.1) and the Transmitter's
+> stream management API (v0.2) are implemented; the latter passes every
+> OIDF stream-management test module. Event delivery (v0.3) and the
+> Receiver (v0.4) are next. See [ROADMAP.md](ROADMAP.md) and
+> [conformance/README.md](conformance/README.md).
 
 ## Specifications
 
 | Specification | Status in SSFgo |
 |---|---|
-| [OpenID Shared Signals Framework 1.0][ssf] | data model done; roles in progress |
+| [OpenID Shared Signals Framework 1.0][ssf] | data model and Transmitter stream management done; delivery and Receiver in progress |
 | [OpenID CAEP 1.0][caep] | all 8 event types |
 | [OpenID RISC 1.0][risc] | all 14 event types |
 | [CAEP Interoperability Profile 1.0][caep-interop] | target profile for conformance |

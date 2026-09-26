@@ -1,5 +1,10 @@
 package ssf
 
+import (
+	"encoding/json"
+	"fmt"
+)
+
 // StreamStatus is the status of an event stream (SSF 1.0 §8.1.2).
 type StreamStatus string
 
@@ -36,3 +41,168 @@ const (
 	// DeliveryPoll is poll-based delivery over HTTP (RFC 8936).
 	DeliveryPoll DeliveryMethod = "urn:ietf:rfc:8936"
 )
+
+// Delivery is a stream's "delivery" member (SSF 1.0 §6.1).
+type Delivery struct {
+	Method DeliveryMethod `json:"method"`
+	// EndpointURL is where the Transmitter pushes SETs (push, set by the
+	// Receiver) or where the Receiver polls for them (poll, set by the
+	// Transmitter).
+	EndpointURL string `json:"endpoint_url,omitempty"`
+	// AuthorizationHeader is the push-only Authorization header value
+	// the Transmitter sends with every push request (SSF 1.0 §6.1.1).
+	AuthorizationHeader string `json:"authorization_header,omitempty"`
+}
+
+// Audience is a JWT "aud" value: one string or an array of strings
+// (RFC 7519 §4.1.3). It encodes a single value as a string.
+type Audience []string
+
+// MarshalJSON implements json.Marshaler.
+func (a Audience) MarshalJSON() ([]byte, error) {
+	if len(a) == 1 {
+		return json.Marshal(a[0])
+	}
+	return json.Marshal([]string(a))
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (a *Audience) UnmarshalJSON(data []byte) error {
+	var one string
+	if err := json.Unmarshal(data, &one); err == nil && string(data) != "null" {
+		*a = Audience{one}
+		return nil
+	}
+	var many []string
+	if err := json.Unmarshal(data, &many); err != nil || many == nil {
+		return fmt.Errorf("ssf: aud must be a string or an array of strings")
+	}
+	*a = many
+	return nil
+}
+
+// StreamConfiguration is an event stream's configuration (SSF 1.0 §8.1.1),
+// as the Transmitter returns it.
+type StreamConfiguration struct {
+	StreamID        string      `json:"stream_id"`
+	Issuer          string      `json:"iss"`
+	Audience        Audience    `json:"aud"`
+	EventsSupported []EventType `json:"events_supported,omitempty"`
+	EventsRequested []EventType `json:"events_requested,omitempty"`
+	// EventsDelivered is always encoded, as an empty array when no
+	// event types are delivered.
+	EventsDelivered []EventType `json:"events_delivered"`
+	Delivery        Delivery    `json:"delivery"`
+	// MinVerificationInterval is in seconds; zero means none.
+	MinVerificationInterval int    `json:"min_verification_interval,omitempty"`
+	Description             string `json:"description,omitempty"`
+	// InactivityTimeout is in seconds; zero means none.
+	InactivityTimeout int `json:"inactivity_timeout,omitempty"`
+}
+
+// MarshalJSON implements json.Marshaler, encoding a nil EventsDelivered as
+// an empty array because the member is required.
+func (c StreamConfiguration) MarshalJSON() ([]byte, error) {
+	type plain StreamConfiguration
+	if c.EventsDelivered == nil {
+		c.EventsDelivered = []EventType{}
+	}
+	return json.Marshal(plain(c))
+}
+
+// StreamState is a stream's status as read from, or written to, the
+// Status Endpoint (SSF 1.0 §8.1.2).
+type StreamState struct {
+	StreamID string       `json:"stream_id"`
+	Status   StreamStatus `json:"status"`
+	Reason   string       `json:"reason,omitempty"`
+}
+
+// AddSubjectRequest is the body of an Add Subject request
+// (SSF 1.0 §8.1.3.2).
+type AddSubjectRequest struct {
+	StreamID string
+	Subject  Subject
+	// Verified is nil when the Receiver did not say; the Transmitter
+	// should then assume the subject was verified.
+	Verified *bool
+}
+
+// RemoveSubjectRequest is the body of a Remove Subject request
+// (SSF 1.0 §8.1.3.3).
+type RemoveSubjectRequest struct {
+	StreamID string
+	Subject  Subject
+}
+
+type subjectRequestWire struct {
+	StreamID string          `json:"stream_id"`
+	Subject  json.RawMessage `json:"subject"`
+	Verified *bool           `json:"verified,omitempty"`
+}
+
+// MarshalJSON implements json.Marshaler.
+func (r AddSubjectRequest) MarshalJSON() ([]byte, error) {
+	return marshalSubjectRequest(r.StreamID, r.Subject, r.Verified)
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (r *AddSubjectRequest) UnmarshalJSON(data []byte) error {
+	id, s, verified, err := unmarshalSubjectRequest(data)
+	if err != nil {
+		return err
+	}
+	*r = AddSubjectRequest{StreamID: id, Subject: s, Verified: verified}
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler.
+func (r RemoveSubjectRequest) MarshalJSON() ([]byte, error) {
+	return marshalSubjectRequest(r.StreamID, r.Subject, nil)
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (r *RemoveSubjectRequest) UnmarshalJSON(data []byte) error {
+	id, s, _, err := unmarshalSubjectRequest(data)
+	if err != nil {
+		return err
+	}
+	*r = RemoveSubjectRequest{StreamID: id, Subject: s}
+	return nil
+}
+
+func marshalSubjectRequest(streamID string, s Subject, verified *bool) ([]byte, error) {
+	if s == nil {
+		return nil, fmt.Errorf("ssf: subject is required")
+	}
+	raw, err := json.Marshal(s)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(subjectRequestWire{StreamID: streamID, Subject: raw, Verified: verified})
+}
+
+func unmarshalSubjectRequest(data []byte) (string, Subject, *bool, error) {
+	var w subjectRequestWire
+	if err := json.Unmarshal(data, &w); err != nil {
+		return "", nil, nil, fmt.Errorf("ssf: malformed subject request: %w", err)
+	}
+	if w.StreamID == "" {
+		return "", nil, nil, fmt.Errorf("ssf: stream_id is required")
+	}
+	if w.Subject == nil {
+		return "", nil, nil, fmt.Errorf("ssf: subject is required")
+	}
+	s, err := ParseSubject(w.Subject)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	return w.StreamID, s, w.Verified, nil
+}
+
+// VerificationRequest is the body of a request to the Verification
+// Endpoint (SSF 1.0 §8.1.4.2).
+type VerificationRequest struct {
+	StreamID string `json:"stream_id"`
+	State    string `json:"state,omitempty"`
+}
