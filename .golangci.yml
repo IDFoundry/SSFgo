@@ -1,0 +1,26 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - gosec
+    - bodyclose
+  exclusions:
+    generated: strict
+    rules:
+      # Not real findings in tests: gosec flags fixture strings that look
+      # like credentials and the deliberately weak RSA keys the "reject
+      # weak keys" tests generate; errcheck and bodyclose flag httptest
+      # plumbing.
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+          - bodyclose
+
+formatters:
+  enable:
+    - gofmt
+
+run:
+  timeout: 5m

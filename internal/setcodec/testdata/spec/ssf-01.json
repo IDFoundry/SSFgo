@@ -1,0 +1,19 @@
+{
+  "jti": "123456",
+  "iss": "https://transmitter.example.com",
+  "aud": [
+    "receiver.example.com/web",
+    "receiver.example.com/mobile"
+  ],
+  "iat": 1493856000,
+  "txn": "8675309",
+  "sub_id": {
+    "format": "opaque",
+    "id": "72e6991badb44e08a69672960053b342"
+  },
+  "events": {
+    "https://schemas.openid.net/secevent/ssf/event-type/verification": {
+      "state": "VGhpcyBpcyBhbiBleGFtcGxlIHN0YXRlIHZhbHVlLgo="
+    }
+  }
+}

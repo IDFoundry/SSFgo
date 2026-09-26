@@ -1,0 +1,20 @@
+{
+  "iss": "https://idp.example.com/3456789/",
+  "jti": "07efd930f0977e4fcc1149a733ce7f78",
+  "iat": 1615305159,
+  "aud": "https://sp.example2.net/caep",
+  "txn": "8675309",
+  "sub_id": {
+    "format": "iss_sub",
+    "iss": "https://idp.example.com/3456789/",
+    "sub": "jane.smith@example.com"
+  },
+  "events": {
+    "https://schemas.openid.net/secevent/caep/event-type/assurance-level-change": {
+      "namespace": "Retinal Scan",
+      "current_level": "hi-res-scan",
+      "initiating_entity": "user",
+      "event_timestamp": 1615304991
+    }
+  }
+}

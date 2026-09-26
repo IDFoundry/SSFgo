@@ -1,0 +1,16 @@
+{
+  "iss": "https://idp.example.com/3456790/",
+  "jti": "756E69717565206964656E746966696572",
+  "iat": 1508184845,
+  "aud": "https://sp.example2.net/caep",
+  "sub_id": {
+    "format": "iss_sub",
+    "iss": "https://idp.example.com/3456790/",
+    "sub": "joe.smith@example.com"
+  },
+  "events": {
+    "https://schemas.openid.net/secevent/risc/event-type/credential-compromise": {
+      "credential_type": "password"
+    }
+  }
+}

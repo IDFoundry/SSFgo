@@ -1,0 +1,33 @@
+{
+  "iss": "https://idp.example.com/123456789/",
+  "jti": "24c63fb56e5a2d77a6b512616ca9fa24",
+  "iat": 1615305159,
+  "aud": "https://sp.example.com/caep",
+  "txn": "8675309",
+  "sub_id": {
+    "format": "complex",
+    "device": {
+      "format": "iss_sub",
+      "iss": "https://idp.example.com/123456789/",
+      "sub": "e9297990-14d2-42ec-a4a9-4036db86509a"
+    },
+    "tenant": {
+      "format": "opaque",
+      "id": "123456789"
+    }
+  },
+  "events": {
+    "https://schemas.openid.net/secevent/caep/event-type/device-compliance-change": {
+      "current_status": "not-compliant",
+      "previous_status": "compliant",
+      "initiating_entity": "policy",
+      "reason_admin": {
+        "en": "Location Policy Violation: C076E8A3"
+      },
+      "reason_user": {
+        "en": "Device is no longer in a trusted location."
+      },
+      "event_timestamp": 1615304991
+    }
+  }
+}

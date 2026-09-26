@@ -1,0 +1,19 @@
+{
+  "iss": "https://sp.example2.com/",
+  "jti": "756E69717565206964656E746966696572",
+  "iat": 1520364019,
+  "txn": "8675309",
+  "aud": "636C69656E745F6964",
+  "sub_id": {
+    "format": "email",
+    "email": "foo@example2.com"
+  },
+  "events": {
+    "https://schemas.openid.net/secevent/caep/event-type/token-claims-change": {
+      "event_timestamp": 1600975810,
+      "claims": {
+        "role": "ro-admin"
+      }
+    }
+  }
+}
