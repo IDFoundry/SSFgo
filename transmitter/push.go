@@ -138,29 +138,42 @@ func (t *Transmitter) drain(ctx context.Context, id string) (failed bool) {
 		if err != nil || len(events) == 0 {
 			return false
 		}
-		e := events[0]
-		if limit := t.cfg.PushRetry.MaxAttempts; limit > 0 && t.pushes.failures(id) >= limit {
-			t.log.ErrorContext(ctx, "ssf transmitter: dropping SET after the maximum push attempts", "stream_id", id, "jti", e.JTI, "attempts", limit)
-			t.pushes.reset(id)
-			if err := t.cfg.Store.AckEvents(ctx, id, []string{e.JTI}); err != nil && !errors.Is(err, storage.ErrNotFound) {
-				return true
-			}
-			continue
-		}
-		switch outcome, detail := t.push(ctx, s.Delivery, e); outcome {
-		case pushDelivered:
-		case pushRejected:
-			// The Receiver says the SET itself is invalid; retrying will
-			// not change that (RFC 8935 §2.3).
-			t.log.WarnContext(ctx, "ssf transmitter: receiver rejected a pushed SET", "stream_id", id, "jti", e.JTI, "error", detail)
-		default:
-			t.log.WarnContext(ctx, "ssf transmitter: push delivery failed, will retry", "stream_id", id, "jti", e.JTI, "error", detail)
+		if retry := t.deliverOne(ctx, s, events[0]); retry {
 			return true
 		}
-		if err := t.cfg.Store.AckEvents(ctx, id, []string{e.JTI}); err != nil && !errors.Is(err, storage.ErrNotFound) {
-			t.log.ErrorContext(ctx, "ssf transmitter: remove pushed SET from queue", "stream_id", id, "error", err)
-			return true
-		}
+	}
+	return false
+}
+
+// deliverOne pushes one SET and removes it from the queue once it has
+// been delivered, rejected by the Receiver, or given up on. It reports
+// whether the stream should back off and retry.
+func (t *Transmitter) deliverOne(ctx context.Context, s storage.Stream, e storage.QueuedEvent) (retry bool) {
+	if limit := t.cfg.PushRetry.MaxAttempts; limit > 0 && t.pushes.failures(s.ID) >= limit {
+		t.log.ErrorContext(ctx, "ssf transmitter: dropping SET after the maximum push attempts", "stream_id", s.ID, "jti", e.JTI, "attempts", limit)
+		t.pushes.reset(s.ID)
+		return t.dequeue(ctx, s.ID, e.JTI)
+	}
+	switch outcome, detail := t.push(ctx, s.Delivery, e); outcome {
+	case pushDelivered:
+	case pushRejected:
+		// The Receiver says the SET itself is invalid; retrying will not
+		// change that (RFC 8935 §2.3).
+		t.log.WarnContext(ctx, "ssf transmitter: receiver rejected a pushed SET", "stream_id", s.ID, "jti", e.JTI, "error", detail)
+	default:
+		t.log.WarnContext(ctx, "ssf transmitter: push delivery failed, will retry", "stream_id", s.ID, "jti", e.JTI, "error", detail)
+		return true
+	}
+	return t.dequeue(ctx, s.ID, e.JTI)
+}
+
+// dequeue removes a SET from a stream's queue, reporting whether that
+// failed and the stream should retry.
+func (t *Transmitter) dequeue(ctx context.Context, id, jti string) (retry bool) {
+	err := t.cfg.Store.AckEvents(ctx, id, []string{jti})
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		t.log.ErrorContext(ctx, "ssf transmitter: remove pushed SET from queue", "stream_id", id, "error", err)
+		return true
 	}
 	return false
 }

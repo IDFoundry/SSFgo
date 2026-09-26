@@ -30,8 +30,10 @@ jobs:
       - name: Clone OIDF conformance suite
         run: git clone --depth 1 https://gitlab.com/openid/conformance-suite.git /tmp/conformance-suite
 
+      # Pinned and hash-checked here rather than taken from the suite's own
+      # unpinned requirements.txt.
       - name: Install suite script dependencies
-        run: "pip install --only-binary :all: -r /tmp/conformance-suite/scripts/requirements.txt"
+        run: pip install --require-hashes --only-binary :all: -r conformance/scripts/requirements.txt
 
       - name: Bring up OIDF conformance suite
         working-directory: /tmp/conformance-suite

@@ -118,40 +118,9 @@ func (c *ClientCredentials) Invalidate() {
 }
 
 func (c *ClientCredentials) fetch(ctx context.Context) (string, time.Duration, error) {
-	if c.TokenURL == "" || c.ClientID == "" {
-		return "", 0, errors.New("receiver: ClientCredentials needs TokenURL and ClientID")
-	}
-	if c.AuthMethod != PrivateKeyJWT && c.ClientSecret == "" {
-		return "", 0, fmt.Errorf("receiver: %s needs a ClientSecret", c.AuthMethod)
-	}
-	form := url.Values{"grant_type": {"client_credentials"}}
-	if len(c.Scopes) > 0 {
-		form.Set("scope", strings.Join(c.Scopes, " "))
-	}
-	switch c.AuthMethod {
-	case ClientSecretPost:
-		form.Set("client_id", c.ClientID)
-		form.Set("client_secret", c.ClientSecret)
-	case ClientSecretBasic:
-	case ClientSecretJWT, PrivateKeyJWT:
-		o := clientassertion.Options{ClientID: c.ClientID, Audience: c.AssertionAudience, Now: time.Now()}
-		if o.Audience == "" {
-			o.Audience = c.TokenURL
-		}
-		if c.AuthMethod == ClientSecretJWT {
-			o.Secret = []byte(c.ClientSecret)
-		} else {
-			o.Signer, o.Algorithm, o.KeyID = c.SigningKey, c.SigningAlgorithm, c.KeyID
-		}
-		assertion, err := clientassertion.Build(o)
-		if err != nil {
-			return "", 0, fmt.Errorf("receiver: %w", err)
-		}
-		form.Set("client_id", c.ClientID)
-		form.Set("client_assertion_type", clientassertion.Type)
-		form.Set("client_assertion", assertion)
-	default:
-		return "", 0, fmt.Errorf("receiver: unsupported client authentication method %q", c.AuthMethod)
+	form, err := c.tokenForm()
+	if err != nil {
+		return "", 0, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.TokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
@@ -177,6 +146,60 @@ func (c *ClientCredentials) fetch(ctx context.Context) (string, time.Duration, e
 	if res.StatusCode != http.StatusOK {
 		return "", 0, fmt.Errorf("receiver: token endpoint returned %d: %s", res.StatusCode, body)
 	}
+	return parseTokenResponse(body)
+}
+
+// tokenForm builds the client credentials request body, including the
+// client's credentials for every method but client_secret_basic.
+func (c *ClientCredentials) tokenForm() (url.Values, error) {
+	if c.TokenURL == "" || c.ClientID == "" {
+		return nil, errors.New("receiver: ClientCredentials needs TokenURL and ClientID")
+	}
+	if c.AuthMethod != PrivateKeyJWT && c.ClientSecret == "" {
+		return nil, fmt.Errorf("receiver: %s needs a ClientSecret", c.AuthMethod)
+	}
+	form := url.Values{"grant_type": {"client_credentials"}}
+	if len(c.Scopes) > 0 {
+		form.Set("scope", strings.Join(c.Scopes, " "))
+	}
+	switch c.AuthMethod {
+	case ClientSecretBasic:
+	case ClientSecretPost:
+		form.Set("client_id", c.ClientID)
+		form.Set("client_secret", c.ClientSecret)
+	case ClientSecretJWT, PrivateKeyJWT:
+		assertion, err := c.assertion()
+		if err != nil {
+			return nil, err
+		}
+		form.Set("client_id", c.ClientID)
+		form.Set("client_assertion_type", clientassertion.Type)
+		form.Set("client_assertion", assertion)
+	default:
+		return nil, fmt.Errorf("receiver: unsupported client authentication method %q", c.AuthMethod)
+	}
+	return form, nil
+}
+
+func (c *ClientCredentials) assertion() (string, error) {
+	o := clientassertion.Options{ClientID: c.ClientID, Audience: c.AssertionAudience, Now: time.Now()}
+	if o.Audience == "" {
+		o.Audience = c.TokenURL
+	}
+	if c.AuthMethod == ClientSecretJWT {
+		o.Secret = []byte(c.ClientSecret)
+	} else {
+		o.Signer, o.Algorithm, o.KeyID = c.SigningKey, c.SigningAlgorithm, c.KeyID
+	}
+	assertion, err := clientassertion.Build(o)
+	if err != nil {
+		return "", fmt.Errorf("receiver: %w", err)
+	}
+	return assertion, nil
+}
+
+// parseTokenResponse reads an RFC 6749 §5.1 token response.
+func parseTokenResponse(body []byte) (string, time.Duration, error) {
 	var tr struct {
 		AccessToken string `json:"access_token"`
 		TokenType   string `json:"token_type"`

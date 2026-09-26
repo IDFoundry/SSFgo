@@ -701,6 +701,35 @@ func TestClientCredentials(t *testing.T) {
 	}
 }
 
+// validAssertion checks a token request's client assertion as an
+// authorization server would (RFC 7523 §3): HS256 against the shared
+// secret, PS256 against the client's public key.
+func validAssertion(r *http.Request, tokenURL, secret string, key *rsa.PrivateKey) bool {
+	_ = r.ParseForm()
+	if r.PostForm.Get("client_assertion_type") != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" || r.PostForm.Get("client_id") != "client" {
+		return false
+	}
+	assertion := r.PostForm.Get("client_assertion")
+	parts := strings.Split(assertion, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	payload, _ := base64.RawURLEncoding.DecodeString(parts[1])
+	var claims map[string]any
+	_ = json.Unmarshal(payload, &claims)
+	if claims["iss"] != "client" || claims["sub"] != "client" || claims["aud"] != tokenURL {
+		return false
+	}
+	header, _ := base64.RawURLEncoding.DecodeString(parts[0])
+	if strings.Contains(string(header), "HS256") {
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write([]byte(parts[0] + "." + parts[1]))
+		return parts[2] == base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	}
+	c, err := jose.ParseCompact(assertion)
+	return err == nil && c.Verify(&key.PublicKey, ssf.PS256) == nil
+}
+
 // TestClientAssertions checks the assertions ClientCredentials sends for
 // client_secret_jwt and private_key_jwt verify as an authorization server
 // would check them (RFC 7523 §3).
@@ -709,31 +738,7 @@ func TestClientAssertions(t *testing.T) {
 	key := signingKey(t)
 	var tokenURL string
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = r.ParseForm()
-		if r.PostForm.Get("client_assertion_type") != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" || r.PostForm.Get("client_id") != "client" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		assertion := r.PostForm.Get("client_assertion")
-		parts := strings.Split(assertion, ".")
-		payload, _ := base64.RawURLEncoding.DecodeString(parts[1])
-		var claims map[string]any
-		_ = json.Unmarshal(payload, &claims)
-		if claims["iss"] != "client" || claims["sub"] != "client" || claims["aud"] != tokenURL {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		header, _ := base64.RawURLEncoding.DecodeString(parts[0])
-		var ok bool
-		if strings.Contains(string(header), "HS256") {
-			mac := hmac.New(sha256.New, []byte(secret))
-			mac.Write([]byte(parts[0] + "." + parts[1]))
-			ok = parts[2] == base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-		} else {
-			c, err := jose.ParseCompact(assertion)
-			ok = err == nil && c.Verify(&key.PublicKey, ssf.PS256) == nil
-		}
-		if !ok {
+		if !validAssertion(r, tokenURL, secret, key) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}

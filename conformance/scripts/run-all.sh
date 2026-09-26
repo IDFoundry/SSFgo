@@ -37,8 +37,10 @@ for _ in $(seq 1 60); do
 done
 
 record() { # name status
-	printf '%-45s %s\n' "$1" "$2" | tee -a "$summary"
-	[[ "$2" == PASSED ]] || failures=$((failures + 1))
+	local name="$1" status="$2"
+	printf '%-45s %s\n' "$name" "$status" | tee -a "$summary"
+	[[ "$status" == PASSED ]] || failures=$((failures + 1))
+	return 0
 }
 
 only="${ONLY:-}"
@@ -80,6 +82,7 @@ run_receiver() { # name, driver args...
 		record "receiver $name" "FAILED (see $log)"
 	fi
 	grep -E '^(PASSED|FAILED|WARNING|ERROR|TIMEOUT|INTERRUPTED|REVIEW|SKIPPED)' "$log" | sed 's/^/    /'
+	return 0
 }
 expected=openid-ssf-receiver-stream-caep-interop
 for auth in static dynamic; do
