@@ -2,8 +2,11 @@ package receiver_test
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -18,6 +21,7 @@ import (
 
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/caep"
+	"github.com/idfoundry/ssfgo/internal/jose"
 	"github.com/idfoundry/ssfgo/internal/setcodec"
 	"github.com/idfoundry/ssfgo/receiver"
 	"github.com/idfoundry/ssfgo/risc"
@@ -170,6 +174,19 @@ func TestDiscovery(t *testing.T) {
 	e.txSrv.Config.Handler = mux
 	if _, err := receiver.New(context.Background(), bad); err == nil || !strings.Contains(err.Error(), "names issuer") {
 		t.Errorf("issuer mismatch: %v", err)
+	}
+
+	// Every advertised endpoint must use TLS (SSF 1.0 §7.1).
+	plain := e.cfg
+	plain.Issuer = e.txSrv.URL + "/plain"
+	mux.HandleFunc("/.well-known/ssf-configuration/plain", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"issuer": plain.Issuer, "jwks_uri": e.rx.Metadata().JWKSURI,
+			"configuration_endpoint": "http://tx.example/ssf/stream",
+		})
+	})
+	if _, err := receiver.New(context.Background(), plain); err == nil || !strings.Contains(err.Error(), "not an https URL") {
+		t.Errorf("plain-HTTP endpoint: %v", err)
 	}
 
 	for name, mutate := range map[string]func(*receiver.Config){
@@ -530,6 +547,53 @@ func (e *env) rotate(newKey *rsa.PrivateKey) {
 	e.txSrv.Config.Handler = tx.Handler()
 }
 
+func TestKeyMaxAge(t *testing.T) {
+	now := time.Now()
+	e := newEnv(t, func(c *receiver.Config) {
+		c.Now = func() time.Time { return now }
+		c.KeyMaxAge = time.Hour
+	})
+	h := e.rx.PushHandler(receiver.PushOptions{})
+	// The Transmitter retires k1 entirely: only k2 is published.
+	newKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := transmitter.New(transmitter.Config{
+		Issuer:          e.cfg.Issuer,
+		SigningKeys:     []transmitter.SigningKey{{Signer: newKey, Algorithm: ssf.RS256, KeyID: "k2"}},
+		EventsSupported: []ssf.EventType{caep.SessionRevokedEventType},
+		DeliveryMethods: []ssf.DeliveryMethod{ssf.DeliveryPoll},
+		DefaultSubjects: ssf.DefaultSubjectsAll,
+		Store:           e.store,
+		Authorize:       func(context.Context, string) (transmitter.Receiver, error) { return transmitter.Receiver{}, nil },
+		Logger:          quiet,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.txSrv.Config.Handler = tx.Handler()
+
+	oldSigned := sign(t, e, func(s *ssf.SET) { s.IssuedAt = now; s.JWTID = "old" })
+	if got := push(t, h, "", oldSigned); got.status != 202 {
+		t.Fatalf("within KeyMaxAge the cached k1 is still trusted: %d %q", got.status, got.err)
+	}
+	now = now.Add(2 * time.Hour)
+	oldSigned = sign(t, e, func(s *ssf.SET) { s.IssuedAt = now; s.JWTID = "old-2" })
+	if got := push(t, h, "", oldSigned); got.status != 400 || got.err != receiver.ErrCodeInvalidKey {
+		t.Fatalf("after KeyMaxAge the retired k1 must no longer verify: %d %q", got.status, got.err)
+	}
+
+	// With the JWKS endpoint down, the keys already held stay in use.
+	e.txSrv.Config.Handler = http.NotFoundHandler()
+	now = now.Add(2 * time.Hour)
+	set := ssf.SET{Issuer: e.cfg.Issuer, Audience: []string{audience}, JWTID: "new", IssuedAt: now, Subject: alice, Event: revoked()}
+	tok, _ := setcodec.Encode(setcodec.Signer{Key: newKey, Algorithm: ssf.RS256, KeyID: "k2"}, set)
+	if got := push(t, h, "", tok); got.status != 202 {
+		t.Fatalf("an unavailable JWKS endpoint must not drop the cached keys: %d %q", got.status, got.err)
+	}
+}
+
 func TestAudienceMismatch(t *testing.T) {
 	e := newEnv(t, func(c *receiver.Config) { c.Audience = "https://not-what-the-transmitter-assigns.example" })
 	c, err := e.rx.CreateStream(context.Background(), receiver.StreamRequest{})
@@ -627,8 +691,63 @@ func TestClientCredentials(t *testing.T) {
 	if _, err := bad.Token(context.Background()); err == nil {
 		t.Error("wrong secret accepted")
 	}
-	unknown := &receiver.ClientCredentials{TokenURL: srv.URL, ClientID: "c", ClientSecret: "s", AuthMethod: "private_key_jwt"}
+	unknown := &receiver.ClientCredentials{TokenURL: srv.URL, ClientID: "c", ClientSecret: "s", AuthMethod: "tls_client_auth"}
 	if _, err := unknown.Token(context.Background()); err == nil {
 		t.Error("unsupported auth method accepted")
+	}
+	noKey := &receiver.ClientCredentials{TokenURL: srv.URL, ClientID: "c", AuthMethod: receiver.PrivateKeyJWT}
+	if _, err := noKey.Token(context.Background()); err == nil {
+		t.Error("private_key_jwt without a key accepted")
+	}
+}
+
+// TestClientAssertions checks the assertions ClientCredentials sends for
+// client_secret_jwt and private_key_jwt verify as an authorization server
+// would check them (RFC 7523 §3).
+func TestClientAssertions(t *testing.T) {
+	secret := strings.Repeat("s", 32)
+	key := signingKey(t)
+	var tokenURL string
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		if r.PostForm.Get("client_assertion_type") != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" || r.PostForm.Get("client_id") != "client" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		assertion := r.PostForm.Get("client_assertion")
+		parts := strings.Split(assertion, ".")
+		payload, _ := base64.RawURLEncoding.DecodeString(parts[1])
+		var claims map[string]any
+		_ = json.Unmarshal(payload, &claims)
+		if claims["iss"] != "client" || claims["sub"] != "client" || claims["aud"] != tokenURL {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		header, _ := base64.RawURLEncoding.DecodeString(parts[0])
+		var ok bool
+		if strings.Contains(string(header), "HS256") {
+			mac := hmac.New(sha256.New, []byte(secret))
+			mac.Write([]byte(parts[0] + "." + parts[1]))
+			ok = parts[2] == base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+		} else {
+			c, err := jose.ParseCompact(assertion)
+			ok = err == nil && c.Verify(&key.PublicKey, ssf.PS256) == nil
+		}
+		if !ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = io.WriteString(w, `{"access_token":"t","token_type":"Bearer","expires_in":60}`)
+	}))
+	defer srv.Close()
+	tokenURL = srv.URL + "/token"
+
+	for _, cc := range []*receiver.ClientCredentials{
+		{TokenURL: tokenURL, ClientID: "client", ClientSecret: secret, AuthMethod: receiver.ClientSecretJWT, HTTPClient: srv.Client()},
+		{TokenURL: tokenURL, ClientID: "client", AuthMethod: receiver.PrivateKeyJWT, SigningKey: key, SigningAlgorithm: ssf.PS256, KeyID: "k", HTTPClient: srv.Client()},
+	} {
+		if tok, err := cc.Token(context.Background()); err != nil || tok != "t" {
+			t.Errorf("%s: %q, %v", cc.AuthMethod, tok, err)
+		}
 	}
 }

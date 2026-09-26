@@ -1,0 +1,10 @@
+# Compose override for the OIDF conformance suite's docker-compose-prebuilt.yml.
+#
+# The suite's server container reaches SSFgo's harnesses on the host as
+# https://host.docker.internal:<port>. Docker Desktop defines that name;
+# Docker Engine on Linux (the GitHub Actions runner) does not, so map it to
+# the host gateway.
+services:
+  server:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

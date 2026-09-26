@@ -86,7 +86,12 @@ func (r *Receiver) process(ctx context.Context, token string) (string, error) {
 }
 
 func (r *Receiver) decode(ctx context.Context, token string) (ssf.SET, error) {
-	keys, fetched := r.currentKeys()
+	if _, fetched := r.currentKeys(); r.cfg.Now().Sub(fetched) > r.cfg.KeyMaxAge {
+		// On failure the keys already held stay in use, rather than
+		// every SET being refused while the JWKS endpoint is down.
+		r.maybeRefreshKeys(ctx)
+	}
+	keys, _ := r.currentKeys()
 	opts := setcodec.VerifyOptions{
 		Issuer:       r.cfg.Issuer,
 		Audience:     r.cfg.Audience,
@@ -95,15 +100,15 @@ func (r *Receiver) decode(ctx context.Context, token string) (ssf.SET, error) {
 		Registry:     r.cfg.Registry,
 		Now:          r.cfg.Now,
 		MaxClockSkew: r.cfg.MaxClockSkew,
+
+		LegacyEventSubject: r.cfg.AcceptLegacySubjects,
+		LegacySubjectType:  r.cfg.AcceptLegacySubjects,
 	}
 	set, err := setcodec.Decode(token, opts)
-	if de, ok := setcodec.IsDecodeError(err); ok && de.Code == setcodec.CodeInvalidKey &&
-		r.cfg.Now().Sub(fetched) > keyRefetchInterval {
-		// Perhaps the Transmitter rotated its keys: refetch once.
-		if rerr := r.refreshKeys(ctx); rerr == nil {
-			opts.Keys, _ = r.currentKeys()
-			set, err = setcodec.Decode(token, opts)
-		}
+	if de, ok := setcodec.IsDecodeError(err); ok && de.Code == setcodec.CodeInvalidKey && r.maybeRefreshKeys(ctx) {
+		// Perhaps the Transmitter rotated its keys: try once more.
+		opts.Keys, _ = r.currentKeys()
+		set, err = setcodec.Decode(token, opts)
 	}
 	if de, ok := setcodec.IsDecodeError(err); ok {
 		return ssf.SET{}, &RejectedSET{Code: de.Code, Description: de.Err.Error()}

@@ -19,11 +19,6 @@ const (
 	// pushScanInterval is how often Run looks for push streams with SETs
 	// queued, in addition to being woken when a SET is queued here.
 	pushScanInterval = time.Second
-	// Retry backoff for push deliveries that fail recoverably
-	// (RFC 8935 §2: delay retransmission to avoid overwhelming the
-	// Receiver).
-	minPushBackoff = time.Second
-	maxPushBackoff = 5 * time.Minute
 )
 
 // pushState tracks, per stream, whether a delivery goroutine is running
@@ -31,6 +26,7 @@ const (
 type pushState struct {
 	mu      sync.Mutex
 	streams map[string]*pushStream
+	policy  PushRetryPolicy
 }
 
 type pushStream struct {
@@ -39,7 +35,29 @@ type pushStream struct {
 	retryAt  time.Time
 }
 
-func newPushState() *pushState { return &pushState{streams: map[string]*pushStream{}} }
+func newPushState(policy PushRetryPolicy) *pushState {
+	return &pushState{streams: map[string]*pushStream{}, policy: policy}
+}
+
+// failures returns how many consecutive attempts on stream id have failed:
+// the attempts spent on the SET at the head of its queue.
+func (p *pushState) failures(id string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if st, ok := p.streams[id]; ok {
+		return st.failures
+	}
+	return 0
+}
+
+// reset clears stream id's failure count, after its head SET is dropped.
+func (p *pushState) reset(id string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if st, ok := p.streams[id]; ok {
+		st.failures = 0
+	}
+}
 
 // claim marks stream id busy if it is idle and not backing off.
 func (p *pushState) claim(id string, now time.Time) bool {
@@ -68,8 +86,11 @@ func (p *pushState) release(id string, failed bool, now time.Time) {
 		return
 	}
 	st.failures++
-	backoff := minPushBackoff << min(st.failures-1, 20)
-	st.retryAt = now.Add(min(backoff, maxPushBackoff))
+	backoff := p.policy.MinBackoff << min(st.failures-1, 20)
+	if backoff <= 0 || backoff > p.policy.MaxBackoff {
+		backoff = p.policy.MaxBackoff
+	}
+	st.retryAt = now.Add(backoff)
 }
 
 // Run delivers SETs queued on push streams (RFC 8935) until ctx is done,
@@ -118,6 +139,14 @@ func (t *Transmitter) drain(ctx context.Context, id string) (failed bool) {
 			return false
 		}
 		e := events[0]
+		if limit := t.cfg.PushRetry.MaxAttempts; limit > 0 && t.pushes.failures(id) >= limit {
+			t.log.ErrorContext(ctx, "ssf transmitter: dropping SET after the maximum push attempts", "stream_id", id, "jti", e.JTI, "attempts", limit)
+			t.pushes.reset(id)
+			if err := t.cfg.Store.AckEvents(ctx, id, []string{e.JTI}); err != nil && !errors.Is(err, storage.ErrNotFound) {
+				return true
+			}
+			continue
+		}
 		switch outcome, detail := t.push(ctx, s.Delivery, e); outcome {
 		case pushDelivered:
 		case pushRejected:

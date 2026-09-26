@@ -60,17 +60,23 @@ milliseconds (CAEP 1.0 §2 requires seconds) — see
 all four variants, and the base supported-events test passes for push and
 poll.
 
-## v0.5 — Hardening
+## v0.5 — Hardening ✅
 
-- JWKS rotation and caching; push retry/backoff tuning.
-- Concurrency and race tests; security review.
-- Opt-in receiver leniency for legacy transmitters: event-embedded
-  `subject` (SSF §3.1.1) and Google's `subject_type` (RISC §3.1).
+- JWKS rotation and caching (`KeyMaxAge`, rate-limited refetch); push
+  retry policy (`PushRetry`: backoff bounds and an optional attempt cap).
+- Concurrency stress test; security review (SSRF-safe default push
+  client, https-only endpoints, no credentials in push URLs) and
+  [SECURITY.md](SECURITY.md).
+- Opt-in receiver leniency for legacy transmitters
+  (`AcceptLegacySubjects`): event-embedded `subject` (SSF §3.1.1) and
+  Google's `subject_type` (RISC §3.1).
 - `client_secret_jwt` and `private_key_jwt` client authentication for the
   Receiver's client-credentials token source.
-- Documentation and a session-revocation example.
+- README usage and a runnable session-revocation example.
 
 **Exit:** the full conformance matrix runs in CI and passes reliably.
+[`conformance/scripts/run-all.sh`](conformance/scripts/run-all.sh) runs it
+and `.github/workflows/conformance.yml` runs that daily.
 
 ## v1.0
 

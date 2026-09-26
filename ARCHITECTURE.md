@@ -31,10 +31,12 @@ github.com/idfoundry/ssfgo     // package ssf: shared value types only
 ├── internal/
 │   ├── jose/                  // minimal JWS: RS256, PS256, ES256, EdDSA; JWK/JWKS
 │   ├── critical/              // RFC 7515 "crit" check
-│   └── setcodec/              // SET encode (sign) / decode (verify) per SSF §4
+│   ├── setcodec/              // SET encode (sign) / decode (verify) per SSF §4
+│   ├── clientassertion/       // RFC 7523 client assertions (HS256 kept out of jose)
+│   └── testcert/              // throwaway TLS certificates for the harnesses
 ├── cmd/conformance-transmitter/ // Transmitter wired up for the OIDF suite
 ├── cmd/conformance-receiver/  // drives the Receiver through OIDF Receiver plans
-├── examples/
+├── examples/session-revocation/ // both roles in one process
 └── conformance/               // suite configs, run scripts, recorded results
 ```
 
@@ -139,6 +141,29 @@ in-memory store and modest stream counts; a large deployment's storage
 backend is where an index belongs, and the contract can grow one without
 changing the Transmitter's behaviour.
 
+## Hardening (v0.5)
+
+- **Push SSRF.** `transmitter.NewPushClient`, the default push client,
+  checks the address actually dialled is public unicast (so DNS
+  rebinding cannot reach internal hosts), follows no redirects and uses no
+  proxy. Deployments with Receivers on a private network pass their own
+  `HTTPClient`.
+- **Retries.** `Config.PushRetry` sets the backoff bounds and an optional
+  attempt cap after which a SET is dropped and logged.
+- **Keys.** The Receiver refetches the JWKS after `KeyMaxAge` (24 h by
+  default) so retired keys stop being trusted, and when a SET names an
+  unknown key; all refetches are rate-limited to one a minute and a failed
+  refetch keeps the keys already held.
+- **Legacy Transmitters.** `receiver.Config.AcceptLegacySubjects` opts in
+  to pre-SSF-1.0 SETs — the subject inside the event, Google's
+  `subject_type` — without loosening anything for other Receivers.
+- **Client authentication.** `ClientCredentials` supports
+  `client_secret_basic`, `client_secret_post`, `client_secret_jwt` (HS256)
+  and `private_key_jwt`. HS256 lives in `internal/clientassertion`, never
+  in `internal/jose`, so a shared-secret MAC can never verify a SET.
+
+See [SECURITY.md](SECURITY.md) for the security model as a whole.
+
 ## Receiver (v0.4)
 
 `receiver.New(ctx, Config)` fetches the Transmitter Configuration Metadata
@@ -151,8 +176,7 @@ Transmitter's JWKS.
   `Config.Audience` (otherwise every SET on the stream would be rejected;
   the stream is returned with `ErrAudienceMismatch` so the caller can
   delete it). Access tokens come from a `TokenSource` — `StaticToken`, or
-  `ClientCredentials` (`client_secret_basic`/`client_secret_post`), which
-  caches and is invalidated once on a 401.
+  `ClientCredentials`, which caches and is invalidated once on a 401.
 - **Delivery.** `PushHandler` answers 202 once a SET is verified and
   handled, 400 with an RFC 8935 error body for a SET it rejects, and 500
   when a handler fails, so the Transmitter retries. `Poll` acknowledges

@@ -131,16 +131,20 @@ func (s *session) tokenSource() (receiver.TokenSource, error) {
 	if s.o.auth == "static" {
 		return receiver.StaticToken(s.exposed["ssf_tx_access_token"]), nil
 	}
-	method := receiver.ClientAuthMethod(s.o.clientAuth)
-	if method != receiver.ClientSecretBasic && method != receiver.ClientSecretPost {
-		return nil, fmt.Errorf("unsupported -client-auth %q", s.o.clientAuth)
-	}
-	return &receiver.ClientCredentials{
+	cc := &receiver.ClientCredentials{
 		TokenURL:     s.exposed["ssf_token_endpoint"],
 		ClientID:     s.exposed["ssf_client_id"],
 		ClientSecret: s.exposed["ssf_client_secret"],
 		Scopes:       strings.Fields(s.exposed["ssf_client_scope"]),
-		AuthMethod:   method,
+		AuthMethod:   receiver.ClientAuthMethod(s.o.clientAuth),
 		HTTPClient:   s.client,
-	}, nil
+	}
+	switch cc.AuthMethod {
+	case receiver.ClientSecretBasic, receiver.ClientSecretPost, receiver.ClientSecretJWT:
+	case receiver.PrivateKeyJWT:
+		cc.SigningKey, cc.SigningAlgorithm, cc.KeyID = s.o.assertionKey, ssf.PS256, assertionKeyID
+	default:
+		return nil, fmt.Errorf("unsupported -client-auth %q", s.o.clientAuth)
+	}
+	return cc, nil
 }

@@ -113,6 +113,17 @@ type VerifyOptions struct {
 	// MaxClockSkew is how far in the future "iat" may be. It defaults to
 	// one minute.
 	MaxClockSkew time.Duration
+
+	// LegacyEventSubject accepts a SET without "sub_id" whose event
+	// object carries a "subject" member instead, as CAEP and RISC events
+	// did before SSF 1.0 (SSF 1.0 §3.1.1 lets those event types keep the
+	// member, but requires "sub_id" too).
+	LegacyEventSubject bool
+	// LegacySubjectType accepts a subject identifier that names its format
+	// in "subject_type" rather than "format", as Google's RISC Transmitter
+	// does (RISC 1.0 §3.1), mapping Google's "iss-sub" and "phone" to
+	// "iss_sub" and "phone_number".
+	LegacySubjectType bool
 }
 
 // Decode verifies token against opts and returns its content. Every
@@ -218,20 +229,26 @@ func decodeClaims(payload []byte, opts VerifyOptions) (ssf.SET, error) {
 	}
 	set.IssuedAt = iat.Time
 
-	rawSub, ok := raw["sub_id"]
-	if !ok {
-		return ssf.SET{}, reject(CodeInvalidRequest, "claim \"sub_id\" is required")
-	}
-	if set.Subject, err = ssf.ParseSubject(rawSub); err != nil {
-		return ssf.SET{}, reject(CodeInvalidRequest, "sub_id: %w", err)
-	}
-
 	var events map[ssf.EventType]json.RawMessage
 	if err := json.Unmarshal(raw["events"], &events); err != nil || events == nil {
 		return ssf.SET{}, reject(CodeInvalidRequest, "claim \"events\" must be a JSON object")
 	}
 	if len(events) != 1 {
 		return ssf.SET{}, reject(CodeInvalidRequest, "events must hold exactly one event, got %d", len(events))
+	}
+
+	rawSub, ok := raw["sub_id"]
+	if !ok && opts.LegacyEventSubject {
+		rawSub, ok = eventSubject(events)
+	}
+	if !ok {
+		return ssf.SET{}, reject(CodeInvalidRequest, "claim \"sub_id\" is required")
+	}
+	if opts.LegacySubjectType {
+		rawSub = normalizeSubjectType(rawSub)
+	}
+	if set.Subject, err = ssf.ParseSubject(rawSub); err != nil {
+		return ssf.SET{}, reject(CodeInvalidRequest, "sub_id: %w", err)
 	}
 	for typ, payload := range events {
 		if set.Event, err = opts.Registry.Decode(typ, payload); err != nil {
@@ -243,6 +260,51 @@ func decodeClaims(payload []byte, opts VerifyOptions) (ssf.SET, error) {
 		return ssf.SET{}, &DecodeError{Code: CodeInvalidRequest, Err: err}
 	}
 	return set, nil
+}
+
+// eventSubject returns the "subject" member of the single event object.
+func eventSubject(events map[ssf.EventType]json.RawMessage) (json.RawMessage, bool) {
+	for _, payload := range events {
+		var obj map[string]json.RawMessage
+		if json.Unmarshal(payload, &obj) != nil {
+			return nil, false
+		}
+		s, ok := obj["subject"]
+		return s, ok
+	}
+	return nil, false
+}
+
+// legacySubjectTypes maps Google's subject_type values to RFC 9493
+// formats; others are used as they are.
+var legacySubjectTypes = map[string]string{"iss-sub": "iss_sub", "phone": "phone_number"}
+
+// normalizeSubjectType rewrites a subject identifier that uses
+// "subject_type" and no "format" to the RFC 9493 form. Anything else is
+// returned unchanged.
+func normalizeSubjectType(raw json.RawMessage) json.RawMessage {
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(raw, &obj) != nil {
+		return raw
+	}
+	if _, has := obj["format"]; has {
+		return raw
+	}
+	var typ string
+	if json.Unmarshal(obj["subject_type"], &typ) != nil || typ == "" {
+		return raw
+	}
+	if mapped, ok := legacySubjectTypes[typ]; ok {
+		typ = mapped
+	}
+	format, _ := json.Marshal(typ)
+	obj["format"] = format
+	delete(obj, "subject_type")
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 func stringClaim(raw map[string]json.RawMessage, name string, required bool) (string, error) {

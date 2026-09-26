@@ -2,6 +2,7 @@ package receiver
 
 import (
 	"context"
+	"crypto"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/internal/clientassertion"
 )
 
 // TokenSource supplies the OAuth 2.0 access token the Receiver presents to
@@ -43,21 +47,42 @@ func (t StaticToken) Token(context.Context) (string, error) {
 type ClientAuthMethod string
 
 const (
+	// ClientSecretBasic sends the secret with HTTP Basic authentication.
 	ClientSecretBasic ClientAuthMethod = "client_secret_basic"
-	ClientSecretPost  ClientAuthMethod = "client_secret_post"
+	// ClientSecretPost sends the secret in the request body.
+	ClientSecretPost ClientAuthMethod = "client_secret_post"
+	// ClientSecretJWT sends a client assertion MACed with the secret
+	// using HS256 (OpenID Connect Core §9, RFC 7523). The secret must be
+	// at least 32 bytes.
+	ClientSecretJWT ClientAuthMethod = "client_secret_jwt"
+	// PrivateKeyJWT sends a client assertion signed with SigningKey
+	// (OpenID Connect Core §9, RFC 7523).
+	PrivateKeyJWT ClientAuthMethod = "private_key_jwt"
 )
 
 // ClientCredentials is a TokenSource that obtains tokens with the OAuth 2.0
 // client credentials grant (RFC 6749 §4.4) and caches each until shortly
 // before it expires.
 type ClientCredentials struct {
-	TokenURL     string
-	ClientID     string
+	TokenURL string
+	ClientID string
+	// ClientSecret is used by every AuthMethod except PrivateKeyJWT.
 	ClientSecret string
 	// Scopes to request, e.g. "ssf.read" and "ssf.manage" (CAEP Interop
 	// §2.7.3). Optional.
 	Scopes     []string
 	AuthMethod ClientAuthMethod
+
+	// SigningKey, SigningAlgorithm and KeyID sign PrivateKeyJWT
+	// assertions; KeyID should match the key's entry in the JWKS
+	// registered with the authorization server.
+	SigningKey       crypto.Signer
+	SigningAlgorithm ssf.SignatureAlgorithm
+	KeyID            string
+	// AssertionAudience is the "aud" of client assertions. Defaults to
+	// TokenURL (RFC 7523 §3).
+	AssertionAudience string
+
 	// HTTPClient defaults to a client with a 10-second timeout.
 	HTTPClient *http.Client
 
@@ -93,8 +118,11 @@ func (c *ClientCredentials) Invalidate() {
 }
 
 func (c *ClientCredentials) fetch(ctx context.Context) (string, time.Duration, error) {
-	if c.TokenURL == "" || c.ClientID == "" || c.ClientSecret == "" {
-		return "", 0, errors.New("receiver: ClientCredentials needs TokenURL, ClientID and ClientSecret")
+	if c.TokenURL == "" || c.ClientID == "" {
+		return "", 0, errors.New("receiver: ClientCredentials needs TokenURL and ClientID")
+	}
+	if c.AuthMethod != PrivateKeyJWT && c.ClientSecret == "" {
+		return "", 0, fmt.Errorf("receiver: %s needs a ClientSecret", c.AuthMethod)
 	}
 	form := url.Values{"grant_type": {"client_credentials"}}
 	if len(c.Scopes) > 0 {
@@ -105,6 +133,23 @@ func (c *ClientCredentials) fetch(ctx context.Context) (string, time.Duration, e
 		form.Set("client_id", c.ClientID)
 		form.Set("client_secret", c.ClientSecret)
 	case ClientSecretBasic:
+	case ClientSecretJWT, PrivateKeyJWT:
+		o := clientassertion.Options{ClientID: c.ClientID, Audience: c.AssertionAudience, Now: time.Now()}
+		if o.Audience == "" {
+			o.Audience = c.TokenURL
+		}
+		if c.AuthMethod == ClientSecretJWT {
+			o.Secret = []byte(c.ClientSecret)
+		} else {
+			o.Signer, o.Algorithm, o.KeyID = c.SigningKey, c.SigningAlgorithm, c.KeyID
+		}
+		assertion, err := clientassertion.Build(o)
+		if err != nil {
+			return "", 0, fmt.Errorf("receiver: %w", err)
+		}
+		form.Set("client_id", c.ClientID)
+		form.Set("client_assertion_type", clientassertion.Type)
+		form.Set("client_assertion", assertion)
 	default:
 		return "", 0, fmt.Errorf("receiver: unsupported client authentication method %q", c.AuthMethod)
 	}
