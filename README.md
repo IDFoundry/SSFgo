@@ -4,8 +4,9 @@ SSFgo is a lightweight Go implementation of the OpenID Shared Signals
 Framework, CAEP and RISC, providing embeddable Transmitter and Receiver
 capabilities with a focus on standards compliance and interoperability.
 
-> **Status: v1.0.** Both roles are implemented and the API is stable —
-> see [COMPATIBILITY.md](COMPATIBILITY.md). The Transmitter passes every
+> **Status: API frozen for v1.0, not yet released.** Both roles are
+> implemented; once `v1.0.0` is tagged the API is covered by
+> [COMPATIBILITY.md](COMPATIBILITY.md). The Transmitter passes every
 > module of the OIDF CAEP Interoperability Profile Transmitter plan; the
 > Receiver passes every module of the Receiver plan except one blocked by
 > a conformance-suite defect — see
