@@ -1,15 +1,12 @@
 package transmitter
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"math"
 	"net/http"
 	"strconv"
 
 	ssf "github.com/idfoundry/ssfgo"
-	"github.com/idfoundry/ssfgo/internal/setcodec"
 	"github.com/idfoundry/ssfgo/storage"
 )
 
@@ -56,7 +53,7 @@ func (t *Transmitter) requestVerification(w http.ResponseWriter, r *http.Request
 		t.writeAPIError(w, r, "verification", err)
 		return
 	}
-	if err := t.emit(r.Context(), s, ssf.OpaqueSubject{ID: s.ID}, ssf.Verification{State: state}); err != nil {
+	if err := t.enqueue(r.Context(), s, ssf.OpaqueSubject{ID: s.ID}, ssf.Verification{State: state}, "", false); err != nil {
 		t.serverError(w, r, "verification", err)
 		return
 	}
@@ -64,27 +61,6 @@ func (t *Transmitter) requestVerification(w http.ResponseWriter, r *http.Request
 }
 
 var errTooManyVerifications = &apiError{http.StatusTooManyRequests, "too_many_requests", "verification was requested more often than min_verification_interval allows"}
-
-// emit signs one SET for stream s and queues it. A disabled stream drops
-// the event (SSF 1.0 §8.1.2.1); a paused one holds it until re-enabled.
-func (t *Transmitter) emit(ctx context.Context, s storage.Stream, subject ssf.Subject, event ssf.Event) error {
-	if s.Status == ssf.StreamDisabled {
-		return nil
-	}
-	jti := randomID()
-	token, err := setcodec.Encode(t.signer, ssf.SET{
-		Issuer:   t.cfg.Issuer,
-		Audience: s.Audience,
-		JWTID:    jti,
-		IssuedAt: t.now(),
-		Subject:  subject,
-		Event:    event,
-	})
-	if err != nil {
-		return fmt.Errorf("sign %s: %w", event.EventType(), err)
-	}
-	return t.cfg.Store.Enqueue(ctx, s.ID, storage.QueuedEvent{JTI: jti, SET: token, EnqueuedAt: t.now()})
-}
 
 // notFoundOr maps storage.ErrNotFound to the API's 404 — the stream can be
 // deleted between the ownership check and the store call.

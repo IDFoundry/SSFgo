@@ -64,5 +64,13 @@ func (t *Transmitter) updateStatus(w http.ResponseWriter, r *http.Request, rx Re
 		t.writeAPIError(w, r, "update status", err)
 		return
 	}
+	if status == ssf.StreamDisabled {
+		// A disabled stream holds no events (SSF 1.0 §8.1.2.1).
+		if err := t.cfg.Store.PurgeEvents(r.Context(), id); err != nil {
+			t.writeAPIError(w, r, "update status", t.notFoundOr(err))
+			return
+		}
+	}
+	t.notify.notify(id)
 	writeJSON(w, http.StatusOK, stateOf(s))
 }

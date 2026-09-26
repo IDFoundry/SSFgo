@@ -48,7 +48,7 @@ type receiverFields struct {
 	description     *string
 }
 
-func (t *Transmitter) parseReceiverFields(obj map[string]json.RawMessage) (receiverFields, error) {
+func (t *Transmitter) parseReceiverFields(obj map[string]json.RawMessage, rx Receiver) (receiverFields, error) {
 	var f receiverFields
 	if v, ok, err := member[[]ssf.EventType](obj, "events_requested"); err != nil {
 		return f, err
@@ -63,7 +63,7 @@ func (t *Transmitter) parseReceiverFields(obj map[string]json.RawMessage) (recei
 	if v, ok, err := member[ssf.Delivery](obj, "delivery"); err != nil {
 		return f, err
 	} else if ok {
-		if err := t.validateDelivery(v); err != nil {
+		if err := t.validateDelivery(v, rx); err != nil {
 			return f, err
 		}
 		f.delivery = &v
@@ -71,7 +71,7 @@ func (t *Transmitter) parseReceiverFields(obj map[string]json.RawMessage) (recei
 	return f, nil
 }
 
-func (t *Transmitter) validateDelivery(d ssf.Delivery) error {
+func (t *Transmitter) validateDelivery(d ssf.Delivery, rx Receiver) error {
 	switch d.Method {
 	case ssf.DeliveryPush, ssf.DeliveryPoll:
 	case "":
@@ -86,6 +86,11 @@ func (t *Transmitter) validateDelivery(d ssf.Delivery) error {
 		u, err := url.Parse(d.EndpointURL)
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.Fragment != "" {
 			return badRequest("push delivery requires an https endpoint_url")
+		}
+		if t.cfg.AllowPushEndpoint != nil {
+			if err := t.cfg.AllowPushEndpoint(rx, u); err != nil {
+				return badRequest("push endpoint_url is not allowed: %v", err)
+			}
 		}
 	}
 	return nil
@@ -140,7 +145,7 @@ func (t *Transmitter) createStream(w http.ResponseWriter, r *http.Request, rx Re
 		t.writeAPIError(w, r, "create stream", err)
 		return
 	}
-	fields, err := t.parseReceiverFields(obj)
+	fields, err := t.parseReceiverFields(obj, rx)
 	if err != nil {
 		t.writeAPIError(w, r, "create stream", err)
 		return
@@ -254,7 +259,7 @@ func (t *Transmitter) modifyStream(w http.ResponseWriter, r *http.Request, rx Re
 		t.writeAPIError(w, r, op, badRequest("stream_id is required"))
 		return
 	}
-	fields, err := t.parseReceiverFields(obj)
+	fields, err := t.parseReceiverFields(obj, rx)
 	if err != nil {
 		t.writeAPIError(w, r, op, err)
 		return

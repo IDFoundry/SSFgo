@@ -4,23 +4,23 @@ SSFgo is a lightweight Go implementation of the OpenID Shared Signals
 Framework, CAEP and RISC, providing embeddable Transmitter and Receiver
 capabilities with a focus on standards compliance and interoperability.
 
-> **Status: pre-release.** The wire formats (v0.1) and the Transmitter's
-> stream management API (v0.2) are implemented; the latter passes every
-> OIDF stream-management test module. Event delivery (v0.3) and the
-> Receiver (v0.4) are next. See [ROADMAP.md](ROADMAP.md) and
+> **Status: pre-release.** The Transmitter is complete: stream
+> management, poll and push delivery, and event routing pass every module
+> of the OIDF CAEP Interoperability Profile Transmitter test plan, in all
+> four auth × delivery variants. The Receiver (v0.4) is next. See [ROADMAP.md](ROADMAP.md) and
 > [conformance/README.md](conformance/README.md).
 
 ## Specifications
 
 | Specification | Status in SSFgo |
 |---|---|
-| [OpenID Shared Signals Framework 1.0][ssf] | data model and Transmitter stream management done; delivery and Receiver in progress |
+| [OpenID Shared Signals Framework 1.0][ssf] | Transmitter done; Receiver in progress |
 | [OpenID CAEP 1.0][caep] | all 8 event types |
 | [OpenID RISC 1.0][risc] | all 14 event types |
-| [CAEP Interoperability Profile 1.0][caep-interop] | target profile for conformance |
+| [CAEP Interoperability Profile 1.0][caep-interop] | Transmitter passes the OIDF plan; `caep/interop` enforces the profile |
 | [RFC 8417][rfc8417] Security Event Token | done |
 | [RFC 9493][rfc9493] Subject Identifiers | done |
-| [RFC 8935][rfc8935] Push delivery / [RFC 8936][rfc8936] Poll delivery | planned (v0.3) |
+| [RFC 8935][rfc8935] Push delivery / [RFC 8936][rfc8936] Poll delivery | Transmitter side done |
 
 The module has no third-party dependencies.
 

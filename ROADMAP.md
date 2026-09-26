@@ -30,7 +30,7 @@ RISC §2; fuzz targets on compact JWS, JWKS, subject and SET parsing.
 Met: every stream-management module passes in all four auth × delivery
 variants — see [conformance/README.md](conformance/README.md).
 
-## v0.3 — Transmitter delivery
+## v0.3 — Transmitter delivery ✅
 
 - Poll handler (RFC 8936) and push worker (RFC 8935) draining the
   per-stream queue v0.2 introduced, with acknowledgement.
@@ -38,7 +38,9 @@ variants — see [conformance/README.md](conformance/README.md).
 - `caep/interop` preset and startup checker.
 
 **Exit:** CAEP Interop Transmitter plan passes for poll, then push; base
-SSF Transmitter plan also passes.
+SSF Transmitter plan also passes. Met: every module of the CAEP Interop
+Transmitter plan passes in all four auth × delivery variants — see
+[conformance/README.md](conformance/README.md).
 
 ## v0.4 — Receiver
 

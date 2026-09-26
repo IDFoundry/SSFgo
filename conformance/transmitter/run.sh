@@ -49,7 +49,7 @@ sed -e "s#{ORIGIN}#$origin#g" -e "s#{ISSUER_PATH}#$issuer_path#g" -e "s#{STATIC_
 	"$repo/conformance/transmitter/config-$auth.json" >"$config"
 
 (cd "$repo" && go build -o "$workdir/conformance-transmitter" ./cmd/conformance-transmitter)
-"$workdir/conformance-transmitter" -addr ":$port" -issuer "$origin$issuer_path" -static-token "$static_token" \
+"$workdir/conformance-transmitter" -addr ":$port" -issuer "$origin$issuer_path" -static-token "$static_token" -insecure-push-tls \
 	>"$workdir/transmitter.log" 2>&1 &
 harness=$!
 trap 'kill $harness 2>/dev/null || true' EXIT

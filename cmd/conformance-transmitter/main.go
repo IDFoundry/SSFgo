@@ -13,6 +13,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -26,6 +27,7 @@ import (
 
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/caep"
+	"github.com/idfoundry/ssfgo/caep/interop"
 	"github.com/idfoundry/ssfgo/risc"
 	"github.com/idfoundry/ssfgo/storage/memstore"
 	"github.com/idfoundry/ssfgo/transmitter"
@@ -42,6 +44,8 @@ func main() {
 		staticToken   = flag.String("static-token", "", "an access token that is always valid, for the suite's static auth mode")
 		singleStream  = flag.Bool("single-stream", false, "allow one stream per Receiver (409 on a second create)")
 		tokenLifetime = flag.Duration("token-lifetime", 10*time.Minute, "access token lifetime; CAEP Interop §2.7.1 caps it at 60 minutes")
+		insecurePush  = flag.Bool("insecure-push-tls", false, "skip TLS verification when pushing to Receivers (the local suite's certificate is self-signed)")
+		emitDelay     = flag.Duration("emit-after-verification", 2*time.Second, "after a verification request, emit the CAEP Interop events the stream delivers; 0 disables")
 	)
 	flag.Parse()
 
@@ -61,25 +65,44 @@ func main() {
 		as.addStaticToken(*staticToken)
 	}
 
-	tx, err := transmitter.New(transmitter.Config{
+	store := memstore.New()
+	pushClient := &http.Client{Timeout: 10 * time.Second}
+	if *insecurePush {
+		pushClient.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec // test harness flag
+	}
+	cfg := transmitter.Config{
 		Issuer:                     *issuer,
 		SigningKeys:                []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "ssfgo-conformance-1"}},
 		EventsSupported:            supportedEvents(),
 		DeliveryMethods:            []ssf.DeliveryMethod{ssf.DeliveryPush, ssf.DeliveryPoll},
 		DefaultSubjects:            ssf.DefaultSubjectsAll,
-		Store:                      memstore.New(),
+		Store:                      store,
 		Authorize:                  as.authorize,
 		MultipleStreamsPerReceiver: !*singleStream,
 		MinVerificationInterval:    0,
+		HTTPClient:                 pushClient,
 		Logger:                     slog.Default(),
-	})
+	}
+	if err := interop.Apply(&cfg); err != nil {
+		log.Fatal(err)
+	}
+	tx, err := transmitter.New(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
+	go func() {
+		if err := tx.Run(context.Background()); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	mux := http.NewServeMux()
 	as.register(mux)
-	mux.Handle("/", tx.Handler())
+	handler := tx.Handler()
+	if *emitDelay > 0 {
+		handler = emitAfterVerification(tx, store, *issuer, *emitDelay, handler)
+	}
+	mux.Handle("/", handler)
 
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
 	if *certFile == "" {
