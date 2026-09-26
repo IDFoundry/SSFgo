@@ -42,18 +42,23 @@ SSF Transmitter plan also passes. Met: every module of the CAEP Interop
 Transmitter plan passes in all four auth × delivery variants — see
 [conformance/README.md](conformance/README.md).
 
-## v0.4 — Receiver
+## v0.4 — Receiver ✅ (one module blocked by a suite defect)
 
 - Discovery and issuer validation (SSF §7.2.4).
 - `TokenSource`: static bearer token and client credentials.
 - Stream management client; push `http.Handler`; poll client.
 - SET verification, `jti` replay protection, typed dispatch
-  (`caep.OnSessionRevoked(fn)`-style adapters).
+  (`receiver.On(r, func(ctx, set, e caep.SessionRevoked) error)`).
 - Unsolicited verification and stream-updated handling.
 
 **Exit:** CAEP Interop Receiver plan passes for {push, poll} × {static,
 dynamic}; base Receiver supported-events test passes with CAEP + RISC
-registered.
+registered. Met except `openid-ssf-receiver-stream-caep-interop`, which
+fails in every variant because the suite sends `event_timestamp` in
+milliseconds (CAEP 1.0 §2 requires seconds) — see
+[conformance/README.md](conformance/README.md). Everything else passes in
+all four variants, and the base supported-events test passes for push and
+poll.
 
 ## v0.5 — Hardening
 
@@ -61,6 +66,8 @@ registered.
 - Concurrency and race tests; security review.
 - Opt-in receiver leniency for legacy transmitters: event-embedded
   `subject` (SSF §3.1.1) and Google's `subject_type` (RISC §3.1).
+- `client_secret_jwt` and `private_key_jwt` client authentication for the
+  Receiver's client-credentials token source.
 - Documentation and a session-revocation example.
 
 **Exit:** the full conformance matrix runs in CI and passes reliably.
