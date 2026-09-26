@@ -472,3 +472,77 @@ func FuzzDecode(f *testing.F) {
 		}
 	})
 }
+
+// googleStyleSET is shaped like the SETs Google's RISC Transmitter sends:
+// no sub_id, and the subject inside the event, typed with subject_type.
+func googleStyleSET(t *testing.T) string {
+	rk, _ := keys(t)
+	claims := map[string]any{
+		"iss": "https://tx.example.com",
+		"aud": "https://rx.example.com",
+		"jti": "g-1",
+		"iat": 1700000000,
+		"events": map[string]any{
+			string(risc.AccountDisabledEventType): map[string]any{
+				"subject": map[string]any{"subject_type": "iss-sub", "iss": "https://accounts.google.com/", "sub": "7375626A656374"},
+				"reason":  "hijacking",
+			},
+		},
+	}
+	payload, err := json.Marshal(claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signRaw(t, rk, rsaHeader(), payload)
+}
+
+func TestLegacySubjects(t *testing.T) {
+	tok := googleStyleSET(t)
+	opts := options(t, "https://tx.example.com", "https://rx.example.com")
+
+	if _, err := Decode(tok, opts); err == nil {
+		t.Fatal("a SET without sub_id decoded without opting in")
+	}
+	opts.LegacyEventSubject = true
+	if _, err := Decode(tok, opts); err == nil {
+		t.Fatal("subject_type decoded without opting in")
+	}
+	opts.LegacySubjectType = true
+	set, err := Decode(tok, opts)
+	if err != nil {
+		t.Fatalf("Decode with both options: %v", err)
+	}
+	want := ssf.IssSubSubject{Issuer: "https://accounts.google.com/", Subject: "7375626A656374"}
+	if !ssf.SubjectsEqual(set.Subject, want) {
+		t.Errorf("subject = %#v", set.Subject)
+	}
+	if ev, ok := set.Event.(risc.AccountDisabled); !ok || ev.Reason != risc.DisabledHijacking {
+		t.Errorf("event = %#v", set.Event)
+	}
+
+	// sub_id wins over the event subject when both are present.
+	rk, _ := keys(t)
+	claims := baseClaims()
+	claims["events"] = map[string]any{string(caep.SessionRevokedEventType): map[string]any{
+		"subject":      map[string]any{"format": "email", "email": "legacy@example.com"},
+		"reason_admin": map[string]any{"en": "x"},
+	}}
+	payload, _ := json.Marshal(claims)
+	set, err = Decode(signRaw(t, rk, rsaHeader(), payload), opts)
+	if err != nil || !ssf.SubjectsEqual(set.Subject, ssf.EmailSubject{Email: "user@example.com"}) {
+		t.Errorf("sub_id should take precedence: %v, %v", set.Subject, err)
+	}
+}
+
+func TestNormalizeSubjectType(t *testing.T) {
+	for in, want := range map[string]string{
+		`{"subject_type":"email","email":"a@b.example"}`:              `{"email":"a@b.example","format":"email"}`,
+		`{"subject_type":"phone","phone_number":"+1555"}`:             `{"format":"phone_number","phone_number":"+1555"}`,
+		`{"format":"email","subject_type":"x","email":"a@b.example"}`: `{"format":"email","subject_type":"x","email":"a@b.example"}`,
+		`not json`: `not json`,
+	} {
+		if got := string(normalizeSubjectType(json.RawMessage(in))); got != want {
+			t.Errorf("normalizeSubjectType(%s) = %s, want %s", in, got, want)
+		}
+	}
+}

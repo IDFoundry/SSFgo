@@ -3,7 +3,9 @@ package receiver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
@@ -59,6 +61,9 @@ type PollResult struct {
 func (r *Receiver) Poll(ctx context.Context, stream ssf.StreamConfiguration, opts PollOptions) (PollResult, error) {
 	if stream.Delivery.Method != ssf.DeliveryPoll || stream.Delivery.EndpointURL == "" {
 		return PollResult{}, errors.New("receiver: the stream does not use poll delivery")
+	}
+	if u, err := url.Parse(stream.Delivery.EndpointURL); err != nil || u.Scheme != "https" {
+		return PollResult{}, fmt.Errorf("receiver: poll endpoint %q is not an https URL", stream.Delivery.EndpointURL)
 	}
 	req := pollRequest{ReturnImmediately: !opts.Wait}
 	if opts.MaxEvents > 0 {

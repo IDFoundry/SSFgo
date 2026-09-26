@@ -213,6 +213,7 @@ func TestConfigValidation(t *testing.T) {
 		"no authorize":          func(c *transmitter.Config) { c.Authorize = nil },
 		"fractional interval":   func(c *transmitter.Config) { c.MinVerificationInterval = 1500 * time.Millisecond },
 		"braces in issuer path": func(c *transmitter.Config) { c.Issuer = "https://tx.example/{x}" },
+		"negative retry":        func(c *transmitter.Config) { c.PushRetry.MaxAttempts = -1 },
 	} {
 		t.Run(name, func(t *testing.T) {
 			c := good()
@@ -522,6 +523,7 @@ func TestBadRequests(t *testing.T) {
 		{"create, delivery not an object", "POST", md.ConfigurationEndpoint, map[string]any{"delivery": "push"}, 400},
 		{"create, unknown delivery method", "POST", md.ConfigurationEndpoint, map[string]any{"delivery": map[string]any{"method": "urn:x"}}, 400},
 		{"create, push without endpoint", "POST", md.ConfigurationEndpoint, map[string]any{"delivery": map[string]any{"method": ssf.DeliveryPush}}, 400},
+		{"create, push URL with credentials", "POST", md.ConfigurationEndpoint, map[string]any{"delivery": map[string]any{"method": ssf.DeliveryPush, "endpoint_url": "https://user:pass@rx.example"}}, 400},
 		{"create, push to http", "POST", md.ConfigurationEndpoint, map[string]any{"delivery": map[string]any{"method": ssf.DeliveryPush, "endpoint_url": "http://rx.example"}}, 400},
 		{"create, description null", "POST", md.ConfigurationEndpoint, map[string]any{"description": nil}, 400},
 		{"update, broken JSON", "PATCH", md.ConfigurationEndpoint, broken, 400},

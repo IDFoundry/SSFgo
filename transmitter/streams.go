@@ -87,6 +87,9 @@ func (t *Transmitter) validateDelivery(d ssf.Delivery, rx Receiver) error {
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.Fragment != "" {
 			return badRequest("push delivery requires an https endpoint_url")
 		}
+		if u.User != nil {
+			return badRequest("push endpoint_url must not contain credentials; use authorization_header")
+		}
 		if t.cfg.AllowPushEndpoint != nil {
 			if err := t.cfg.AllowPushEndpoint(rx, u); err != nil {
 				return badRequest("push endpoint_url is not allowed: %v", err)

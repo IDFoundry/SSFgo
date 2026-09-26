@@ -43,9 +43,22 @@ type Config struct {
 	// to 7 days.
 	ReplayWindow time.Duration
 
+	// KeyMaxAge is how long the Transmitter's JWKS is used before it is
+	// fetched again, so a retired key stops being trusted. A SET signed
+	// with an unknown key also triggers a fetch, at most once a minute.
+	// Defaults to 24 hours.
+	KeyMaxAge time.Duration
+
 	// MaxClockSkew is how far in the future a SET's "iat" may be.
 	// Defaults to one minute.
 	MaxClockSkew time.Duration
+
+	// AcceptLegacySubjects opts in to SETs from Transmitters that predate
+	// SSF 1.0: a SET without "sub_id" whose event carries a "subject"
+	// member (SSF 1.0 §3.1.1), and subject identifiers naming their format
+	// in Google's "subject_type" (RISC 1.0 §3.1). Off by default; enable it
+	// only for a Transmitter known to need it.
+	AcceptLegacySubjects bool
 
 	// HTTPClient calls the Transmitter. Defaults to a client with a
 	// 30-second timeout, long enough for a long poll.
@@ -89,6 +102,9 @@ func (c *Config) validate() error {
 	}
 	if c.ReplayWindow <= 0 {
 		c.ReplayWindow = 7 * 24 * time.Hour
+	}
+	if c.KeyMaxAge <= 0 {
+		c.KeyMaxAge = 24 * time.Hour
 	}
 	if c.MaxClockSkew <= 0 {
 		c.MaxClockSkew = time.Minute

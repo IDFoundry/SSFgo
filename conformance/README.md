@@ -93,9 +93,18 @@ go run ./cmd/conformance-receiver -plan openid-ssf-receiver-test-plan \
   -modules openid-ssf-receiver-stream-supported-events
 ```
 
-Dynamic auth uses `client_secret_basic` by default (`-client-auth
-client_secret_post` also works); `client_secret_jwt` and `private_key_jwt`
-are not implemented yet.
+Dynamic auth uses `client_secret_basic` by default; `-client-auth` also
+takes `client_secret_post`, `client_secret_jwt` and `private_key_jwt`
+(the driver generates the key and registers its public JWKS in the plan
+configuration). All four pass the create-delete and verification modules
+(v0.5).
+
+## Running everything
+
+[`scripts/run-all.sh`](scripts/run-all.sh) runs the whole matrix — both
+roles, every variant, every client authentication method — and prints one
+summary, treating the documented suite defect below as expected.
+`.github/workflows/conformance.yml` runs it daily and on demand.
 
 ### Results — v0.4
 

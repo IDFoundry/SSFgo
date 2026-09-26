@@ -23,7 +23,8 @@ type Receiver struct {
 
 	keysMu      sync.Mutex
 	keys        []jose.SetKey
-	keysFetched time.Time
+	keysFetched time.Time // last successful fetch
+	keysTried   time.Time // last attempt, successful or not
 
 	handlersMu sync.RWMutex
 	handlers   map[ssf.EventType]HandlerFunc
@@ -65,19 +66,62 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 	if r.metadata.Issuer != cfg.Issuer {
 		return nil, fmt.Errorf("receiver: transmitter metadata names issuer %q, not %q", r.metadata.Issuer, cfg.Issuer)
 	}
+	if err := checkEndpoints(r.metadata); err != nil {
+		return nil, err
+	}
 	if err := r.refreshKeys(ctx); err != nil {
 		return nil, err
 	}
 	return r, nil
 }
 
+// checkEndpoints enforces SSF 1.0 §7.1: every endpoint the metadata
+// advertises uses HTTP over TLS. The Receiver sends its access token to
+// them.
+func checkEndpoints(md ssf.TransmitterMetadata) error {
+	for name, endpoint := range map[string]string{
+		"jwks_uri":                md.JWKSURI,
+		"configuration_endpoint":  md.ConfigurationEndpoint,
+		"status_endpoint":         md.StatusEndpoint,
+		"add_subject_endpoint":    md.AddSubjectEndpoint,
+		"remove_subject_endpoint": md.RemoveSubjectEndpoint,
+		"verification_endpoint":   md.VerificationEndpoint,
+	} {
+		if endpoint == "" {
+			continue
+		}
+		if u, err := url.Parse(endpoint); err != nil || u.Scheme != "https" || u.Host == "" {
+			return fmt.Errorf("receiver: transmitter metadata %s %q is not an https URL", name, endpoint)
+		}
+	}
+	return nil
+}
+
 // Metadata returns the Transmitter Configuration Metadata fetched by New.
 func (r *Receiver) Metadata() ssf.TransmitterMetadata { return r.metadata }
 
-// keyRefetchInterval rate-limits JWKS refetches triggered by SETs signed
-// with an unknown key, so a stream of forged SETs cannot make the Receiver
-// hammer the Transmitter.
+// keyRefetchInterval rate-limits JWKS refetches — whether triggered by a
+// SET naming an unknown key or by KeyMaxAge — so neither a stream of forged
+// SETs nor an unavailable JWKS endpoint makes the Receiver hammer the
+// Transmitter.
 const keyRefetchInterval = time.Minute
+
+// maybeRefreshKeys refetches the JWKS unless an attempt was made within
+// keyRefetchInterval. It reports whether it fetched new keys.
+func (r *Receiver) maybeRefreshKeys(ctx context.Context) bool {
+	r.keysMu.Lock()
+	if r.cfg.Now().Sub(r.keysTried) < keyRefetchInterval {
+		r.keysMu.Unlock()
+		return false
+	}
+	r.keysTried = r.cfg.Now()
+	r.keysMu.Unlock()
+	if err := r.refreshKeys(ctx); err != nil {
+		r.cfg.Logger.WarnContext(ctx, "ssf receiver: refresh transmitter JWKS", "error", err)
+		return false
+	}
+	return true
+}
 
 func (r *Receiver) refreshKeys(ctx context.Context) error {
 	u, err := url.Parse(r.metadata.JWKSURI)
@@ -93,7 +137,8 @@ func (r *Receiver) refreshKeys(ctx context.Context) error {
 		return fmt.Errorf("receiver: parse transmitter JWKS: %w", err)
 	}
 	r.keysMu.Lock()
-	r.keys, r.keysFetched = keys, r.cfg.Now()
+	now := r.cfg.Now()
+	r.keys, r.keysFetched, r.keysTried = keys, now, now
 	r.keysMu.Unlock()
 	return nil
 }

@@ -86,9 +86,13 @@ type Config struct {
 	// here. An error is reported to the Receiver as 400. Optional.
 	AllowPushEndpoint func(rx Receiver, endpoint *url.URL) error
 
-	// HTTPClient sends push deliveries. Defaults to a client with a
-	// 10-second timeout.
+	// HTTPClient sends push deliveries. Defaults to NewPushClient(10s),
+	// which refuses non-public addresses and redirects; supply a client to
+	// push to Receivers on a private network.
 	HTTPClient *http.Client
+
+	// PushRetry controls how failed push deliveries are retried.
+	PushRetry PushRetryPolicy
 
 	// LongPollTimeout is how long a poll request that asks to wait
 	// (returnImmediately false, RFC 8936 §2.5) waits for a SET before
@@ -99,6 +103,21 @@ type Config struct {
 	// errors) that are reported to the Receiver only as 500. Defaults to
 	// slog.Default().
 	Logger *slog.Logger
+}
+
+// PushRetryPolicy controls retries of push deliveries that fail
+// recoverably — a network error or any response but 2xx or an RFC 8935
+// error. RFC 8935 §2 asks Transmitters to delay retransmission so as not
+// to overwhelm the Receiver, and lets them cap attempts.
+type PushRetryPolicy struct {
+	// MinBackoff is the delay after the first failure; it doubles with
+	// each further failure. Defaults to one second.
+	MinBackoff time.Duration
+	// MaxBackoff caps the delay. Defaults to five minutes.
+	MaxBackoff time.Duration
+	// MaxAttempts, if positive, is how many times a SET is tried before
+	// it is dropped and logged. Zero retries indefinitely.
+	MaxAttempts int
 }
 
 func (c *Config) validate() error {
@@ -148,9 +167,19 @@ func (c *Config) validate() error {
 	if c.MinVerificationInterval < 0 || c.MinVerificationInterval%time.Second != 0 {
 		errs = append(errs, errors.New("MinVerificationInterval must be a non-negative whole number of seconds"))
 	}
+	if c.PushRetry.MinBackoff < 0 || c.PushRetry.MaxBackoff < 0 || c.PushRetry.MaxAttempts < 0 {
+		errs = append(errs, errors.New("PushRetry values must not be negative"))
+	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("transmitter: invalid config: %w", err)
 	}
+	if c.PushRetry.MinBackoff == 0 {
+		c.PushRetry.MinBackoff = time.Second
+	}
+	if c.PushRetry.MaxBackoff == 0 {
+		c.PushRetry.MaxBackoff = 5 * time.Minute
+	}
+	c.PushRetry.MaxBackoff = max(c.PushRetry.MaxBackoff, c.PushRetry.MinBackoff)
 	return nil
 }
 

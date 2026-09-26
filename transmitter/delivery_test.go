@@ -512,6 +512,59 @@ func TestPushRetriesAndRejections(t *testing.T) {
 	})
 }
 
+func TestPushMaxAttempts(t *testing.T) {
+	rx := newPushReceiver(t)
+	rx.respond = func(n int) (int, string) {
+		if n <= 2 {
+			return http.StatusBadGateway, ""
+		}
+		return http.StatusAccepted, ""
+	}
+	f := newFixture(t, func(c *transmitter.Config) {
+		c.HTTPClient = rx.srv.Client()
+		c.PushRetry = transmitter.PushRetryPolicy{MinBackoff: 10 * time.Millisecond, MaxBackoff: 20 * time.Millisecond, MaxAttempts: 2}
+	})
+	c := pushStream(f, rx, "")
+	runTransmitter(t, f)
+	ctx := context.Background()
+	if err := f.tx.Emit(ctx, bob, revoked()); err != nil {
+		t.Fatal(err)
+	}
+	rx.wait(t, 2) // two failed attempts, then the SET is dropped
+	cc := caep.CredentialChange{CredentialType: caep.CredentialPIN, ChangeType: caep.ChangeCreate, Common: caep.Common{ReasonAdmin: ssf.LocalizedText{"en": "x"}}}
+	if err := f.tx.Emit(ctx, bob, cc); err != nil {
+		t.Fatal(err)
+	}
+	rx.wait(t, 1)
+	rx.mu.Lock()
+	third := rx.bodies[2]
+	rx.mu.Unlock()
+	if _, ok := f.decodeSET(third, "https://bob.example").Event.(caep.CredentialChange); !ok {
+		t.Error("after the dropped SET, the next one should be delivered")
+	}
+	waitFor(t, func() bool {
+		q, _ := f.store.PendingEvents(ctx, c.StreamID, 0, false)
+		return len(q) == 0
+	})
+}
+
+// With the default client, a push to a Receiver on a private address is
+// refused and retried rather than sent.
+func TestDefaultClientRefusesPrivatePushEndpoints(t *testing.T) {
+	rx := newPushReceiver(t)
+	f := newFixture(t) // no HTTPClient: the SSRF-safe default
+	pushStream(f, rx, "")
+	runTransmitter(t, f)
+	if err := f.tx.Emit(context.Background(), bob, revoked()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-rx.got:
+		t.Fatal("the default client pushed to a loopback address")
+	case <-time.After(1500 * time.Millisecond):
+	}
+}
+
 func TestPushHoldsEventsWhilePaused(t *testing.T) {
 	rx := newPushReceiver(t)
 	f := newFixture(t, func(c *transmitter.Config) { c.HTTPClient = rx.srv.Client() })

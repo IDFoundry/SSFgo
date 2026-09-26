@@ -70,13 +70,13 @@ func New(cfg Config) (*Transmitter, error) {
 	}
 	t.client = cfg.HTTPClient
 	if t.client == nil {
-		t.client = &http.Client{Timeout: 10 * time.Second}
+		t.client = NewPushClient(10 * time.Second)
 	}
 	if t.cfg.LongPollTimeout <= 0 {
 		t.cfg.LongPollTimeout = 20 * time.Second
 	}
 	t.notify = newNotifier()
-	t.pushes = newPushState()
+	t.pushes = newPushState(t.cfg.PushRetry)
 	t.log = cfg.Logger
 	if t.log == nil {
 		t.log = slog.Default()
