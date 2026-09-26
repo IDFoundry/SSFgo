@@ -1,0 +1,54 @@
+package jose
+
+import (
+	"encoding/json"
+	"fmt"
+
+	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/internal/critical"
+)
+
+// Header is a JWS protected header. Only the members SSFgo acts on are
+// modeled. Every other member is ignored, as RFC 7515 §4.2/§4.3 require,
+// except that "crit" (RFC 7515 §4.1.11) may only name members this
+// package understands.
+type Header struct {
+	Algorithm ssf.SignatureAlgorithm
+	Type      string // "typ", optional
+	KeyID     string // "kid", optional
+}
+
+type rawHeader struct {
+	Alg  string   `json:"alg"`
+	Typ  string   `json:"typ,omitempty"`
+	Kid  string   `json:"kid,omitempty"`
+	Crit []string `json:"crit,omitempty"`
+}
+
+// understoodHeaderParams is every header member this package processes —
+// the set a "crit" list is checked against.
+var understoodHeaderParams = map[string]bool{
+	"alg": true, "typ": true, "kid": true, "crit": true,
+}
+
+func marshalHeader(h Header) ([]byte, error) {
+	if !h.Algorithm.IsValid() {
+		return nil, fmt.Errorf("jose: invalid algorithm %v", h.Algorithm)
+	}
+	return json.Marshal(rawHeader{Alg: h.Algorithm.String(), Typ: h.Type, Kid: h.KeyID})
+}
+
+func parseHeader(data []byte) (Header, error) {
+	var raw rawHeader
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return Header{}, fmt.Errorf("jose: parse header: %w", err)
+	}
+	if err := critical.Check(raw.Crit, understoodHeaderParams); err != nil {
+		return Header{}, fmt.Errorf("jose: parse header: %w", err)
+	}
+	alg, err := ssf.ParseSignatureAlgorithm(raw.Alg)
+	if err != nil {
+		return Header{}, fmt.Errorf("jose: parse header: %w", err)
+	}
+	return Header{Algorithm: alg, Type: raw.Typ, KeyID: raw.Kid}, nil
+}
