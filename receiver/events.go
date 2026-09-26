@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/internal/setcodec"
@@ -63,6 +64,9 @@ func (r *Receiver) process(ctx context.Context, token string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := r.checkCriticalMembers(set.Subject); err != nil {
+		return set.JWTID, err
+	}
 	fresh, err := r.cfg.ReplayStore.MarkSET(ctx, set.Issuer, set.JWTID, r.cfg.Now().Add(r.cfg.ReplayWindow))
 	if err != nil {
 		return set.JWTID, fmt.Errorf("receiver: replay store: %w", err)
@@ -110,6 +114,30 @@ func (r *Receiver) decode(ctx context.Context, token string) (ssf.SET, error) {
 		return ssf.SET{}, &rejectedSET{code: de.Code, description: de.Err.Error()}
 	}
 	return set, err
+}
+
+// standardSubjectMembers are the complex-subject members SSF 1.0 §3.3
+// defines; ssf.ComplexSubject parses each into its own field.
+var standardSubjectMembers = []string{"user", "device", "session", "application", "tenant", "org_unit", "group"}
+
+// checkCriticalMembers rejects a SET whose subject carries a member the
+// Transmitter declared critical and the Receiver does not process
+// (SSF 1.0 §3.6).
+func (r *Receiver) checkCriticalMembers(s ssf.Subject) error {
+	complexSubject, ok := s.(ssf.ComplexSubject)
+	if !ok {
+		return nil
+	}
+	for _, name := range r.metadata.CriticalSubjectMembers {
+		if slices.Contains(standardSubjectMembers, name) || slices.Contains(r.cfg.SubjectMembers, name) {
+			continue
+		}
+		if _, present := complexSubject.Additional[name]; present {
+			return &rejectedSET{code: setcodec.CodeInvalidRequest,
+				description: "the subject has critical member " + name + ", which this Receiver does not process"}
+		}
+	}
+	return nil
 }
 
 func (r *Receiver) dispatch(ctx context.Context, set ssf.SET) error {

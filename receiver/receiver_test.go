@@ -594,6 +594,67 @@ func TestKeyMaxAge(t *testing.T) {
 	}
 }
 
+// TestCriticalSubjectMembers checks SSF 1.0 §3.6: an event whose subject
+// has a member the Transmitter declares critical and the Receiver does not
+// process is discarded.
+func TestCriticalSubjectMembers(t *testing.T) {
+	e := newEnv(t)
+	tx, err := transmitter.New(transmitter.Config{
+		Issuer:                 e.cfg.Issuer,
+		SigningKeys:            []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
+		EventsSupported:        []ssf.EventType{caep.SessionRevokedEventType},
+		DeliveryMethods:        []ssf.DeliveryMethod{ssf.DeliveryPoll},
+		DefaultSubjects:        ssf.DefaultSubjectsAll,
+		CriticalSubjectMembers: []string{"tenant", "x_region"},
+		Store:                  e.store,
+		Authorize:              func(context.Context, string) (transmitter.Receiver, error) { return transmitter.Receiver{}, nil },
+		Logger:                 quiet,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.txSrv.Config.Handler = tx.Handler()
+
+	complexWith := func(extra string) ssf.Subject {
+		s := ssf.ComplexSubject{User: alice, Tenant: ssf.OpaqueSubject{ID: "t1"}}
+		if extra != "" {
+			s.Additional = map[string]ssf.Subject{extra: ssf.OpaqueSubject{ID: "v"}}
+		}
+		return s
+	}
+	for _, c := range []struct {
+		name    string
+		members []string
+		subject ssf.Subject
+		status  int
+	}{
+		{"simple subject", nil, alice, 202},
+		{"critical standard member", nil, complexWith(""), 202},
+		{"non-critical unknown member", nil, complexWith("x_other"), 202},
+		{"critical unknown member", nil, complexWith("x_region"), 400},
+		{"critical member the application processes", []string{"x_region"}, complexWith("x_region"), 202},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cfg := e.cfg
+			cfg.SubjectMembers = c.members
+			cfg.ReplayStore = memstore.NewReplayStore()
+			rx, err := receiver.New(context.Background(), cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var handled atomic.Bool
+			receiver.On(rx, func(context.Context, ssf.SET, caep.SessionRevoked) error { handled.Store(true); return nil })
+			got := push(t, rx.PushHandler(receiver.PushOptions{}), "", sign(t, e, func(s *ssf.SET) { s.Subject = c.subject }))
+			if got.status != c.status {
+				t.Fatalf("status = %d %q, want %d", got.status, got.err, c.status)
+			}
+			if handled.Load() != (c.status == 202) {
+				t.Errorf("handler called = %v", handled.Load())
+			}
+		})
+	}
+}
+
 func TestAudienceMismatch(t *testing.T) {
 	e := newEnv(t, func(c *receiver.Config) { c.Audience = "https://not-what-the-transmitter-assigns.example" })
 	c, err := e.rx.CreateStream(context.Background(), receiver.StreamRequest{})
