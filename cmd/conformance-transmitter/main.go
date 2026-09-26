@@ -28,6 +28,7 @@ import (
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/caep"
 	"github.com/idfoundry/ssfgo/caep/interop"
+	"github.com/idfoundry/ssfgo/internal/testcert"
 	"github.com/idfoundry/ssfgo/risc"
 	"github.com/idfoundry/ssfgo/storage/memstore"
 	"github.com/idfoundry/ssfgo/transmitter"
@@ -106,7 +107,7 @@ func main() {
 
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
 	if *certFile == "" {
-		cert, err := selfSignedCertificate(iss.Hostname())
+		cert, err := testcert.SelfSigned(iss.Hostname())
 		if err != nil {
 			log.Fatal(err)
 		}

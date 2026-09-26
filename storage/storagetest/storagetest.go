@@ -357,3 +357,64 @@ func withoutTimes(s storage.Stream) storage.Stream {
 	s.CreatedAt, s.LastVerificationRequest = time.Time{}, time.Time{}
 	return s
 }
+
+// ReplayStore runs the storage.ReplayStore contract against stores made by
+// newStore. Each subtest gets a fresh, empty store.
+func ReplayStore(t *testing.T, newStore func(t *testing.T) storage.ReplayStore) {
+	far := time.Now().Add(time.Hour)
+	t.Run("MarkOnce", func(t *testing.T) {
+		st := newStore(t)
+		if fresh, err := st.MarkSET(ctx, "https://iss", "1", far); err != nil || !fresh {
+			t.Fatalf("first mark = %v, %v", fresh, err)
+		}
+		if fresh, err := st.MarkSET(ctx, "https://iss", "1", far); err != nil || fresh {
+			t.Errorf("second mark = %v, %v; want not fresh", fresh, err)
+		}
+		if fresh, _ := st.MarkSET(ctx, "https://other", "1", far); !fresh {
+			t.Error("the same jti from another issuer was treated as a replay")
+		}
+	})
+	t.Run("Forget", func(t *testing.T) {
+		st := newStore(t)
+		_, _ = st.MarkSET(ctx, "https://iss", "1", far)
+		if err := st.ForgetSET(ctx, "https://iss", "1"); err != nil {
+			t.Fatal(err)
+		}
+		if fresh, _ := st.MarkSET(ctx, "https://iss", "1", far); !fresh {
+			t.Error("a forgotten SET is still recorded")
+		}
+		if err := st.ForgetSET(ctx, "https://iss", "unknown"); err != nil {
+			t.Errorf("forgetting an unknown SET: %v", err)
+		}
+	})
+	t.Run("Expiry", func(t *testing.T) {
+		st := newStore(t)
+		_, _ = st.MarkSET(ctx, "https://iss", "1", time.Now().Add(-time.Second))
+		if fresh, _ := st.MarkSET(ctx, "https://iss", "1", far); !fresh {
+			t.Error("an expired record still blocks the SET")
+		}
+	})
+	t.Run("Concurrent", func(t *testing.T) {
+		st := newStore(t)
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+		fresh := 0
+		for range 50 {
+			wg.Go(func() {
+				ok, err := st.MarkSET(ctx, "https://iss", "race", far)
+				if err != nil {
+					t.Error(err)
+				}
+				if ok {
+					mu.Lock()
+					fresh++
+					mu.Unlock()
+				}
+			})
+		}
+		wg.Wait()
+		if fresh != 1 {
+			t.Errorf("%d concurrent marks succeeded, want exactly 1", fresh)
+		}
+	})
+}

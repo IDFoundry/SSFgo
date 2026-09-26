@@ -1,4 +1,6 @@
-package main
+// Package testcert makes throwaway TLS certificates for SSFgo's
+// conformance harnesses.
+package testcert
 
 import (
 	"crypto/ecdsa"
@@ -12,10 +14,10 @@ import (
 	"time"
 )
 
-// selfSignedCertificate returns a throwaway certificate valid for host,
+// SelfSigned returns a throwaway certificate valid for host,
 // localhost, host.docker.internal and the loopback addresses. The
 // conformance suite's development deployment does not verify it.
-func selfSignedCertificate(host string) (tls.Certificate, error) {
+func SelfSigned(host string) (tls.Certificate, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return tls.Certificate{}, err

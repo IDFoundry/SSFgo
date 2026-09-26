@@ -71,3 +71,69 @@ protocol failure; recorded here rather than hidden.
 **Base SSF Transmitter plan** — the modules the CAEP Interop plan omits
 (dynamic auth, poll): update ×3, replace ×3 and subject control, all
 PASSED.
+
+## Receiver
+
+In a Receiver plan the suite emulates a Transmitter per test module and
+waits for the Receiver to act. [`cmd/conformance-receiver`](../cmd/conformance-receiver)
+drives that: it creates the plan, and for each module reads the emulated
+Transmitter's issuer and credentials from the suite API ("exposed
+values"), then runs one SSFgo Receiver session — discover, create a
+stream, read it and its status, request verification, take delivery until
+events stop, delete the stream. Push deliveries arrive on a self-signed
+HTTPS listener the suite reaches at `https://host.docker.internal:9444`.
+
+```bash
+# CAEP Interop plan: -auth static|dynamic, -delivery poll|push
+go run ./cmd/conformance-receiver -auth dynamic -delivery push
+
+# base plan's supported-events test (every CAEP and RISC event type)
+go run ./cmd/conformance-receiver -plan openid-ssf-receiver-test-plan \
+  -variant ssf_profile=default -subjects email \
+  -modules openid-ssf-receiver-stream-supported-events
+```
+
+Dynamic auth uses `client_secret_basic` by default (`-client-auth
+client_secret_post` also works); `client_secret_jwt` and `private_key_jwt`
+are not implemented yet.
+
+### Results — v0.4
+
+Run 2026-09-26 against the suite's `latest` prebuilt image.
+
+**CAEP Interop Receiver plan:**
+
+| Module | static · poll | static · push | dynamic · poll | dynamic · push |
+|---|---|---|---|---|
+| openid-ssf-receiver-stream-create-delete | PASSED | PASSED | PASSED | PASSED |
+| openid-ssf-receiver-stream-verification | PASSED | PASSED | PASSED | PASSED |
+| openid-ssf-receiver-unsolicited-stream-verification | PASSED | PASSED | PASSED | PASSED |
+| openid-ssf-receiver-stream-supported-events | PASSED | PASSED | PASSED | PASSED |
+| openid-ssf-receiver-stream-caep-interop | FAILED² | FAILED² | FAILED² | FAILED² |
+
+**Base SSF Receiver plan**, `openid-ssf-receiver-stream-supported-events`
+with CAEP and RISC registered: PASSED for poll and push. Each run
+delivered 23 distinct event types — verification, all 8 CAEP and all 14
+RISC types — every one verified, handled and acknowledged.
+
+² **Conformance suite defect, not an SSFgo one.**
+`OIDSSFReceiverStreamCaepInteropTest.afterInitialStreamVerification`
+sets `event_timestamp` from `System.currentTimeMillis()` (line 183, still
+so on upstream master), so every CAEP event it generates carries a
+timestamp in **milliseconds**, e.g. `1790407364112`. CAEP 1.0 §2 defines
+`event_timestamp` as a JSON number of **seconds**, the suite's own
+Transmitter-side check (`OIDSSFValidateCaepCommonOptionalFields`) says the
+same, and the suite's supported-events test correctly uses
+`Instant.now().getEpochSecond()`. SSFgo rejects the malformed SETs —
+`invalid_request: NumericDate 1790407364112 is out of range` — as 400 on
+push and in `setErrs` on poll, so the module records them as not
+acknowledged. The one-line fix in the suite is
+`Instant.now().getEpochSecond()`.
+
+**Subjects for the base plan.** The supported-events test sends every
+event about every configured subject, including RISC `identifier-changed`
+and `identifier-recycled`, which RISC 1.0 §2.5/§2.6 restrict to `email` or
+`phone_number` subjects. With an `iss_sub` subject configured, SSFgo
+correctly rejects those two SETs; the base-plan run therefore configures an
+email subject only. (The CAEP Interop plan requires both `email` and
+`iss_sub`, and sends no RISC events.)

@@ -24,7 +24,7 @@ github.com/idfoundry/ssfgo     // package ssf: shared value types only
 │   └── interop/               // CAEP Interoperability Profile config check + event validator
 ├── risc/                      // RISC 1.0 event types (14, sessions-revoked deprecated)
 ├── transmitter/               // Transmitter role
-├── receiver/                  // Receiver role (v0.4+)
+├── receiver/                  // Receiver role
 ├── storage/                   // storage contracts
 │   ├── memstore/              // in-memory implementation
 │   └── storagetest/           // exported contract tests for third-party backends
@@ -33,6 +33,7 @@ github.com/idfoundry/ssfgo     // package ssf: shared value types only
 │   ├── critical/              // RFC 7515 "crit" check
 │   └── setcodec/              // SET encode (sign) / decode (verify) per SSF §4
 ├── cmd/conformance-transmitter/ // Transmitter wired up for the OIDF suite
+├── cmd/conformance-receiver/  // drives the Receiver through OIDF Receiver plans
 ├── examples/
 └── conformance/               // suite configs, run scripts, recorded results
 ```
@@ -137,6 +138,36 @@ the Receiver requests send no event.
 in-memory store and modest stream counts; a large deployment's storage
 backend is where an index belongs, and the contract can grow one without
 changing the Transmitter's behaviour.
+
+## Receiver (v0.4)
+
+`receiver.New(ctx, Config)` fetches the Transmitter Configuration Metadata
+from the well-known location derived from `Config.Issuer`, refuses it
+unless it names exactly that issuer (SSF §7.2.4), and fetches the
+Transmitter's JWKS.
+
+- **Management client.** Methods for every §8 operation. Returned stream
+  configurations are checked: `iss` must match, and `aud` must include
+  `Config.Audience` (otherwise every SET on the stream would be rejected;
+  the stream is returned with `ErrAudienceMismatch` so the caller can
+  delete it). Access tokens come from a `TokenSource` — `StaticToken`, or
+  `ClientCredentials` (`client_secret_basic`/`client_secret_post`), which
+  caches and is invalidated once on a 401.
+- **Delivery.** `PushHandler` answers 202 once a SET is verified and
+  handled, 400 with an RFC 8935 error body for a SET it rejects, and 500
+  when a handler fails, so the Transmitter retries. `Poll` acknowledges
+  what the previous poll processed (`ack`), reports rejections
+  (`setErrs`), and leaves SETs whose handler failed unacknowledged so they
+  are redelivered; `RunPoller` long-polls in a loop.
+- **Processing.** Every SET is decoded by `internal/setcodec` against the
+  Transmitter's keys (refetched at most once a minute when a SET names an
+  unknown key), then recorded in a `storage.ReplayStore` so a redelivered
+  SET is acknowledged without being handled twice. A verification event
+  carrying a `state` must match one `RequestVerification` issued and has
+  not yet been used (§8.1.4.1); one without `state` is accepted
+  (§8.1.4). Handlers are registered per event type, typed with
+  `receiver.On[E]`; an event of a registered type with no handler is
+  acknowledged and ignored.
 
 ## Stream management (v0.2)
 
