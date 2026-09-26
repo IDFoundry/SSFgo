@@ -12,8 +12,8 @@ import (
 	"github.com/idfoundry/ssfgo/storage"
 )
 
-// Store implements storage.StreamStore.
-type Store struct {
+// StreamStore implements storage.StreamStore.
+type StreamStore struct {
 	mu       sync.Mutex
 	streams  map[string]*entry
 	sequence int
@@ -26,11 +26,11 @@ type entry struct {
 	queue  []storage.QueuedEvent
 }
 
-var _ storage.StreamStore = (*Store)(nil)
+var _ storage.StreamStore = (*StreamStore)(nil)
 
-// New returns an empty Store.
-func New() *Store {
-	return &Store{streams: make(map[string]*entry)}
+// NewStreamStore returns an empty StreamStore.
+func NewStreamStore() *StreamStore {
+	return &StreamStore{streams: make(map[string]*entry)}
 }
 
 func clone(s storage.Stream) storage.Stream {
@@ -41,7 +41,7 @@ func clone(s storage.Stream) storage.Stream {
 }
 
 // CreateStream implements storage.StreamStore.
-func (m *Store) CreateStream(_ context.Context, s storage.Stream, opts storage.CreateOptions) error {
+func (m *StreamStore) CreateStream(_ context.Context, s storage.Stream, opts storage.CreateOptions) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.streams[s.ID]; ok {
@@ -60,7 +60,7 @@ func (m *Store) CreateStream(_ context.Context, s storage.Stream, opts storage.C
 }
 
 // Stream implements storage.StreamStore.
-func (m *Store) Stream(_ context.Context, id string) (storage.Stream, error) {
+func (m *StreamStore) Stream(_ context.Context, id string) (storage.Stream, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.streams[id]
@@ -71,7 +71,7 @@ func (m *Store) Stream(_ context.Context, id string) (storage.Stream, error) {
 }
 
 // StreamsForReceiver implements storage.StreamStore.
-func (m *Store) StreamsForReceiver(_ context.Context, receiverID string) ([]storage.Stream, error) {
+func (m *StreamStore) StreamsForReceiver(_ context.Context, receiverID string) ([]storage.Stream, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var owned []*entry
@@ -89,7 +89,7 @@ func (m *Store) StreamsForReceiver(_ context.Context, receiverID string) ([]stor
 }
 
 // AllStreams implements storage.StreamStore.
-func (m *Store) AllStreams(_ context.Context) ([]storage.Stream, error) {
+func (m *StreamStore) AllStreams(_ context.Context) ([]storage.Stream, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	all := make([]*entry, 0, len(m.streams))
@@ -105,7 +105,7 @@ func (m *Store) AllStreams(_ context.Context) ([]storage.Stream, error) {
 }
 
 // UpdateStream implements storage.StreamStore.
-func (m *Store) UpdateStream(_ context.Context, id string, update func(*storage.Stream) error) (storage.Stream, error) {
+func (m *StreamStore) UpdateStream(_ context.Context, id string, update func(*storage.Stream) error) (storage.Stream, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.streams[id]
@@ -122,7 +122,7 @@ func (m *Store) UpdateStream(_ context.Context, id string, update func(*storage.
 }
 
 // DeleteStream implements storage.StreamStore.
-func (m *Store) DeleteStream(_ context.Context, id string) error {
+func (m *StreamStore) DeleteStream(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.streams[id]; !ok {
@@ -133,7 +133,7 @@ func (m *Store) DeleteStream(_ context.Context, id string) error {
 }
 
 // SetSubjectRule implements storage.StreamStore.
-func (m *Store) SetSubjectRule(_ context.Context, streamID string, rule storage.SubjectRule) error {
+func (m *StreamStore) SetSubjectRule(_ context.Context, streamID string, rule storage.SubjectRule) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.streams[streamID]
@@ -151,7 +151,7 @@ func (m *Store) SetSubjectRule(_ context.Context, streamID string, rule storage.
 }
 
 // SubjectRules implements storage.StreamStore.
-func (m *Store) SubjectRules(_ context.Context, streamID string) ([]storage.SubjectRule, error) {
+func (m *StreamStore) SubjectRules(_ context.Context, streamID string) ([]storage.SubjectRule, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.streams[streamID]
@@ -162,7 +162,7 @@ func (m *Store) SubjectRules(_ context.Context, streamID string) ([]storage.Subj
 }
 
 // Enqueue implements storage.StreamStore.
-func (m *Store) Enqueue(_ context.Context, streamID string, q storage.QueuedEvent) error {
+func (m *StreamStore) Enqueue(_ context.Context, streamID string, q storage.QueuedEvent) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.streams[streamID]
@@ -174,7 +174,7 @@ func (m *Store) Enqueue(_ context.Context, streamID string, q storage.QueuedEven
 }
 
 // PendingEvents implements storage.StreamStore.
-func (m *Store) PendingEvents(_ context.Context, streamID string, max int, controlOnly bool) ([]storage.QueuedEvent, error) {
+func (m *StreamStore) PendingEvents(_ context.Context, streamID string, max int, controlOnly bool) ([]storage.QueuedEvent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.streams[streamID]
@@ -194,7 +194,7 @@ func (m *Store) PendingEvents(_ context.Context, streamID string, max int, contr
 }
 
 // AckEvents implements storage.StreamStore.
-func (m *Store) AckEvents(_ context.Context, streamID string, jtis []string) error {
+func (m *StreamStore) AckEvents(_ context.Context, streamID string, jtis []string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.streams[streamID]
@@ -206,7 +206,7 @@ func (m *Store) AckEvents(_ context.Context, streamID string, jtis []string) err
 }
 
 // PurgeEvents implements storage.StreamStore.
-func (m *Store) PurgeEvents(_ context.Context, streamID string) error {
+func (m *StreamStore) PurgeEvents(_ context.Context, streamID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.streams[streamID]

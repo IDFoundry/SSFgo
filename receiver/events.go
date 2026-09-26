@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/internal/setcodec"
@@ -37,35 +38,34 @@ func On[E ssf.Event](r *Receiver, fn func(ctx context.Context, set ssf.SET, even
 	})
 }
 
-// Error codes a Receiver reports for a SET it rejects (RFC 8935 §2.4;
-// SSF 1.0 §8.1.4.1 for invalid_state).
+// Error codes a Receiver reports for a SET it rejects, beyond those
+// setcodec produces (RFC 8935 §2.4; SSF 1.0 §8.1.4.1 for invalid_state).
 const (
-	ErrCodeInvalidRequest       = setcodec.CodeInvalidRequest
-	ErrCodeInvalidKey           = setcodec.CodeInvalidKey
-	ErrCodeInvalidIssuer        = setcodec.CodeInvalidIssuer
-	ErrCodeInvalidAudience      = setcodec.CodeInvalidAudience
-	ErrCodeAuthenticationFailed = "authentication_failed"
-	ErrCodeInvalidState         = "invalid_state"
+	errCodeAuthenticationFailed = "authentication_failed"
+	errCodeInvalidState         = "invalid_state"
 )
 
-// RejectedSET is a SET the Receiver refuses: it is reported to the
-// Transmitter with Code and never handled.
-type RejectedSET struct {
-	Code        string
-	Description string
+// rejectedSET is a SET the Receiver refuses: it is reported to the
+// Transmitter with code and never handled.
+type rejectedSET struct {
+	code        string
+	description string
 }
 
-func (e *RejectedSET) Error() string {
-	return "receiver: rejected SET: " + e.Code + ": " + e.Description
+func (e *rejectedSET) Error() string {
+	return "receiver: rejected SET: " + e.code + ": " + e.description
 }
 
 // process verifies, de-duplicates and dispatches one SET. It returns the
-// SET's jti when known; the error is a *RejectedSET for a SET that must not
+// SET's jti when known; the error is a *rejectedSET for a SET that must not
 // be retried, or any other error for a handler failure that should be.
 func (r *Receiver) process(ctx context.Context, token string) (string, error) {
 	set, err := r.decode(ctx, token)
 	if err != nil {
 		return "", err
+	}
+	if err := r.checkCriticalMembers(set.Subject); err != nil {
+		return set.JWTID, err
 	}
 	fresh, err := r.cfg.ReplayStore.MarkSET(ctx, set.Issuer, set.JWTID, r.cfg.Now().Add(r.cfg.ReplayWindow))
 	if err != nil {
@@ -111,9 +111,33 @@ func (r *Receiver) decode(ctx context.Context, token string) (ssf.SET, error) {
 		set, err = setcodec.Decode(token, opts)
 	}
 	if de, ok := setcodec.IsDecodeError(err); ok {
-		return ssf.SET{}, &RejectedSET{Code: de.Code, Description: de.Err.Error()}
+		return ssf.SET{}, &rejectedSET{code: de.Code, description: de.Err.Error()}
 	}
 	return set, err
+}
+
+// standardSubjectMembers are the complex-subject members SSF 1.0 §3.3
+// defines; ssf.ComplexSubject parses each into its own field.
+var standardSubjectMembers = []string{"user", "device", "session", "application", "tenant", "org_unit", "group"}
+
+// checkCriticalMembers rejects a SET whose subject carries a member the
+// Transmitter declared critical and the Receiver does not process
+// (SSF 1.0 §3.6).
+func (r *Receiver) checkCriticalMembers(s ssf.Subject) error {
+	complexSubject, ok := s.(ssf.ComplexSubject)
+	if !ok {
+		return nil
+	}
+	for _, name := range r.metadata.CriticalSubjectMembers {
+		if slices.Contains(standardSubjectMembers, name) || slices.Contains(r.cfg.SubjectMembers, name) {
+			continue
+		}
+		if _, present := complexSubject.Additional[name]; present {
+			return &rejectedSET{code: setcodec.CodeInvalidRequest,
+				description: "the subject has critical member " + name + ", which this Receiver does not process"}
+		}
+	}
+	return nil
 }
 
 func (r *Receiver) dispatch(ctx context.Context, set ssf.SET) error {
@@ -123,7 +147,7 @@ func (r *Receiver) dispatch(ctx context.Context, set ssf.SET) error {
 		// Transmitter-initiated and always acceptable (§8.1.4).
 		streamID := set.Subject.(ssf.OpaqueSubject).ID
 		if !r.takeState(streamID, v.State) {
-			return &RejectedSET{Code: ErrCodeInvalidState, Description: "the verification state does not match an outstanding request"}
+			return &rejectedSET{code: errCodeInvalidState, description: "the verification state does not match an outstanding request"}
 		}
 	}
 	r.handlersMu.RLock()
@@ -135,8 +159,8 @@ func (r *Receiver) dispatch(ctx context.Context, set ssf.SET) error {
 	return h(ctx, set)
 }
 
-// isRejection reports whether err is a *RejectedSET.
-func isRejection(err error) (*RejectedSET, bool) {
-	var rej *RejectedSET
+// isRejection reports whether err is a *rejectedSET.
+func isRejection(err error) (*rejectedSET, bool) {
+	var rej *rejectedSET
 	return rej, errors.As(err, &rej)
 }

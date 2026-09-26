@@ -87,6 +87,7 @@ func (AccountPurged) Validate() error { return nil }
 // DisabledReason is why an account was disabled (RISC 1.0 §2.3).
 type DisabledReason string
 
+// Account-disabled reasons RISC 1.0 §2.3 lists.
 const (
 	DisabledHijacking   DisabledReason = "hijacking"
 	DisabledBulkAccount DisabledReason = "bulk-account"

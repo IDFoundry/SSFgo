@@ -54,14 +54,14 @@ type env struct {
 	t     *testing.T
 	txSrv *httptest.Server
 	tx    *transmitter.Transmitter
-	store *memstore.Store
+	store *memstore.StreamStore
 	rx    *receiver.Receiver
 	cfg   receiver.Config
 }
 
 func newEnv(t *testing.T, mutate ...func(*receiver.Config)) *env {
 	t.Helper()
-	e := &env{t: t, store: memstore.New()}
+	e := &env{t: t, store: memstore.NewStreamStore()}
 	e.txSrv = httptest.NewUnstartedServer(nil)
 	e.txSrv.StartTLS()
 	t.Cleanup(e.txSrv.Close)
@@ -436,11 +436,11 @@ func TestPushHandlerRejections(t *testing.T) {
 		status     int
 		err        string
 	}{
-		"no authorization":    {"", sign(t, e, nil), 401, receiver.ErrCodeAuthenticationFailed},
-		"wrong authorization": {"Bearer nope", sign(t, e, nil), 401, receiver.ErrCodeAuthenticationFailed},
-		"not a JWT":           {auth, "hello", 400, receiver.ErrCodeInvalidRequest},
-		"wrong audience":      {auth, sign(t, e, func(s *ssf.SET) { s.Audience = []string{"https://other.example"} }), 400, receiver.ErrCodeInvalidAudience},
-		"wrong issuer":        {auth, sign(t, e, func(s *ssf.SET) { s.Issuer = "https://evil.example" }), 400, receiver.ErrCodeInvalidIssuer},
+		"no authorization":    {"", sign(t, e, nil), 401, "authentication_failed"},
+		"wrong authorization": {"Bearer nope", sign(t, e, nil), 401, "authentication_failed"},
+		"not a JWT":           {auth, "hello", 400, "invalid_request"},
+		"wrong audience":      {auth, sign(t, e, func(s *ssf.SET) { s.Audience = []string{"https://other.example"} }), 400, "invalid_audience"},
+		"wrong issuer":        {auth, sign(t, e, func(s *ssf.SET) { s.Issuer = "https://evil.example" }), 400, "invalid_issuer"},
 		"unregistered event": {auth, sign(t, e, func(s *ssf.SET) {
 			s.Event = caep.RiskLevelChange{Principal: caep.PrincipalUser, CurrentLevel: caep.RiskLow}
 			s.Subject = ssf.IssSubSubject{Issuer: "https://i", Subject: "s"}
@@ -448,7 +448,7 @@ func TestPushHandlerRejections(t *testing.T) {
 		"verification with unknown state": {auth, sign(t, e, func(s *ssf.SET) {
 			s.Subject = ssf.OpaqueSubject{ID: "stream-1"}
 			s.Event = ssf.Verification{State: "never-requested"}
-		}), 400, receiver.ErrCodeInvalidState},
+		}), 400, "invalid_state"},
 		"unsolicited verification": {auth, sign(t, e, func(s *ssf.SET) {
 			s.Subject = ssf.OpaqueSubject{ID: "stream-1"}
 			s.Event = ssf.Verification{}
@@ -517,7 +517,7 @@ func TestKeyRotation(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Within a minute of the last fetch the Receiver will not refetch.
-	if got := push(t, h, "", tok); got.status != 400 || got.err != receiver.ErrCodeInvalidKey {
+	if got := push(t, h, "", tok); got.status != 400 || got.err != "invalid_key" {
 		t.Fatalf("before the refetch interval: %d %q", got.status, got.err)
 	}
 	now = now.Add(2 * time.Minute)
@@ -580,7 +580,7 @@ func TestKeyMaxAge(t *testing.T) {
 	}
 	now = now.Add(2 * time.Hour)
 	oldSigned = sign(t, e, func(s *ssf.SET) { s.IssuedAt = now; s.JWTID = "old-2" })
-	if got := push(t, h, "", oldSigned); got.status != 400 || got.err != receiver.ErrCodeInvalidKey {
+	if got := push(t, h, "", oldSigned); got.status != 400 || got.err != "invalid_key" {
 		t.Fatalf("after KeyMaxAge the retired k1 must no longer verify: %d %q", got.status, got.err)
 	}
 
@@ -591,6 +591,67 @@ func TestKeyMaxAge(t *testing.T) {
 	tok, _ := setcodec.Encode(setcodec.Signer{Key: newKey, Algorithm: ssf.RS256, KeyID: "k2"}, set)
 	if got := push(t, h, "", tok); got.status != 202 {
 		t.Fatalf("an unavailable JWKS endpoint must not drop the cached keys: %d %q", got.status, got.err)
+	}
+}
+
+// TestCriticalSubjectMembers checks SSF 1.0 §3.6: an event whose subject
+// has a member the Transmitter declares critical and the Receiver does not
+// process is discarded.
+func TestCriticalSubjectMembers(t *testing.T) {
+	e := newEnv(t)
+	tx, err := transmitter.New(transmitter.Config{
+		Issuer:                 e.cfg.Issuer,
+		SigningKeys:            []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
+		EventsSupported:        []ssf.EventType{caep.SessionRevokedEventType},
+		DeliveryMethods:        []ssf.DeliveryMethod{ssf.DeliveryPoll},
+		DefaultSubjects:        ssf.DefaultSubjectsAll,
+		CriticalSubjectMembers: []string{"tenant", "x_region"},
+		Store:                  e.store,
+		Authorize:              func(context.Context, string) (transmitter.Receiver, error) { return transmitter.Receiver{}, nil },
+		Logger:                 quiet,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.txSrv.Config.Handler = tx.Handler()
+
+	complexWith := func(extra string) ssf.Subject {
+		s := ssf.ComplexSubject{User: alice, Tenant: ssf.OpaqueSubject{ID: "t1"}}
+		if extra != "" {
+			s.Additional = map[string]ssf.Subject{extra: ssf.OpaqueSubject{ID: "v"}}
+		}
+		return s
+	}
+	for _, c := range []struct {
+		name    string
+		members []string
+		subject ssf.Subject
+		status  int
+	}{
+		{"simple subject", nil, alice, 202},
+		{"critical standard member", nil, complexWith(""), 202},
+		{"non-critical unknown member", nil, complexWith("x_other"), 202},
+		{"critical unknown member", nil, complexWith("x_region"), 400},
+		{"critical member the application processes", []string{"x_region"}, complexWith("x_region"), 202},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cfg := e.cfg
+			cfg.SubjectMembers = c.members
+			cfg.ReplayStore = memstore.NewReplayStore()
+			rx, err := receiver.New(context.Background(), cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var handled atomic.Bool
+			receiver.On(rx, func(context.Context, ssf.SET, caep.SessionRevoked) error { handled.Store(true); return nil })
+			got := push(t, rx.PushHandler(receiver.PushOptions{}), "", sign(t, e, func(s *ssf.SET) { s.Subject = c.subject }))
+			if got.status != c.status {
+				t.Fatalf("status = %d %q, want %d", got.status, got.err, c.status)
+			}
+			if handled.Load() != (c.status == 202) {
+				t.Errorf("handler called = %v", handled.Load())
+			}
+		})
 	}
 }
 

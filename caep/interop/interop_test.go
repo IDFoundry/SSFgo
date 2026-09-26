@@ -28,7 +28,7 @@ func config(t *testing.T) transmitter.Config {
 		EventsSupported: []ssf.EventType{caep.SessionRevokedEventType},
 		DeliveryMethods: []ssf.DeliveryMethod{ssf.DeliveryPoll, ssf.DeliveryPush},
 		DefaultSubjects: ssf.DefaultSubjectsAll,
-		Store:           memstore.New(),
+		Store:           memstore.NewStreamStore(),
 		Authorize:       func(context.Context, string) (transmitter.Receiver, error) { return transmitter.Receiver{}, nil },
 	}
 }
@@ -78,6 +78,17 @@ func TestValidateEvent(t *testing.T) {
 		if (err == nil) != c.ok {
 			t.Errorf("%s: %v", c.name, err)
 		}
+	}
+}
+
+func TestProfileListsAreCopies(t *testing.T) {
+	interop.SubjectFormats()[0] = ssf.FormatOpaque
+	interop.EventTypes()[0] = "https://example.com/other"
+	if err := interop.ValidateEvent(ssf.OpaqueSubject{ID: "x"}, caep.SessionRevoked{Common: caep.Common{ReasonAdmin: ssf.LocalizedText{"en": "x"}}}); err == nil {
+		t.Error("modifying a returned list weakened ValidateEvent")
+	}
+	if interop.EventTypes()[0] != caep.SessionRevokedEventType {
+		t.Error("modifying a returned list changed the profile")
 	}
 }
 

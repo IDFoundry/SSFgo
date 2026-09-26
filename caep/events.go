@@ -41,6 +41,7 @@ func (e TokenClaimsChange) Validate() error {
 // when Transmitter and Receiver agree on them.
 type CredentialType string
 
+// Credential types CAEP 1.0 §3.3.1 lists.
 const (
 	CredentialPassword             CredentialType = "password"
 	CredentialPIN                  CredentialType = "pin"
@@ -69,6 +70,7 @@ func (t CredentialType) IsStandard() bool {
 // ChangeType is what happened to a credential (CAEP 1.0 §3.3.1).
 type ChangeType string
 
+// Change types CAEP 1.0 §3.3.1 defines.
 const (
 	ChangeCreate ChangeType = "create"
 	ChangeRevoke ChangeType = "revoke"
@@ -105,21 +107,26 @@ func (e CredentialChange) Validate() error {
 	return e.validate(CredentialChangeEventType)
 }
 
-// Assurance level namespaces CAEP 1.0 §3.4.1 lists. Other values name a
-// namespace agreed between Transmitter and Receiver.
+// AssuranceNamespace names the scheme an AssuranceLevelChange's levels
+// come from (CAEP 1.0 §3.4.1). Values other than the constants below name
+// a namespace agreed between Transmitter and Receiver.
+type AssuranceNamespace string
+
+// Assurance level namespaces CAEP 1.0 §3.4.1 lists.
 const (
-	NamespaceRFC8176     = "RFC8176"
-	NamespaceRFC6711     = "RFC6711"
-	NamespaceISOIEC29115 = "ISO-IEC-29115"
-	NamespaceNISTIAL     = "NIST-IAL"
-	NamespaceNISTAAL     = "NIST-AAL"
-	NamespaceNISTFAL     = "NIST-FAL"
+	NamespaceRFC8176     AssuranceNamespace = "RFC8176"
+	NamespaceRFC6711     AssuranceNamespace = "RFC6711"
+	NamespaceISOIEC29115 AssuranceNamespace = "ISO-IEC-29115"
+	NamespaceNISTIAL     AssuranceNamespace = "NIST-IAL"
+	NamespaceNISTAAL     AssuranceNamespace = "NIST-AAL"
+	NamespaceNISTFAL     AssuranceNamespace = "NIST-FAL"
 )
 
 // ChangeDirection says whether an assurance level rose or fell
 // (CAEP 1.0 §3.4.1).
 type ChangeDirection string
 
+// Assurance level change directions (CAEP 1.0 §3.4.1).
 const (
 	Increase ChangeDirection = "increase"
 	Decrease ChangeDirection = "decrease"
@@ -131,7 +138,7 @@ type AssuranceLevelChange struct {
 	Common
 	// Namespace is the namespace of CurrentLevel and PreviousLevel.
 	// Required.
-	Namespace string `json:"namespace"`
+	Namespace AssuranceNamespace `json:"namespace"`
 	// CurrentLevel is the new assurance level. Required.
 	CurrentLevel string `json:"current_level"`
 	// PreviousLevel is empty when the Transmitter does not know it.
@@ -158,6 +165,7 @@ func (e AssuranceLevelChange) Validate() error {
 // ComplianceStatus is a device's compliance status (CAEP 1.0 §3.5.1).
 type ComplianceStatus string
 
+// Device compliance statuses (CAEP 1.0 §3.5.1).
 const (
 	Compliant    ComplianceStatus = "compliant"
 	NotCompliant ComplianceStatus = "not-compliant"
@@ -227,6 +235,7 @@ func (e SessionPresented) Validate() error { return e.validate(SessionPresentedE
 // RiskLevel is an abstracted risk level (CAEP 1.0 §3.8.1).
 type RiskLevel string
 
+// Risk levels (CAEP 1.0 §3.8.1).
 const (
 	RiskLow    RiskLevel = "LOW"
 	RiskMedium RiskLevel = "MEDIUM"
@@ -240,6 +249,7 @@ func (l RiskLevel) valid() bool { return l == RiskLow || l == RiskMedium || l ==
 // principals.
 type Principal string
 
+// Principals CAEP 1.0 §3.8.1 names.
 const (
 	PrincipalUser    Principal = "USER"
 	PrincipalDevice  Principal = "DEVICE"

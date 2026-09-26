@@ -24,18 +24,22 @@ import (
 	"github.com/idfoundry/ssfgo/transmitter"
 )
 
-// Events are the CAEP event types the profile's use cases are built on
-// (§3.1–§3.3). An implementation supports at least one.
-var Events = []ssf.EventType{
-	caep.SessionRevokedEventType,
-	caep.CredentialChangeEventType,
-	caep.DeviceComplianceChangeEventType,
+// EventTypes returns the CAEP event types the profile's use cases are
+// built on (§3.1–§3.3). An implementation supports at least one.
+func EventTypes() []ssf.EventType {
+	return []ssf.EventType{
+		caep.SessionRevokedEventType,
+		caep.CredentialChangeEventType,
+		caep.DeviceComplianceChangeEventType,
+	}
 }
 
-// SubjectFormats are the subject identifier formats CAEP events may use
-// under the profile (§2.5). The opaque format is reserved for the
+// SubjectFormats returns the subject identifier formats CAEP events may
+// use under the profile (§2.5). The opaque format is reserved for the
 // verification event.
-var SubjectFormats = []ssf.SubjectFormat{ssf.FormatEmail, ssf.FormatIssSub}
+func SubjectFormats() []ssf.SubjectFormat {
+	return []ssf.SubjectFormat{ssf.FormatEmail, ssf.FormatIssSub}
+}
 
 // ErrNotInterop is wrapped by every error this package returns.
 var ErrNotInterop = errors.New("caep interop profile")
@@ -51,7 +55,7 @@ func CheckTransmitterConfig(cfg transmitter.Config) error {
 			errs = append(errs, fmt.Errorf("§2.3.8.1: delivery method %s must be supported", m))
 		}
 	}
-	if !slices.ContainsFunc(Events, func(e ssf.EventType) bool { return slices.Contains(cfg.EventsSupported, e) }) {
+	if !slices.ContainsFunc(EventTypes(), func(e ssf.EventType) bool { return slices.Contains(cfg.EventsSupported, e) }) {
 		errs = append(errs, errors.New("§3: EventsSupported must include session-revoked, credential-change or device-compliance-change"))
 	}
 	if err := errors.Join(errs...); err != nil {
@@ -69,7 +73,7 @@ func ValidateEvent(subject ssf.Subject, event ssf.Event) error {
 	if !strings.HasPrefix(string(typ), "https://schemas.openid.net/secevent/caep/") {
 		return nil
 	}
-	if !slices.Contains(SubjectFormats, subject.Format()) {
+	if !slices.Contains(SubjectFormats(), subject.Format()) {
 		return fmt.Errorf("%w: §2.5: CAEP events must use an email or iss_sub subject, not %q", ErrNotInterop, subject.Format())
 	}
 	var reason ssf.LocalizedText

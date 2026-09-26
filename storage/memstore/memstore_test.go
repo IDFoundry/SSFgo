@@ -9,7 +9,7 @@ import (
 )
 
 func TestContract(t *testing.T) {
-	storagetest.StreamStore(t, func(*testing.T) storage.StreamStore { return memstore.New() })
+	storagetest.StreamStore(t, func(*testing.T) storage.StreamStore { return memstore.NewStreamStore() })
 }
 
 func TestReplayContract(t *testing.T) {

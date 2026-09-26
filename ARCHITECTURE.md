@@ -189,7 +189,10 @@ Transmitter's JWKS.
   SET is acknowledged without being handled twice. A verification event
   carrying a `state` must match one `RequestVerification` issued and has
   not yet been used (§8.1.4.1); one without `state` is accepted
-  (§8.1.4). Handlers are registered per event type, typed with
+  (§8.1.4). A SET whose complex subject carries a member the Transmitter
+  declares critical, and the Receiver does not process, is rejected
+  (§3.6): the §3.3 members always count as processed, others only when
+  listed in `Config.SubjectMembers`. Handlers are registered per event type, typed with
   `receiver.On[E]`; an event of a registered type with no handler is
   acknowledged and ignored.
 

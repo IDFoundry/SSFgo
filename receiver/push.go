@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+
+	"github.com/idfoundry/ssfgo/internal/setcodec"
 )
 
 // maxSETBytes bounds a pushed SET.
@@ -33,18 +35,18 @@ func (r *Receiver) PushHandler(opts PushOptions) http.Handler {
 		}
 		if opts.AuthorizationHeader != "" &&
 			subtle.ConstantTimeCompare([]byte(req.Header.Get("Authorization")), []byte(opts.AuthorizationHeader)) != 1 {
-			pushError(w, http.StatusUnauthorized, ErrCodeAuthenticationFailed, "the Authorization header is missing or wrong")
+			pushError(w, http.StatusUnauthorized, errCodeAuthenticationFailed, "the Authorization header is missing or wrong")
 			return
 		}
 		body, err := io.ReadAll(http.MaxBytesReader(w, req.Body, maxSETBytes))
 		if err != nil {
-			pushError(w, http.StatusBadRequest, ErrCodeInvalidRequest, "the request body could not be read")
+			pushError(w, http.StatusBadRequest, setcodec.CodeInvalidRequest, "the request body could not be read")
 			return
 		}
 		jti, err := r.process(req.Context(), string(body))
 		if rej, ok := isRejection(err); ok {
-			r.cfg.Logger.WarnContext(req.Context(), "ssf receiver: rejected pushed SET", "jti", jti, "err", rej.Code, "description", rej.Description)
-			pushError(w, http.StatusBadRequest, rej.Code, rej.Description)
+			r.cfg.Logger.WarnContext(req.Context(), "ssf receiver: rejected pushed SET", "jti", jti, "err", rej.code, "description", rej.description)
+			pushError(w, http.StatusBadRequest, rej.code, rej.description)
 			return
 		}
 		if err != nil {

@@ -59,7 +59,7 @@ var tokens = map[string]transmitter.Receiver{
 type fixture struct {
 	t      *testing.T
 	srv    *httptest.Server
-	store  *memstore.Store
+	store  *memstore.StreamStore
 	tx     *transmitter.Transmitter
 	issuer string
 	now    time.Time
@@ -67,7 +67,7 @@ type fixture struct {
 
 func newFixture(t *testing.T, mutate ...func(*transmitter.Config)) *fixture {
 	t.Helper()
-	f := &fixture{t: t, store: memstore.New(), now: time.Unix(1700000000, 0)}
+	f := &fixture{t: t, store: memstore.NewStreamStore(), now: time.Unix(1700000000, 0)}
 	f.srv = httptest.NewUnstartedServer(nil)
 	f.srv.StartTLS()
 	t.Cleanup(f.srv.Close)
@@ -188,7 +188,7 @@ func TestConfigValidation(t *testing.T) {
 			EventsSupported: interopEvents,
 			DeliveryMethods: []ssf.DeliveryMethod{ssf.DeliveryPoll},
 			DefaultSubjects: ssf.DefaultSubjectsNone,
-			Store:           memstore.New(),
+			Store:           memstore.NewStreamStore(),
 			Authorize:       func(context.Context, string) (transmitter.Receiver, error) { return transmitter.Receiver{}, nil },
 		}
 	}
@@ -284,6 +284,39 @@ func TestMetadata(t *testing.T) {
 	}
 }
 
+// Neither the Config slices passed to New nor the metadata returned by
+// Metadata may alias the Transmitter's own state.
+func TestConfigAndMetadataAreCopied(t *testing.T) {
+	events := []ssf.EventType{caep.SessionRevokedEventType}
+	methods := []ssf.DeliveryMethod{ssf.DeliveryPoll}
+	tx, err := transmitter.New(transmitter.Config{
+		Issuer:          "https://tx.example",
+		SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
+		EventsSupported: events,
+		DeliveryMethods: methods,
+		DefaultSubjects: ssf.DefaultSubjectsAll,
+		Store:           memstore.NewStreamStore(),
+		Authorize:       func(context.Context, string) (transmitter.Receiver, error) { return transmitter.Receiver{}, nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	methods[0] = ssf.DeliveryPush
+	events[0] = "https://example.com/other"
+	md := tx.Metadata()
+	if md.DeliveryMethodsSupported[0] != ssf.DeliveryPoll {
+		t.Error("changing the Config slice after New changed the Transmitter")
+	}
+	md.DeliveryMethodsSupported[0] = ssf.DeliveryPush
+	md.AuthorizationSchemes[0].SpecURN = "urn:evil"
+	if again := tx.Metadata(); again.DeliveryMethodsSupported[0] != ssf.DeliveryPoll || again.AuthorizationSchemes[0].SpecURN != ssf.OAuth2SpecURN {
+		t.Error("changing returned metadata changed the Transmitter")
+	}
+	if err := tx.Emit(context.Background(), ssf.EmailSubject{Email: "a@b.example"}, caep.SessionRevoked{}); err != nil {
+		t.Errorf("session-revoked must still be supported after the caller's slice changed: %v", err)
+	}
+}
+
 func TestMetadataAtIssuerWithoutPath(t *testing.T) {
 	srv := httptest.NewTLSServer(nil)
 	defer srv.Close()
@@ -293,7 +326,7 @@ func TestMetadataAtIssuerWithoutPath(t *testing.T) {
 		EventsSupported: interopEvents,
 		DeliveryMethods: []ssf.DeliveryMethod{ssf.DeliveryPoll},
 		DefaultSubjects: ssf.DefaultSubjectsNone,
-		Store:           memstore.New(),
+		Store:           memstore.NewStreamStore(),
 		Authorize:       func(context.Context, string) (transmitter.Receiver, error) { return transmitter.Receiver{}, nil },
 	})
 	if err != nil {
@@ -668,7 +701,7 @@ func TestMethodNotAllowed(t *testing.T) {
 }
 
 func TestStoreFailureIs500(t *testing.T) {
-	f := newFixture(t, func(c *transmitter.Config) { c.Store = failingStore{memstore.New()} })
+	f := newFixture(t, func(c *transmitter.Config) { c.Store = failingStore{memstore.NewStreamStore()} })
 	expect(t, f.do("GET", f.metadata().ConfigurationEndpoint, "alice", nil), http.StatusInternalServerError)
 }
 

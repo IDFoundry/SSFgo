@@ -94,10 +94,10 @@ func run(ctx context.Context, w io.Writer) error {
 	txCfg := transmitter.Config{
 		Issuer:          issuer,
 		SigningKeys:     []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "idp-2026"}},
-		EventsSupported: interop.Events,
+		EventsSupported: interop.EventTypes(),
 		DeliveryMethods: []ssf.DeliveryMethod{ssf.DeliveryPush, ssf.DeliveryPoll},
 		DefaultSubjects: ssf.DefaultSubjectsAll,
-		Store:           memstore.New(),
+		Store:           memstore.NewStreamStore(),
 		Authorize: func(_ context.Context, token string) (transmitter.Receiver, error) {
 			if token != rpToken {
 				return transmitter.Receiver{}, transmitter.ErrInvalidToken

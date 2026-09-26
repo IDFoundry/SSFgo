@@ -71,7 +71,7 @@ func emitInteropEvents(tx *transmitter.Transmitter, store storage.StreamStore, i
 			Common: reason, PreviousStatus: caep.Compliant, CurrentStatus: caep.NotCompliant,
 		}},
 	}
-	for _, typ := range interop.Events {
+	for _, typ := range interop.EventTypes() {
 		if !slices.Contains(s.EventsDelivered, typ) {
 			continue
 		}

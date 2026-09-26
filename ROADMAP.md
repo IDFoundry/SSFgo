@@ -78,10 +78,13 @@ poll.
 [`conformance/scripts/run-all.sh`](conformance/scripts/run-all.sh) runs it
 and `.github/workflows/conformance.yml` runs that daily.
 
-## v1.0
+## v1.0 — API frozen, release pending
 
-API freeze. The matrix passes on every release. Certification is
-submitted once OIDF opens the SSF certification programme.
+API freeze, after a review of every exported identifier (see
+[CHANGELOG.md](CHANGELOG.md)); the compatibility promise is in
+[COMPATIBILITY.md](COMPATIBILITY.md). The full matrix runs daily in CI.
+Certification will be submitted once OIDF opens the SSF certification
+programme. Remaining: tag and publish `v1.0.0`.
 
 ## Not planned for v1.0
 

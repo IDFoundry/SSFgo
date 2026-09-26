@@ -4,12 +4,14 @@ SSFgo is a lightweight Go implementation of the OpenID Shared Signals
 Framework, CAEP and RISC, providing embeddable Transmitter and Receiver
 capabilities with a focus on standards compliance and interoperability.
 
-> **Status: pre-release.** Both roles are implemented. The Transmitter
-> passes every module of the OIDF CAEP Interoperability Profile
-> Transmitter plan; the Receiver passes every module of the Receiver plan
-> except one blocked by a conformance-suite defect — see
+> **Status: API frozen for v1.0, not yet released.** Both roles are
+> implemented; once `v1.0.0` is tagged the API is covered by
+> [COMPATIBILITY.md](COMPATIBILITY.md). The Transmitter passes every
+> module of the OIDF CAEP Interoperability Profile Transmitter plan; the
+> Receiver passes every module of the Receiver plan except one blocked by
+> a conformance-suite defect — see
 > [conformance/README.md](conformance/README.md). The full matrix runs
-> daily in CI. Next: the v1.0 API freeze. See [ROADMAP.md](ROADMAP.md) and
+> daily in CI. OIDF has not yet opened SSF certification. See [ROADMAP.md](ROADMAP.md) and
 > [conformance/README.md](conformance/README.md).
 
 ## Specifications
@@ -35,10 +37,10 @@ endpoints and emits events:
 tx, err := transmitter.New(transmitter.Config{
 	Issuer:          "https://idp.example.com/ssf",
 	SigningKeys:     []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "2026-09"}},
-	EventsSupported: interop.Events,
+	EventsSupported: interop.EventTypes(),
 	DeliveryMethods: []ssf.DeliveryMethod{ssf.DeliveryPush, ssf.DeliveryPoll},
 	DefaultSubjects: ssf.DefaultSubjectsAll,
-	Store:           memstore.New(),
+	Store:           memstore.NewStreamStore(),
 	Authorize:       authorizeAccessToken, // your OAuth resource-server check
 })
 go tx.Run(ctx) // push delivery
@@ -77,6 +79,11 @@ sides in one process: `go run ./examples/session-revocation`.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md), and [SECURITY.md](SECURITY.md) for
 the security model and how to report a vulnerability.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Changes are listed in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
