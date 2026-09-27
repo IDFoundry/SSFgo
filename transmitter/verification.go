@@ -1,7 +1,9 @@
 package transmitter
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"strconv"
@@ -53,6 +55,7 @@ func (t *Transmitter) requestVerification(w http.ResponseWriter, r *http.Request
 		t.writeAPIError(w, r, "verification", err)
 		return
 	}
+	t.touch(r.Context(), s)
 	if err := t.enqueue(r.Context(), s, ssf.OpaqueSubject{ID: s.ID}, ssf.Verification{State: state}, "", false); err != nil {
 		t.serverError(w, r, "verification", err)
 		return
@@ -69,4 +72,19 @@ func (t *Transmitter) notFoundOr(err error) error {
 		return errStreamNotFound
 	}
 	return err
+}
+
+// SendVerification sends a Transmitter-initiated verification event on a
+// stream (SSF 1.0 §8.1.4). It carries no state (§8.1.4.2) and is not
+// subject to min_verification_interval, which limits Receivers. A
+// disabled stream drops it.
+func (t *Transmitter) SendVerification(ctx context.Context, streamID string) error {
+	s, err := t.cfg.Store.Stream(ctx, streamID)
+	if err != nil {
+		return fmt.Errorf("transmitter: send verification: %w", err)
+	}
+	if err := t.enqueue(ctx, s, ssf.OpaqueSubject{ID: s.ID}, ssf.Verification{}, "", false); err != nil {
+		return fmt.Errorf("transmitter: send verification: %w", err)
+	}
+	return nil
 }

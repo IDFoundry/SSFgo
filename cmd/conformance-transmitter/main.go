@@ -82,7 +82,13 @@ func main() {
 		MultipleStreamsPerReceiver: !*singleStream,
 		// The suite does not always delete the streams its modules
 		// create, so allow many more than the default.
-		Limits:                  transmitter.Limits{StreamsPerReceiver: 1000},
+		Limits: transmitter.Limits{StreamsPerReceiver: 1000},
+		// Exercise both optional SSF features against the suite: a
+		// Transmitter-initiated verification on every new stream (the
+		// suite accepts these, SSF §8.1.4), and an inactivity timeout
+		// long enough never to fire during a run.
+		VerifyNewStreams:        true,
+		Inactivity:              transmitter.InactivityPolicy{Timeout: time.Hour, Action: transmitter.InactivityPause},
 		MinVerificationInterval: 0,
 		HTTPClient:              pushClient,
 		Logger:                  slog.Default(),

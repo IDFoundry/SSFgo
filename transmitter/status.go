@@ -25,6 +25,7 @@ func (t *Transmitter) readStatus(w http.ResponseWriter, r *http.Request, rx Rece
 		t.writeAPIError(w, r, "read status", err)
 		return
 	}
+	t.touch(r.Context(), s)
 	writeJSON(w, http.StatusOK, stateOf(s))
 }
 
@@ -77,5 +78,6 @@ func (t *Transmitter) updateStatus(w http.ResponseWriter, r *http.Request, rx Re
 		}
 	}
 	t.notify.notify(id)
+	t.touch(r.Context(), s)
 	writeJSON(w, http.StatusOK, stateOf(s))
 }

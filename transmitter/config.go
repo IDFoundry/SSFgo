@@ -98,6 +98,16 @@ type Config struct {
 	// Limits bound what one Receiver can make the Transmitter store.
 	Limits Limits
 
+	// Inactivity, if its Timeout is set, advertises inactivity_timeout on
+	// every stream and acts on streams whose Receiver has gone quiet
+	// (SSF 1.0 §8.1.1). Optional.
+	Inactivity InactivityPolicy
+
+	// VerifyNewStreams sends a Transmitter-initiated verification event,
+	// without state, on every stream as soon as it is created (SSF 1.0
+	// §8.1.4), so the Receiver learns at once whether delivery works.
+	VerifyNewStreams bool
+
 	// PermitEvent, if set, decides whether the Receiver that owns a stream
 	// may receive a given event about a given subject. Emit consults it
 	// for every stream the event would otherwise be queued on. SSF 1.0
@@ -132,6 +142,37 @@ type Limits struct {
 	// Receiver stops collecting, further SETs for that stream are dropped
 	// and logged rather than held without bound. Defaults to 10,000.
 	QueuedSETsPerStream int
+}
+
+// InactivityAction is what the Transmitter does to a stream whose
+// inactivity timeout has passed (SSF 1.0 §8.1.1).
+type InactivityAction string
+
+const (
+	// InactivityPause pauses the stream: SETs are held, and the Receiver
+	// can re-enable it.
+	InactivityPause InactivityAction = "pause"
+	// InactivityDisable disables the stream: queued SETs are discarded
+	// and no more are held. The Receiver can re-enable it.
+	InactivityDisable InactivityAction = "disable"
+	// InactivityDelete deletes the stream.
+	InactivityDelete InactivityAction = "delete"
+)
+
+// InactivityPolicy configures inactivity_timeout (SSF 1.0 §8.1.1).
+//
+// Eligible Receiver activity, which restarts the timeout, is any stream
+// management request that references the stream — reading it or its
+// status, updating it, subject changes, verification requests — and, for
+// poll streams, polling. Pausing or disabling a stream sends the
+// stream-updated event SSF requires; unlike SetStreamStatus, it does not
+// stop the Receiver re-enabling the stream. Timeouts are enforced by Run,
+// or by calling ExpireInactiveStreams.
+type InactivityPolicy struct {
+	// Timeout is advertised in whole seconds. Zero turns the feature off.
+	Timeout time.Duration
+	// Action is required when Timeout is set.
+	Action InactivityAction
 }
 
 // PushRetryPolicy controls retries of push deliveries that fail
@@ -201,6 +242,16 @@ func (c *Config) validate() error {
 	}
 	if c.Limits.StreamsPerReceiver < 0 || c.Limits.SubjectRulesPerStream < 0 || c.Limits.QueuedSETsPerStream < 0 {
 		errs = append(errs, errors.New("Limits values must not be negative"))
+	}
+	if c.Inactivity.Timeout < 0 || c.Inactivity.Timeout%time.Second != 0 {
+		errs = append(errs, errors.New("Inactivity.Timeout must be a non-negative whole number of seconds"))
+	}
+	if c.Inactivity.Timeout > 0 {
+		switch c.Inactivity.Action {
+		case InactivityPause, InactivityDisable, InactivityDelete:
+		default:
+			errs = append(errs, errors.New(`Inactivity.Action must be "pause", "disable" or "delete"`))
+		}
 	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("transmitter: invalid config: %w", err)

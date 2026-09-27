@@ -13,6 +13,11 @@ self-signed TLS certificate, and a minimal client-credentials OAuth server
 for the suite to obtain access tokens from. The OAuth server is test
 scaffolding, not part of the library.
 
+The harness also turns on SSFgo's optional features the suite can
+observe: a Transmitter-initiated verification event on every new stream,
+which the suite logs as accepted, and a one-hour `inactivity_timeout`,
+which it lists among the stream's optional fields.
+
 [`transmitter/run.sh`](transmitter/run.sh) builds and starts it, runs one
 test plan variant against a local suite, and stops it:
 

@@ -54,6 +54,12 @@ type Stream struct {
 	// min_verification_interval.
 	LastVerificationRequest time.Time
 
+	// LastActivity is when the Receiver last did something that restarts
+	// the stream's inactivity timeout (SSF 1.0 §8.1.1); zero means none
+	// since CreatedAt. It may lag real activity by up to a tenth of the
+	// timeout, since it is recorded no more often than that.
+	LastActivity time.Time
+
 	CreatedAt time.Time
 }
 

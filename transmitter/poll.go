@@ -67,6 +67,7 @@ func (t *Transmitter) poll(w http.ResponseWriter, r *http.Request, rx Receiver) 
 		t.writeAPIError(w, r, "poll", badRequest("this stream does not use poll delivery"))
 		return
 	}
+	t.touch(r.Context(), s)
 
 	done := slices.Clone(req.Ack)
 	logged := 0

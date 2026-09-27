@@ -104,6 +104,13 @@ func (t *Transmitter) includes(rules []storage.SubjectRule, subject ssf.Subject)
 // Disabling a stream first discards everything queued on it. Setting the current
 // status again does nothing.
 func (t *Transmitter) SetStreamStatus(ctx context.Context, streamID string, status ssf.StreamStatus, reason string) error {
+	return t.setStatus(ctx, streamID, status, reason, true)
+}
+
+// setStatus changes a stream's status on the Transmitter's initiative and
+// announces it. With lock set, a pause or disable holds until the
+// Transmitter lifts it.
+func (t *Transmitter) setStatus(ctx context.Context, streamID string, status ssf.StreamStatus, reason string, lock bool) error {
 	if !status.IsValid() {
 		return fmt.Errorf("transmitter: invalid stream status %q", status)
 	}
@@ -111,10 +118,9 @@ func (t *Transmitter) SetStreamStatus(ctx context.Context, streamID string, stat
 	s, err := t.cfg.Store.UpdateStream(ctx, streamID, func(s *storage.Stream) error {
 		previous = s.Status
 		s.Status, s.StatusReason = status, reason
-		// A pause or disable imposed by the Transmitter holds until the
-		// Transmitter lifts it; re-enabling hands control back to the
-		// Receiver.
-		s.StatusSetByTransmitter = status != ssf.StreamEnabled
+		// A locked pause or disable holds until the Transmitter lifts it;
+		// re-enabling hands control back to the Receiver.
+		s.StatusSetByTransmitter = lock && status != ssf.StreamEnabled
 		return nil
 	})
 	if err != nil {

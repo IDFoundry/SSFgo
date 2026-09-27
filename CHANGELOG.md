@@ -32,6 +32,15 @@ conformance-suite defect (millisecond `event_timestamp`), documented in
 
 ### Added since v0.5
 
+- Transmitter-initiated verification (SSF §8.1.4): `tx.SendVerification`
+  sends a verification event without state on demand, and
+  `transmitter.Config.VerifyNewStreams` sends one on every new stream.
+- `inactivity_timeout` (SSF §8.1.1): `transmitter.Config.Inactivity`
+  advertises the timeout and pauses, disables or deletes streams whose
+  Receiver has gone quiet, with the stream-updated event SSF requires.
+  Enforced by `Run`, or by calling `tx.ExpireInactiveStreams`. New
+  `storage.Stream.LastActivity`.
+
 - Receiver-side CAEP Interoperability Profile preset:
   `interop.ApplyReceiver` checks the Receiver's configuration (RS256
   accepted, a profile event type registered) and installs
