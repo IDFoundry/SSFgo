@@ -91,10 +91,10 @@ jobs:
       - name: fuzz targets are all scheduled
         run: |
           missing=0
-          for target in $(grep -rhoE '^func Fuzz[A-Za-z0-9_]+' --include='*_test.go' . | sed 's/^func //'); do
+          while read -r target; do
             if ! grep -q "name: $target }" .github/workflows/fuzz.yml; then
               echo "::error::$target is not listed in .github/workflows/fuzz.yml"
               missing=1
             fi
-          done
-          exit $missing
+          done < <(grep -rhoE '^func Fuzz[A-Za-z0-9_]+' --include='*_test.go' . | sed 's/^func //')
+          exit "$missing"
