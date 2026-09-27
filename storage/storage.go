@@ -1,7 +1,9 @@
 // Package storage defines the persistence contracts SSFgo's roles depend
-// on. SSFgo ships an in-memory implementation (storage/memstore) and a
-// contract test suite (storage/storagetest) that any other implementation
-// can run to show it behaves the same way.
+// on. SSFgo ships an in-memory implementation (storage/memstore), a
+// PostgreSQL and SQLite one in the separate module
+// github.com/idfoundry/ssfgo/storage/sqlstore, and a contract test suite
+// (storage/storagetest) that any other implementation can run to show it
+// behaves the same way.
 package storage
 
 import (

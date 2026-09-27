@@ -15,6 +15,11 @@ or suite behaviour that is not obvious from the code.
 - `gofmt -l .`, `go vet ./...`, `go test -race ./...` and
   `golangci-lint run ./...` are clean — CI enforces them, along with
   `govulncheck` and `actionlint`.
+- `storage/sqlstore` is its own module: run the same checks in that
+  directory. Its tests use SQLite, and PostgreSQL too when
+  `SSFGO_TEST_POSTGRES` holds a URL, for example
+  `postgres://postgres:pw@localhost:5432/postgres?sslmode=disable`
+  (`docker run -e POSTGRES_PASSWORD=pw -p 5432:5432 postgres:17-alpine`).
 - Behaviour changes come with tests, including the rejection paths.
 - New parsers of untrusted input come with a fuzz target, listed in
   `.github/workflows/fuzz.yml` (CI checks). A failing input the fuzzer

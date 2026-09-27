@@ -19,6 +19,12 @@ The public API is every exported identifier in these packages:
 Not covered: `internal/...` (not importable), `cmd/...` (conformance
 harnesses), `examples/...` and `conformance/...`.
 
+`github.com/idfoundry/ssfgo/storage/sqlstore` is a separate module with
+its own version tags (`storage/sqlstore/vX.Y.Z`), so the core module stays
+free of dependencies. It follows the same rules from its own v1, and its
+database schema is part of its API: a release that changes the schema says
+how to migrate.
+
 ## Storage interfaces
 
 `storage.StreamStore` and `storage.ReplayStore` are implemented by

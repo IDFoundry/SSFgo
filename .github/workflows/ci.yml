@@ -45,6 +45,51 @@ jobs:
       - name: coverage summary
         run: go tool cover -func=coverage.out | tail -1
 
+  # storage/sqlstore is a separate module (it needs database drivers, the
+  # core has no dependencies), tested against SQLite and PostgreSQL.
+  sqlstore:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ssfgo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: storage/sqlstore
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: storage/sqlstore/go.mod
+          check-latest: true
+          cache-dependency-path: storage/sqlstore/go.sum
+
+      - name: gofmt
+        run: |
+          fmt_out="$(gofmt -l .)"
+          if [ -n "$fmt_out" ]; then
+            echo "The following files are not gofmt-formatted:"
+            echo "$fmt_out"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test (race, SQLite and PostgreSQL)
+        env:
+          SSFGO_TEST_POSTGRES: postgres://postgres:ssfgo@localhost:5432/postgres?sslmode=disable
+        run: go test -race ./...
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -60,6 +105,12 @@ jobs:
         with:
           version: v2.12
 
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12
+          working-directory: storage/sqlstore
+          args: --config ../../.golangci.yml
+
   govulncheck:
     runs-on: ubuntu-latest
     steps:
@@ -69,6 +120,11 @@ jobs:
       # CVE fixed in a newer Go patch release, so scan with the latest Go
       # rather than go.mod's minimum.
       - uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+
+      # storage/sqlstore's test-only drivers are third-party code.
+      - uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+        with:
+          work-dir: storage/sqlstore
 
   # Workflow files are otherwise only checked when GitHub runs them — for
   # the scheduled conformance workflow, after merge.

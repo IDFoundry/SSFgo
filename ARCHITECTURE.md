@@ -27,6 +27,7 @@ github.com/idfoundry/ssfgo     // package ssf: shared value types only
 ├── receiver/                  // Receiver role
 ├── storage/                   // storage contracts
 │   ├── memstore/              // in-memory implementation
+│   ├── sqlstore/              // PostgreSQL and SQLite (a separate module)
 │   └── storagetest/           // exported contract tests for third-party backends
 ├── internal/
 │   ├── jose/                  // minimal JWS: RS256, PS256, ES256, EdDSA; JWK/JWKS
@@ -81,7 +82,10 @@ receiver    ──► ssf, storage, internal/*
   references (RISC §2.7: `credential_type` takes CAEP's values). It never
   aliases or converts events between families: the deprecated RISC
   `sessions-revoked` and CAEP `session-revoked` are distinct types.
-- The module has no third-party dependencies.
+- The module has no third-party dependencies. `storage/sqlstore` is a
+  separate module so that stays true: its package imports only the
+  standard library and the core module, and the database drivers it is
+  tested with are required by its own `go.mod` alone.
 
 ## Wire-format decisions
 
@@ -217,6 +221,13 @@ per-stream queue of signed SETs. `UpdateStream` takes a function applied
 atomically, so read-modify-write operations (PATCH, status changes,
 verification rate limiting) cannot lose updates in a durable backend.
 `storagetest.StreamStore` is the contract every backend must pass.
+`storage/sqlstore` passes it on PostgreSQL and SQLite: on PostgreSQL each
+atomic operation locks the stream's row (`SELECT ... FOR UPDATE`) or, when
+creating a stream under a per-Receiver limit, takes a transaction-scoped
+advisory lock on the Receiver, so Transmitter instances can share one
+database; on SQLite, write transactions begin `IMMEDIATE`. Subject rules
+are matched with `ssf.SubjectsEqual` in Go, not by comparing stored JSON,
+since equal subjects can be encoded differently.
 
 **Decisions the spec leaves open:**
 

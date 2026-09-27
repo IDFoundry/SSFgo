@@ -40,6 +40,10 @@ conformance-suite defect (millisecond `event_timestamp`), documented in
   Receiver has gone quiet, with the stream-updated event SSF requires.
   On the Receiver side, `r.KeepAlive` keeps a stream from reaching its
   timeout until its context is done.
+- `storage/sqlstore`, a separate module: durable `StreamStore` and
+  `ReplayStore` implementations on `database/sql` for PostgreSQL and
+  SQLite, passing the `storagetest` contract on both. The core module
+  still has no dependencies.
   Enforced by `Run`, or by calling `tx.ExpireInactiveStreams`. New
   `storage.Stream.LastActivity`.
 
