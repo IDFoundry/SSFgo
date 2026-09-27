@@ -15,6 +15,9 @@ import (
 // so SETs queued by another process are still picked up promptly.
 const pollRecheck = time.Second
 
+// maxLoggedSetErrs bounds the log lines one poll request can produce.
+const maxLoggedSetErrs = 10
+
 // setError is one entry of a poll request's "setErrs" (RFC 8936 §2.2).
 type setError struct {
 	Err         string `json:"err"`
@@ -66,9 +69,16 @@ func (t *Transmitter) poll(w http.ResponseWriter, r *http.Request, rx Receiver) 
 	}
 
 	done := slices.Clone(req.Ack)
+	logged := 0
 	for jti, e := range req.SetErrs {
-		t.log.WarnContext(r.Context(), "ssf transmitter: receiver rejected a SET", "stream_id", id, "jti", jti, "err", e.Err, "description", e.Description)
+		if logged < maxLoggedSetErrs {
+			t.log.WarnContext(r.Context(), "ssf transmitter: receiver rejected a SET", "stream_id", id, "jti", jti, "err", e.Err, "description", e.Description)
+			logged++
+		}
 		done = append(done, jti)
+	}
+	if n := len(req.SetErrs); n > logged {
+		t.log.WarnContext(r.Context(), "ssf transmitter: receiver rejected further SETs", "stream_id", id, "count", n-logged)
 	}
 	if len(done) > 0 {
 		if err := t.cfg.Store.AckEvents(r.Context(), id, done); err != nil {

@@ -7,6 +7,8 @@ import (
 	"github.com/idfoundry/ssfgo/storage"
 )
 
+var errStatusLocked = &apiError{http.StatusForbidden, "status_locked", "the Transmitter has set this stream's status and it cannot be changed by the Receiver"}
+
 func stateOf(s storage.Stream) ssf.StreamState {
 	return ssf.StreamState{StreamID: s.ID, Status: s.Status, Reason: s.StatusReason}
 }
@@ -57,6 +59,9 @@ func (t *Transmitter) updateStatus(w http.ResponseWriter, r *http.Request, rx Re
 		return
 	}
 	s, err := t.updateOwned(r, id, rx, func(s *storage.Stream) error {
+		if s.StatusSetByTransmitter {
+			return errStatusLocked
+		}
 		s.Status, s.StatusReason = status, reason
 		return nil
 	})

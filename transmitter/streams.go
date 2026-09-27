@@ -71,6 +71,26 @@ func (t *Transmitter) parseReceiverFields(obj map[string]json.RawMessage, rx Rec
 	return f, nil
 }
 
+// Bounds on Receiver-supplied push settings.
+const (
+	maxURLBytes    = 2048
+	maxHeaderBytes = 4096
+)
+
+// validHeaderValue reports whether v can be sent as an HTTP header value
+// (RFC 9110 §5.5): no control characters other than horizontal tab.
+func validHeaderValue(v string) bool {
+	if len(v) > maxHeaderBytes {
+		return false
+	}
+	for i := 0; i < len(v); i++ {
+		if c := v[i]; (c < 0x20 && c != '\t') || c == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
 func (t *Transmitter) validateDelivery(d ssf.Delivery, rx Receiver) error {
 	switch d.Method {
 	case ssf.DeliveryPush, ssf.DeliveryPoll:
@@ -89,6 +109,12 @@ func (t *Transmitter) validateDelivery(d ssf.Delivery, rx Receiver) error {
 		}
 		if u.User != nil {
 			return badRequest("push endpoint_url must not contain credentials; use authorization_header")
+		}
+		if len(d.EndpointURL) > maxURLBytes {
+			return badRequest("push endpoint_url is too long")
+		}
+		if !validHeaderValue(d.AuthorizationHeader) {
+			return badRequest("authorization_header must be a valid HTTP header value of at most %d bytes", maxHeaderBytes)
 		}
 		if t.cfg.AllowPushEndpoint != nil {
 			if err := t.cfg.AllowPushEndpoint(rx, u); err != nil {
@@ -173,9 +199,17 @@ func (t *Transmitter) createStream(w http.ResponseWriter, r *http.Request, rx Re
 		return
 	}
 
-	err = t.cfg.Store.CreateStream(r.Context(), s, storage.CreateOptions{SingleStreamPerReceiver: !t.cfg.MultipleStreamsPerReceiver})
-	if errors.Is(err, storage.ErrReceiverHasStream) {
-		writeError(w, http.StatusConflict, "conflict", "this Transmitter allows one stream per Receiver, and one already exists")
+	limit := 1
+	if t.cfg.MultipleStreamsPerReceiver {
+		limit = t.cfg.Limits.StreamsPerReceiver
+	}
+	err = t.cfg.Store.CreateStream(r.Context(), s, storage.CreateOptions{MaxStreamsPerReceiver: limit})
+	if errors.Is(err, storage.ErrTooManyStreams) {
+		if limit == 1 {
+			writeError(w, http.StatusConflict, "conflict", "this Transmitter allows one stream per Receiver, and one already exists")
+		} else {
+			writeError(w, http.StatusForbidden, "stream_limit", "this Receiver already has the maximum number of streams")
+		}
 		return
 	}
 	if err != nil {

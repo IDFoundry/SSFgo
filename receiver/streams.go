@@ -190,10 +190,13 @@ func (r *Receiver) RequestVerification(ctx context.Context, streamID string) (st
 	_, _ = rand.Read(b)
 	state := hex.EncodeToString(b)
 	r.stateMu.Lock()
-	if r.states[streamID] == nil {
-		r.states[streamID] = map[string]bool{}
+	pending := append(r.states[streamID], state)
+	if len(pending) > maxPendingStates {
+		// A verification that never arrived is forgotten rather than
+		// kept forever.
+		pending = pending[len(pending)-maxPendingStates:]
 	}
-	r.states[streamID][state] = true
+	r.states[streamID] = pending
 	r.stateMu.Unlock()
 
 	err := r.call(ctx, http.MethodPost, r.metadata.VerificationEndpoint,
@@ -205,14 +208,23 @@ func (r *Receiver) RequestVerification(ctx context.Context, streamID string) (st
 	return state, nil
 }
 
+// maxPendingStates bounds the outstanding verification requests
+// remembered per stream.
+const maxPendingStates = 16
+
 // takeState consumes an outstanding verification state.
 func (r *Receiver) takeState(streamID, state string) bool {
 	r.stateMu.Lock()
 	defer r.stateMu.Unlock()
-	if !r.states[streamID][state] {
+	pending := r.states[streamID]
+	i := slices.Index(pending, state)
+	if i < 0 {
 		return false
 	}
-	delete(r.states[streamID], state)
+	r.states[streamID] = slices.Delete(pending, i, i+1)
+	if len(r.states[streamID]) == 0 {
+		delete(r.states, streamID)
+	}
 	return true
 }
 

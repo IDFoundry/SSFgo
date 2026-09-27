@@ -39,8 +39,11 @@ type Config struct {
 	// acknowledged without being handled twice.
 	ReplayStore storage.ReplayStore
 
-	// ReplayWindow is how long a processed SET is remembered. Defaults
-	// to 7 days.
+	// ReplayWindow is how long after its "iat" a SET is accepted, and how
+	// long a processed SET is remembered to reject replays. A SET older
+	// than this is rejected, so a captured SET cannot be replayed once its
+	// record expires; SETs held on a paused stream for longer are lost.
+	// Defaults to 7 days.
 	ReplayWindow time.Duration
 
 	// KeyMaxAge is how long the Transmitter's JWKS is used before it is
@@ -71,7 +74,8 @@ type Config struct {
 	AcceptLegacySubjects bool
 
 	// HTTPClient calls the Transmitter. Defaults to a client with a
-	// 30-second timeout, long enough for a long poll.
+	// 30-second timeout, long enough for a long poll. Whichever client is
+	// used, the Receiver follows only redirects to https URLs.
 	HTTPClient *http.Client
 
 	// Now returns the current time. Defaults to time.Now.
@@ -122,6 +126,7 @@ func (c *Config) validate() error {
 	if c.HTTPClient == nil {
 		c.HTTPClient = &http.Client{Timeout: 30 * time.Second}
 	}
+	c.HTTPClient = httpsOnlyRedirects(c.HTTPClient)
 	if c.Now == nil {
 		c.Now = time.Now
 	}

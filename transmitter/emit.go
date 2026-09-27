@@ -68,6 +68,9 @@ func (t *Transmitter) Emit(ctx context.Context, subject ssf.Subject, event ssf.E
 		if !t.includes(rules, subject) {
 			continue
 		}
+		if t.cfg.PermitEvent != nil && !t.cfg.PermitEvent(ctx, s.ReceiverID, subject, event) {
+			continue
+		}
 		if err := t.enqueue(ctx, s, subject, event, txn, false); err != nil && !errors.Is(err, storage.ErrNotFound) {
 			errs = append(errs, fmt.Errorf("stream %s: %w", s.ID, err))
 		}
@@ -94,6 +97,9 @@ func (t *Transmitter) includes(rules []storage.SubjectRule, subject ssf.Subject)
 // SetStreamStatus changes a stream's status on the Transmitter's own
 // initiative — for example an operator pausing a misbehaving Receiver —
 // and tells the Receiver with a stream-updated event (SSF 1.0 §8.1.5).
+// While a status set this way is paused or disabled, the Receiver cannot
+// change it (its status update gets 403, SSF 1.0 §8.1.2.2); setting the
+// stream enabled again releases it.
 // That event is delivered even though the stream is no longer enabled.
 // Disabling a stream first discards everything queued on it. Setting the current
 // status again does nothing.
@@ -105,6 +111,10 @@ func (t *Transmitter) SetStreamStatus(ctx context.Context, streamID string, stat
 	s, err := t.cfg.Store.UpdateStream(ctx, streamID, func(s *storage.Stream) error {
 		previous = s.Status
 		s.Status, s.StatusReason = status, reason
+		// A pause or disable imposed by the Transmitter holds until the
+		// Transmitter lifts it; re-enabling hands control back to the
+		// Receiver.
+		s.StatusSetByTransmitter = status != ssf.StreamEnabled
 		return nil
 	})
 	if err != nil {
@@ -145,7 +155,15 @@ func (t *Transmitter) enqueue(ctx context.Context, s storage.Stream, subject ssf
 	if err != nil {
 		return fmt.Errorf("sign %s: %w", event.EventType(), err)
 	}
-	err = t.cfg.Store.Enqueue(ctx, s.ID, storage.QueuedEvent{JTI: jti, SET: token, EnqueuedAt: now, Control: control})
+	limit := t.cfg.Limits.QueuedSETsPerStream
+	if control {
+		limit = 0 // a stream-updated notice must get through
+	}
+	err = t.cfg.Store.Enqueue(ctx, s.ID, storage.QueuedEvent{JTI: jti, SET: token, EnqueuedAt: now, Control: control}, limit)
+	if errors.Is(err, storage.ErrQueueFull) {
+		t.log.WarnContext(ctx, "ssf transmitter: dropping SET, the stream's queue is full", "stream_id", s.ID, "event", event.EventType(), "limit", limit)
+		return nil
+	}
 	if err != nil {
 		return err
 	}

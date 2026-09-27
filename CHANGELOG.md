@@ -30,6 +30,33 @@ auth × delivery variants; the Receiver passes every module except
 conformance-suite defect (millisecond `event_timestamp`), documented in
 [conformance/README.md](conformance/README.md).
 
+### Security
+
+A trust-boundary review of the whole repository
+([docs/security-review-2026-09.md](docs/security-review-2026-09.md));
+each finding was reproduced by a failing test before it was fixed.
+
+- New `transmitter.Config.PermitEvent`: the Transmitter decides which
+  Receiver may receive events about which subject (SSF §9.2).
+- The Receiver follows only `https` redirects, so its access token and
+  client credentials can no longer be sent in cleartext after a redirect;
+  `ClientCredentials.TokenURL` must be `https`.
+- The Receiver rejects SETs older than `ReplayWindow`, closing replay of
+  captured SETs once their replay record expired.
+- New `transmitter.Config.Limits` caps streams per Receiver, subject rules
+  per stream and queued SETs per stream.
+- The push client's public-address check covers NAT64, IPv4-compatible,
+  6to4 and Teredo addresses.
+- A status the Transmitter sets with `SetStreamStatus` can no longer be
+  overridden by the Receiver.
+- A handler panic no longer loses its SET; push settings are validated;
+  log output and pending verification state are bounded.
+- Storage contract: `CreateOptions.MaxStreamsPerReceiver` replaces
+  `SingleStreamPerReceiver` (`ErrTooManyStreams` replaces
+  `ErrReceiverHasStream`); `SetSubjectRule` and `Enqueue` take a limit
+  and return `ErrTooManySubjectRules` / `ErrQueueFull`;
+  `storage.Stream.StatusSetByTransmitter` is new.
+
 ### Fixed since v0.5
 
 - The Receiver now enforces SSF 1.0 §3.6: a SET whose complex subject

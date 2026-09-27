@@ -28,7 +28,8 @@ func StreamStore(t *testing.T, newStore func(t *testing.T) storage.StreamStore) 
 	}{
 		{"CreateAndGet", testCreateAndGet},
 		{"CreateDuplicateID", testCreateDuplicateID},
-		{"SingleStreamPerReceiver", testSingleStreamPerReceiver},
+		{"MaxStreamsPerReceiver", testSingleStreamPerReceiver},
+		{"Limits", testLimits},
 		{"NotFound", testNotFound},
 		{"StreamsForReceiver", testStreamsForReceiver},
 		{"AllStreams", testAllStreams},
@@ -89,27 +90,61 @@ func testCreateDuplicateID(t *testing.T, st storage.StreamStore) {
 }
 
 func testSingleStreamPerReceiver(t *testing.T, st storage.StreamStore) {
-	single := storage.CreateOptions{SingleStreamPerReceiver: true}
-	if err := st.CreateStream(ctx, sampleStream("s1", "r1"), single); err != nil {
-		t.Fatal(err)
+	two := storage.CreateOptions{MaxStreamsPerReceiver: 2}
+	for _, id := range []string{"s1", "s2"} {
+		if err := st.CreateStream(ctx, sampleStream(id, "r1"), two); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := st.CreateStream(ctx, sampleStream("s2", "r1"), single); !errors.Is(err, storage.ErrReceiverHasStream) {
-		t.Errorf("second stream for r1 = %v, want ErrReceiverHasStream", err)
+	if err := st.CreateStream(ctx, sampleStream("s3", "r1"), two); !errors.Is(err, storage.ErrTooManyStreams) {
+		t.Errorf("third stream for r1 = %v, want ErrTooManyStreams", err)
 	}
-	if err := st.CreateStream(ctx, sampleStream("s3", "r2"), single); err != nil {
+	if err := st.CreateStream(ctx, sampleStream("s4", "r2"), two); err != nil {
 		t.Errorf("first stream for r2: %v", err)
 	}
-	if err := st.CreateStream(ctx, sampleStream("s4", "r1"), storage.CreateOptions{}); err != nil {
-		t.Errorf("without the option a receiver may own several streams: %v", err)
+	if err := st.CreateStream(ctx, sampleStream("s5", "r1"), storage.CreateOptions{}); err != nil {
+		t.Errorf("without a limit a receiver may own any number of streams: %v", err)
 	}
-	if err := st.DeleteStream(ctx, "s1"); err != nil {
+	for _, id := range []string{"s1", "s5"} {
+		if err := st.DeleteStream(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.CreateStream(ctx, sampleStream("s6", "r1"), two); err != nil {
+		t.Errorf("after deleting below the limit: %v", err)
+	}
+}
+
+func testLimits(t *testing.T, st storage.StreamStore) {
+	mustCreate(t, st, sampleStream("s1", "r1"))
+	for i := range 2 {
+		rule := storage.SubjectRule{Subject: ssf.OpaqueSubject{ID: fmt.Sprint(i)}, Included: true}
+		if err := st.SetSubjectRule(ctx, "s1", rule, 2); err != nil {
+			t.Fatal(err)
+		}
+	}
+	extra := storage.SubjectRule{Subject: ssf.OpaqueSubject{ID: "extra"}, Included: true}
+	if err := st.SetSubjectRule(ctx, "s1", extra, 2); !errors.Is(err, storage.ErrTooManySubjectRules) {
+		t.Errorf("rule beyond the limit = %v, want ErrTooManySubjectRules", err)
+	}
+	replace := storage.SubjectRule{Subject: ssf.OpaqueSubject{ID: "0"}, Included: false}
+	if err := st.SetSubjectRule(ctx, "s1", replace, 2); err != nil {
+		t.Errorf("replacing a rule at the limit: %v", err)
+	}
+
+	for i := range 2 {
+		if err := st.Enqueue(ctx, "s1", storage.QueuedEvent{JTI: fmt.Sprint(i), SET: "x"}, 2); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.Enqueue(ctx, "s1", storage.QueuedEvent{JTI: "extra", SET: "x"}, 2); !errors.Is(err, storage.ErrQueueFull) {
+		t.Errorf("enqueue beyond the limit = %v, want ErrQueueFull", err)
+	}
+	if err := st.AckEvents(ctx, "s1", []string{"0"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.DeleteStream(ctx, "s4"); err != nil {
-		t.Fatal(err)
-	}
-	if err := st.CreateStream(ctx, sampleStream("s5", "r1"), single); err != nil {
-		t.Errorf("after deleting r1's streams: %v", err)
+	if err := st.Enqueue(ctx, "s1", storage.QueuedEvent{JTI: "after-ack", SET: "x"}, 2); err != nil {
+		t.Errorf("enqueue after an acknowledgement frees space: %v", err)
 	}
 }
 
@@ -118,9 +153,9 @@ func testNotFound(t *testing.T, st storage.StreamStore) {
 	_, calls["Stream"] = st.Stream(ctx, "nope")
 	_, calls["UpdateStream"] = st.UpdateStream(ctx, "nope", func(*storage.Stream) error { return nil })
 	calls["DeleteStream"] = st.DeleteStream(ctx, "nope")
-	calls["SetSubjectRule"] = st.SetSubjectRule(ctx, "nope", storage.SubjectRule{Subject: ssf.OpaqueSubject{ID: "x"}})
+	calls["SetSubjectRule"] = st.SetSubjectRule(ctx, "nope", storage.SubjectRule{Subject: ssf.OpaqueSubject{ID: "x"}}, 0)
 	_, calls["SubjectRules"] = st.SubjectRules(ctx, "nope")
-	calls["Enqueue"] = st.Enqueue(ctx, "nope", storage.QueuedEvent{JTI: "1", SET: "x"})
+	calls["Enqueue"] = st.Enqueue(ctx, "nope", storage.QueuedEvent{JTI: "1", SET: "x"}, 0)
 	_, calls["PendingEvents"] = st.PendingEvents(ctx, "nope", 0, false)
 	calls["AckEvents"] = st.AckEvents(ctx, "nope", []string{"1"})
 	calls["PurgeEvents"] = st.PurgeEvents(ctx, "nope")
@@ -216,10 +251,10 @@ func testReturnedValuesAreCopies(t *testing.T, st storage.StreamStore) {
 
 func testDelete(t *testing.T, st storage.StreamStore) {
 	mustCreate(t, st, sampleStream("s1", "r1"))
-	if err := st.SetSubjectRule(ctx, "s1", storage.SubjectRule{Subject: ssf.OpaqueSubject{ID: "x"}, Included: true}); err != nil {
+	if err := st.SetSubjectRule(ctx, "s1", storage.SubjectRule{Subject: ssf.OpaqueSubject{ID: "x"}, Included: true}, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Enqueue(ctx, "s1", storage.QueuedEvent{JTI: "1", SET: "a.b.c"}); err != nil {
+	if err := st.Enqueue(ctx, "s1", storage.QueuedEvent{JTI: "1", SET: "a.b.c"}, 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.DeleteStream(ctx, "s1"); err != nil {
@@ -249,7 +284,7 @@ func testSubjectRules(t *testing.T, st storage.StreamStore) {
 		{Subject: a, Included: false},
 		{Subject: bReordered, Included: true},
 	} {
-		if err := st.SetSubjectRule(ctx, "s1", r); err != nil {
+		if err := st.SetSubjectRule(ctx, "s1", r, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -277,7 +312,7 @@ func testQueue(t *testing.T, st storage.StreamStore) {
 	}
 	for i := range 3 {
 		e := storage.QueuedEvent{JTI: fmt.Sprint(i), SET: fmt.Sprintf("set-%d", i), EnqueuedAt: time.Unix(int64(i), 0).UTC()}
-		if err := st.Enqueue(ctx, "s1", e); err != nil {
+		if err := st.Enqueue(ctx, "s1", e, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -301,7 +336,7 @@ func testAckAndPurge(t *testing.T, st storage.StreamStore) {
 	mustCreate(t, st, sampleStream("s1", "r1"))
 	for i, control := range []bool{false, true, false, true} {
 		e := storage.QueuedEvent{JTI: fmt.Sprint(i), SET: "set", Control: control}
-		if err := st.Enqueue(ctx, "s1", e); err != nil {
+		if err := st.Enqueue(ctx, "s1", e, 0); err != nil {
 			t.Fatal(err)
 		}
 	}

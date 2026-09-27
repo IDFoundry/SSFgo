@@ -80,9 +80,12 @@ func main() {
 		Store:                      store,
 		Authorize:                  as.authorize,
 		MultipleStreamsPerReceiver: !*singleStream,
-		MinVerificationInterval:    0,
-		HTTPClient:                 pushClient,
-		Logger:                     slog.Default(),
+		// The suite does not always delete the streams its modules
+		// create, so allow many more than the default.
+		Limits:                  transmitter.Limits{StreamsPerReceiver: 1000},
+		MinVerificationInterval: 0,
+		HTTPClient:              pushClient,
+		Logger:                  slog.Default(),
 	}
 	if err := interop.Apply(&cfg); err != nil {
 		log.Fatal(err)

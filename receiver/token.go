@@ -137,7 +137,7 @@ func (c *ClientCredentials) fetch(ctx context.Context) (string, time.Duration, e
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
-	res, err := client.Do(req)
+	res, err := httpsOnlyRedirects(client).Do(req)
 	if err != nil {
 		return "", 0, fmt.Errorf("receiver: token request: %w", err)
 	}
@@ -154,6 +154,10 @@ func (c *ClientCredentials) fetch(ctx context.Context) (string, time.Duration, e
 func (c *ClientCredentials) tokenForm() (url.Values, error) {
 	if c.TokenURL == "" || c.ClientID == "" {
 		return nil, errors.New("receiver: ClientCredentials needs TokenURL and ClientID")
+	}
+	if u, err := url.Parse(c.TokenURL); err != nil || u.Scheme != "https" || u.Host == "" {
+		// The request carries the client's credentials.
+		return nil, fmt.Errorf("receiver: TokenURL %q must be an https URL", c.TokenURL)
 	}
 	if c.AuthMethod != PrivateKeyJWT && c.ClientSecret == "" {
 		return nil, fmt.Errorf("receiver: %s needs a ClientSecret", c.AuthMethod)

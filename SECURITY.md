@@ -50,11 +50,26 @@ What SSFgo enforces on its own, so reviewers know where to look:
 - **Server-side request forgery.** Receivers choose push endpoints. The
   Transmitter's default push client connects only to public unicast
   addresses (checked on the address actually dialled, so DNS rebinding
-  does not help), follows no redirects, and uses no proxy; push URLs may
-  not carry credentials. `Config.AllowPushEndpoint` can restrict further.
-- **Resource limits.** Request and response bodies, SETs and JWKS
-  documents are size-limited; push retries back off exponentially; JWKS
-  refetches are rate-limited to one a minute.
+  does not help, and NAT64/6to4/Teredo addresses cannot smuggle an
+  internal IPv4 address), follows no redirects, and uses no proxy; push
+  URLs may not carry credentials. `Config.AllowPushEndpoint` can restrict
+  further.
+- **What each Receiver may see.** `transmitter.Config.PermitEvent` decides,
+  per stream, whether its Receiver may receive an event about a subject
+  (SSF §9.2). Multi-tenant Transmitters must set it.
+- **Replay window.** A SET is accepted only within `ReplayWindow` of its
+  `iat`, and remembered for exactly that long.
+- **Redirects.** The Receiver follows only `https` redirects, so its
+  access token and client credentials cannot be downgraded to cleartext.
+- **Resource limits.** An authenticated Receiver's streams, subject rules
+  and queued SETs are capped (`transmitter.Config.Limits`); request and
+  response bodies, SETs and JWKS documents are size-limited; push retries
+  back off exponentially; JWKS refetches are rate-limited to one a minute.
+- **Operator control.** A stream status the Transmitter sets with
+  `SetStreamStatus` cannot be undone by the Receiver.
+
+The most recent review, with the trust boundaries and every finding, is
+[docs/security-review-2026-09.md](docs/security-review-2026-09.md).
 
 What stays the application's responsibility: authenticating Receivers
 (`transmitter.AuthorizeFunc`), protecting signing keys (any

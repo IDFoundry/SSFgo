@@ -31,7 +31,7 @@ type Receiver struct {
 	handlers   map[ssf.EventType]HandlerFunc
 
 	stateMu sync.Mutex
-	states  map[string]map[string]bool // stream ID -> outstanding verification states
+	states  map[string][]string // stream ID -> outstanding verification states, oldest first
 
 	pollMu sync.Mutex
 	acks   map[string]*pendingAcks // stream ID -> acknowledgements for the next poll
@@ -52,7 +52,7 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 	r := &Receiver{
 		cfg:      cfg,
 		handlers: map[ssf.EventType]HandlerFunc{},
-		states:   map[string]map[string]bool{},
+		states:   map[string][]string{},
 		acks:     map[string]*pendingAcks{},
 	}
 	wellKnown, err := ssf.WellKnownURL(cfg.Issuer)
