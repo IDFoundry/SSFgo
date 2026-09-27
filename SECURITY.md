@@ -74,4 +74,8 @@ The most recent review, with the trust boundaries and every finding, is
 What stays the application's responsibility: authenticating Receivers
 (`transmitter.AuthorizeFunc`), protecting signing keys (any
 `crypto.Signer`, including KMS- or HSM-backed ones), TLS termination and
-certificates, rate-limiting the management API, and durable storage.
+certificates, rate-limiting the management API, and durable storage
+(`storage/sqlstore` is a reference implementation). Whatever the backend,
+its database holds each push stream's `authorization_header` — a
+credential for the Receiver's push endpoint — and signed SETs awaiting
+delivery, so protect it as you would other credentials.

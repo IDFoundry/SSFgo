@@ -26,7 +26,10 @@ capabilities with a focus on standards compliance and interoperability.
 | [RFC 9493][rfc9493] Subject Identifiers | done |
 | [RFC 8935][rfc8935] Push delivery / [RFC 8936][rfc8936] Poll delivery | both sides |
 
-The module has no third-party dependencies.
+The module has no third-party dependencies. Durable storage for
+PostgreSQL and SQLite is a separate module,
+[`storage/sqlstore`](storage/sqlstore), which imports no database driver
+itself.
 
 ## Usage
 
@@ -72,6 +75,17 @@ http.Handle("/ssf/events", rx.PushHandler(receiver.PushOptions{AuthorizationHead
 stream, err := rx.CreateStream(ctx, receiver.StreamRequest{Delivery: &ssf.Delivery{
 	Method: ssf.DeliveryPush, EndpointURL: "https://rp.example.com/ssf/events", AuthorizationHeader: pushSecret,
 }})
+```
+
+`memstore` keeps everything in memory. To survive restarts, or to run
+several Transmitter instances on one database, use `storage/sqlstore`:
+
+```go
+// go get github.com/idfoundry/ssfgo/storage/sqlstore
+db, err := sql.Open("pgx", dsn) // any database/sql driver for PostgreSQL or SQLite
+err = sqlstore.CreateSchema(ctx, db, sqlstore.Postgres)
+store, err := sqlstore.NewStreamStore(db, sqlstore.Postgres)   // transmitter.Config.Store
+replay, err := sqlstore.NewReplayStore(db, sqlstore.Postgres)  // receiver.Config.ReplayStore
 ```
 
 [`examples/session-revocation`](examples/session-revocation) runs both

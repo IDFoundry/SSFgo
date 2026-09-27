@@ -89,5 +89,3 @@ programme. Remaining: tag and publish `v1.0.0`.
 ## Not planned for v1.0
 
 - SCIM events (RFC 9967).
-- A durable storage implementation — `storagetest` lets one be written
-  and verified outside this module.
