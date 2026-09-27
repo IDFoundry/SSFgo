@@ -14,9 +14,11 @@ import (
 type Dialect int
 
 const (
-	// Postgres is PostgreSQL 12 or later.
+	// Postgres is PostgreSQL 10 or later (for identity columns); CI tests
+	// PostgreSQL 17.
 	Postgres Dialect = iota + 1
-	// SQLite is SQLite 3.35 or later.
+	// SQLite is SQLite 3.24 or later (for upserts); the tests use
+	// modernc.org/sqlite.
 	SQLite
 )
 

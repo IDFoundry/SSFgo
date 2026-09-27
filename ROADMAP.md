@@ -23,8 +23,8 @@ RISC §2; fuzz targets on compact JWS, JWKS, subject and SET parsing.
 - JWKS endpoint.
 - Stream create/read/update/replace/delete, status, add/remove subject,
   verification endpoint with `min_verification_interval`.
-- `Authorizer` hook; `storage` contracts, `memstore`, `storagetest`.
-- Conformance harness: client-credentials token issuer, public deployment.
+- `AuthorizeFunc` hook; `storage` contracts, `memstore`, `storagetest`.
+- Conformance harness with a client-credentials token issuer.
 
 **Exit:** OIDF metadata test and all stream-control negative tests pass.
 Met: every stream-management module passes in all four auth × delivery
@@ -85,6 +85,13 @@ API freeze, after a review of every exported identifier (see
 [COMPATIBILITY.md](COMPATIBILITY.md). The full matrix runs daily in CI.
 Certification will be submitted once OIDF opens the SSF certification
 programme. Remaining: tag and publish `v1.0.0`.
+
+Added since the freeze: a security review
+([docs/security-review-2026-09.md](docs/security-review-2026-09.md)),
+whose fixes changed the storage contract before any tag (see
+[CHANGELOG.md](CHANGELOG.md)), the Receiver-side `caep/interop` preset, continuous fuzzing,
+Transmitter-initiated verification, `inactivity_timeout` with the
+Receiver's `KeepAlive`, and `storage/sqlstore` for PostgreSQL and SQLite.
 
 ## Not planned for v1.0
 
