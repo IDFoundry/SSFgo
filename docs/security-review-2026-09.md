@@ -44,7 +44,10 @@ credentials or network connections.
   never the token; `none` and HMAC are rejected; RSA keys are 2048–8192
   bits with a sane exponent; EC points are checked on-curve; `crit` is
   honoured; `typ`, `iss`, `aud`, `iat`, and the absence of `sub`/`exp`
-  are enforced; exactly one event; SETs are at most 64 KiB. Fuzzed.
+  are enforced; exactly one event; SETs are at most 64 KiB.
+- **Fuzzing.** Ten targets — including the Receiver's push endpoint and
+  poll responses and the Transmitter's management API — run daily with a
+  corpus that persists between runs.
 - **Parsing.** Every body and response read is size-limited; subject
   nesting is bounded; JWKS entries with private key material are refused.
 - **Stream isolation.** Every operation, including poll acknowledgements,

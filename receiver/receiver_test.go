@@ -51,7 +51,7 @@ var quiet = slog.New(slog.DiscardHandler)
 
 // env is an SSFgo Transmitter and a Receiver configured against it.
 type env struct {
-	t     *testing.T
+	t     testing.TB
 	txSrv *httptest.Server
 	tx    *transmitter.Transmitter
 	store *memstore.StreamStore
@@ -59,7 +59,7 @@ type env struct {
 	cfg   receiver.Config
 }
 
-func newEnv(t *testing.T, mutate ...func(*receiver.Config)) *env {
+func newEnv(t testing.TB, mutate ...func(*receiver.Config)) *env {
 	t.Helper()
 	e := &env{t: t, store: memstore.NewStreamStore()}
 	e.txSrv = httptest.NewUnstartedServer(nil)
@@ -382,7 +382,7 @@ func (e *env) setTransmitterClient(c *http.Client) {
 }
 
 // sign builds a SET the way the test Transmitter would, with overrides.
-func sign(t *testing.T, e *env, mutate func(*ssf.SET)) string {
+func sign(t testing.TB, e *env, mutate func(*ssf.SET)) string {
 	t.Helper()
 	set := ssf.SET{
 		Issuer:   e.cfg.Issuer,

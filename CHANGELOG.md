@@ -41,6 +41,14 @@ conformance-suite defect (millisecond `event_timestamp`), documented in
   `interop.CheckReceiverConfig` and `interop.CheckTransmitterMetadata` are
   usable on their own.
 
+### Testing
+
+- Continuous fuzzing: `.github/workflows/fuzz.yml` runs all ten fuzz
+  targets daily for ten minutes each, carrying each target's corpus
+  between runs. New targets cover the Receiver's push endpoint and poll
+  responses, the Transmitter's management API, JWK parsing and the wire
+  types' JSON decoders. CI fails if a fuzz target is not scheduled.
+
 ### Security
 
 A trust-boundary review of the whole repository
@@ -69,6 +77,11 @@ each finding was reproduced by a failing test before it was fixed.
   `storage.Stream.StatusSetByTransmitter` is new.
 
 ### Fixed since v0.5
+
+- Found by the new fuzz targets: an empty `ssf.Audience` encoded as
+  `null`, which `Audience` itself refused to decode (it now encodes `[]`);
+  `ssf.NumericDate` accepted values below one second that encoded as `0`
+  and then failed to decode (it now requires at least one second).
 
 - The Receiver now enforces SSF 1.0 §3.6: a SET whose complex subject
   carries a member the Transmitter declared critical

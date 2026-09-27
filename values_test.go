@@ -25,7 +25,9 @@ func TestNumericDate(t *testing.T) {
 		t.Errorf("Marshal = %s, %v; want whole seconds", b, err)
 	}
 
-	for _, bad := range []string{`"1615304991"`, `null`, `true`, `-1`, `0`, `1e20`, `{}`} {
+	// 0.01 was found by FuzzWireTypes: it decoded, then encoded as 0,
+	// which does not decode.
+	for _, bad := range []string{`"1615304991"`, `null`, `true`, `-1`, `0`, `0.01`, `1e20`, `{}`} {
 		if err := json.Unmarshal([]byte(bad), &d); err == nil {
 			t.Errorf("Unmarshal(%s) succeeded", bad)
 		}

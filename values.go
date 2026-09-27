@@ -45,7 +45,9 @@ func (d *NumericDate) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("ssf: NumericDate must be a JSON number, not a string")
 	}
 	f, err := n.Float64()
-	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) || f <= 0 || f > maxNumericDate {
+	// Below one second the value would encode as 0 — "absent" — and could
+	// not be decoded again.
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) || f < 1 || f > maxNumericDate {
 		return fmt.Errorf("ssf: NumericDate %s is out of range", n)
 	}
 	sec, frac := math.Modf(f)
