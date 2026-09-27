@@ -56,6 +56,12 @@ type Config struct {
 	// Defaults to one minute.
 	MaxClockSkew time.Duration
 
+	// CheckMetadata, if set, vets the Transmitter Configuration Metadata
+	// New fetches; New fails with its error. It lets a profile refuse a
+	// Transmitter that does not meet it — for example
+	// caep/interop.CheckTransmitterMetadata. Optional.
+	CheckMetadata func(ssf.TransmitterMetadata) error
+
 	// SubjectMembers lists the complex-subject members, beyond those
 	// SSF 1.0 §3.3 defines, that the application processes. A Transmitter
 	// may declare members critical (critical_subject_members); SSF 1.0

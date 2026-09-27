@@ -12,6 +12,7 @@ import (
 
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/caep"
+	"github.com/idfoundry/ssfgo/caep/interop"
 	"github.com/idfoundry/ssfgo/receiver"
 	"github.com/idfoundry/ssfgo/risc"
 	"github.com/idfoundry/ssfgo/storage/memstore"
@@ -47,7 +48,7 @@ func (s *session) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	rx, err := receiver.New(ctx, receiver.Config{
+	cfg := receiver.Config{
 		Issuer:      issuer,
 		Audience:    s.o.audience,
 		Registry:    registry,
@@ -55,7 +56,15 @@ func (s *session) run(ctx context.Context) error {
 		TokenSource: tokens,
 		ReplayStore: memstore.NewReplayStore(),
 		HTTPClient:  s.client,
-	})
+	}
+	if strings.Contains(s.o.plan, "caep") {
+		// Hold the suite's emulated Transmitter to the CAEP Interop
+		// Profile, as a CAEP Interop Receiver would.
+		if err := interop.ApplyReceiver(&cfg); err != nil {
+			return err
+		}
+	}
+	rx, err := receiver.New(ctx, cfg)
 	if err != nil {
 		return err
 	}

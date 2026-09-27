@@ -21,7 +21,7 @@ capabilities with a focus on standards compliance and interoperability.
 | [OpenID Shared Signals Framework 1.0][ssf] | Transmitter and Receiver |
 | [OpenID CAEP 1.0][caep] | all 8 event types |
 | [OpenID RISC 1.0][risc] | all 14 event types |
-| [CAEP Interoperability Profile 1.0][caep-interop] | Transmitter passes the OIDF plan; `caep/interop` enforces the profile |
+| [CAEP Interoperability Profile 1.0][caep-interop] | both roles pass the OIDF plans; `caep/interop` enforces the profile for each |
 | [RFC 8417][rfc8417] Security Event Token | done |
 | [RFC 9493][rfc9493] Subject Identifiers | done |
 | [RFC 8935][rfc8935] Push delivery / [RFC 8936][rfc8936] Poll delivery | both sides |
@@ -63,6 +63,8 @@ rx, err := receiver.New(ctx, receiver.Config{
 	TokenSource: &receiver.ClientCredentials{TokenURL: tokenURL, ClientID: id, ClientSecret: secret, AuthMethod: receiver.ClientSecretBasic},
 	ReplayStore: memstore.NewReplayStore(),
 })
+// Optional: interop.ApplyReceiver(&cfg) before receiver.New holds the
+// Transmitter to the CAEP Interoperability Profile.
 receiver.On(rx, func(ctx context.Context, set ssf.SET, e caep.SessionRevoked) error {
 	return sessions.RevokeAll(ctx, set.Subject)
 })

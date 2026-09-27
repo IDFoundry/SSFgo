@@ -1,16 +1,22 @@
 // Package interop applies the OpenID CAEP Interoperability Profile 1.0 to
-// an SSFgo Transmitter.
+// an SSFgo Transmitter or Receiver.
 //
 // Most of the profile is met by SSFgo unconditionally: Transmitter
 // metadata always carries spec_version, jwks_uri, the management
 // endpoints and the OAuth 2.0 authorization scheme (§2.3); SETs always
 // carry exactly one event (§2.8.1); access tokens are only accepted in the
-// Authorization header (§2.7.2). This package covers the rest, which
-// depends on how a deployment is configured and what it emits:
+// Authorization header (§2.7.2); a Receiver takes its keys from jwks_uri
+// (§2.4.2) and authenticates with OAuth 2.0 (§2.4.3). This package covers
+// the rest, which depends on how a deployment is configured, what it
+// emits, and which Transmitter a Receiver talks to:
 //
 //	cfg := transmitter.Config{...}
-//	if err := interop.Apply(&cfg); err != nil { ... }
+//	if err := interop.ApplyTransmitter(&cfg); err != nil { ... }
 //	tx, err := transmitter.New(cfg)
+//
+//	rcfg := receiver.Config{...}
+//	if err := interop.ApplyReceiver(&rcfg); err != nil { ... }
+//	rx, err := receiver.New(ctx, rcfg) // fails if the Transmitter does not meet the profile
 package interop
 
 import (
@@ -91,9 +97,10 @@ func ValidateEvent(subject ssf.Subject, event ssf.Event) error {
 	return nil
 }
 
-// Apply checks cfg against the profile and installs ValidateEvent as its
-// EventValidator, running after any validator cfg already has.
-func Apply(cfg *transmitter.Config) error {
+// ApplyTransmitter checks cfg against the profile and installs
+// ValidateEvent as its EventValidator, running after any validator cfg
+// already has.
+func ApplyTransmitter(cfg *transmitter.Config) error {
 	if err := CheckTransmitterConfig(*cfg); err != nil {
 		return err
 	}

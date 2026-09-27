@@ -21,7 +21,7 @@ replay protection.
 ```text
 github.com/idfoundry/ssfgo     // package ssf: shared value types only
 ├── caep/                      // CAEP 1.0 event types (8)
-│   └── interop/               // CAEP Interoperability Profile config check + event validator
+│   └── interop/               // CAEP Interoperability Profile presets for both roles
 ├── risc/                      // RISC 1.0 event types (14, sessions-revoked deprecated)
 ├── transmitter/               // Transmitter role
 ├── receiver/                  // Receiver role

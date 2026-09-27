@@ -106,7 +106,7 @@ func run(ctx context.Context, w io.Writer) error {
 		},
 		Logger: quiet,
 	}
-	if err := interop.Apply(&txCfg); err != nil {
+	if err := interop.ApplyTransmitter(&txCfg); err != nil {
 		return err
 	}
 	// The default push client refuses private addresses; this demo pushes

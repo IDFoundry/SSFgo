@@ -72,6 +72,11 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 	if err := checkEndpoints(r.metadata); err != nil {
 		return nil, err
 	}
+	if cfg.CheckMetadata != nil {
+		if err := cfg.CheckMetadata(r.Metadata()); err != nil {
+			return nil, fmt.Errorf("receiver: transmitter metadata: %w", err)
+		}
+	}
 	if err := r.refreshKeys(ctx); err != nil {
 		return nil, err
 	}
