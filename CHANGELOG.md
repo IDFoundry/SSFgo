@@ -38,6 +38,8 @@ conformance-suite defect (millisecond `event_timestamp`), documented in
 - `inactivity_timeout` (SSF §8.1.1): `transmitter.Config.Inactivity`
   advertises the timeout and pauses, disables or deletes streams whose
   Receiver has gone quiet, with the stream-updated event SSF requires.
+  On the Receiver side, `r.KeepAlive` keeps a stream from reaching its
+  timeout until its context is done.
   Enforced by `Run`, or by calling `tx.ExpireInactiveStreams`. New
   `storage.Stream.LastActivity`.
 

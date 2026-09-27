@@ -61,13 +61,20 @@ type env struct {
 
 func newEnv(t testing.TB, mutate ...func(*receiver.Config)) *env {
 	t.Helper()
+	return newEnvTx(t, nil, mutate...)
+}
+
+// newEnvTx is newEnv with the Transmitter's configuration adjusted by
+// txMutate, if it is not nil.
+func newEnvTx(t testing.TB, txMutate func(*transmitter.Config), mutate ...func(*receiver.Config)) *env {
+	t.Helper()
 	e := &env{t: t, store: memstore.NewStreamStore()}
 	e.txSrv = httptest.NewUnstartedServer(nil)
 	e.txSrv.StartTLS()
 	t.Cleanup(e.txSrv.Close)
 	issuer := e.txSrv.URL + "/tx"
 
-	tx, err := transmitter.New(transmitter.Config{
+	txCfg := transmitter.Config{
 		Issuer:          issuer,
 		SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
 		EventsSupported: []ssf.EventType{caep.SessionRevokedEventType, caep.CredentialChangeEventType, risc.AccountDisabledEventType},
@@ -83,7 +90,11 @@ func newEnv(t testing.TB, mutate ...func(*receiver.Config)) *env {
 		HTTPClient:      e.txSrv.Client(),
 		LongPollTimeout: 2 * time.Second,
 		Logger:          quiet,
-	})
+	}
+	if txMutate != nil {
+		txMutate(&txCfg)
+	}
+	tx, err := transmitter.New(txCfg)
 	if err != nil {
 		t.Fatal(err)
 	}
