@@ -30,6 +30,17 @@ auth × delivery variants; the Receiver passes every module except
 conformance-suite defect (millisecond `event_timestamp`), documented in
 [conformance/README.md](conformance/README.md).
 
+### Added since v0.5
+
+- Receiver-side CAEP Interoperability Profile preset:
+  `interop.ApplyReceiver` checks the Receiver's configuration (RS256
+  accepted, a profile event type registered) and installs
+  `interop.CheckTransmitterMetadata` through the new
+  `receiver.Config.CheckMetadata`, so `receiver.New` refuses a Transmitter
+  whose metadata does not meet the profile (§2.3.1–§2.3.7).
+  `interop.CheckReceiverConfig` and `interop.CheckTransmitterMetadata` are
+  usable on their own.
+
 ### Security
 
 A trust-boundary review of the whole repository
@@ -76,6 +87,8 @@ API review before the freeze — all breaking, none behavioural:
   `interop.SubjectFormats()`, returning copies.
 - `memstore.Store` / `memstore.New` are renamed `memstore.StreamStore` /
   `memstore.NewStreamStore`, matching `memstore.ReplayStore`.
+- `interop.Apply` is renamed `interop.ApplyTransmitter`, alongside the new
+  `interop.ApplyReceiver`.
 - `caep.AssuranceLevelChange.Namespace` has the new type
   `caep.AssuranceNamespace`.
 - `receiver.RejectedSET` and the `receiver.ErrCode*` constants are no

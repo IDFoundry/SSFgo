@@ -92,11 +92,11 @@ func TestProfileListsAreCopies(t *testing.T) {
 	}
 }
 
-func TestApply(t *testing.T) {
+func TestApplyTransmitter(t *testing.T) {
 	c := config(t)
 	called := false
 	c.EventValidator = func(ssf.Subject, ssf.Event) error { called = true; return nil }
-	if err := interop.Apply(&c); err != nil {
+	if err := interop.ApplyTransmitter(&c); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.EventValidator(ssf.OpaqueSubject{ID: "x"}, caep.SessionRevoked{}); !errors.Is(err, interop.ErrNotInterop) || !called {
@@ -104,7 +104,7 @@ func TestApply(t *testing.T) {
 	}
 	bad := config(t)
 	bad.DeliveryMethods = []ssf.DeliveryMethod{ssf.DeliveryPush}
-	if err := interop.Apply(&bad); err == nil || bad.EventValidator != nil {
+	if err := interop.ApplyTransmitter(&bad); err == nil || bad.EventValidator != nil {
 		t.Error("Apply accepted a non-conforming config or modified it")
 	}
 }

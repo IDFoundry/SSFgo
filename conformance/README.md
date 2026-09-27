@@ -93,6 +93,9 @@ go run ./cmd/conformance-receiver -plan openid-ssf-receiver-test-plan \
   -modules openid-ssf-receiver-stream-supported-events
 ```
 
+For the CAEP Interop plan the driver applies `interop.ApplyReceiver`, so
+the suite's emulated Transmitter is itself held to the profile; it passes.
+
 Dynamic auth uses `client_secret_basic` by default; `-client-auth` also
 takes `client_secret_post`, `client_secret_jwt` and `private_key_jwt`
 (the driver generates the key and registers its public JWKS in the plan

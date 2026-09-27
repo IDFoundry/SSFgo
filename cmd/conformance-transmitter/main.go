@@ -87,7 +87,7 @@ func main() {
 		HTTPClient:              pushClient,
 		Logger:                  slog.Default(),
 	}
-	if err := interop.Apply(&cfg); err != nil {
+	if err := interop.ApplyTransmitter(&cfg); err != nil {
 		log.Fatal(err)
 	}
 	tx, err := transmitter.New(cfg)
