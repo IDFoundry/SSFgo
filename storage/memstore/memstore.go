@@ -47,11 +47,15 @@ func (m *StreamStore) CreateStream(_ context.Context, s storage.Stream, opts sto
 	if _, ok := m.streams[s.ID]; ok {
 		return storage.ErrExists
 	}
-	if opts.SingleStreamPerReceiver {
+	if opts.MaxStreamsPerReceiver > 0 {
+		owned := 0
 		for _, e := range m.streams {
 			if e.stream.ReceiverID == s.ReceiverID {
-				return storage.ErrReceiverHasStream
+				owned++
 			}
+		}
+		if owned >= opts.MaxStreamsPerReceiver {
+			return storage.ErrTooManyStreams
 		}
 	}
 	m.sequence++
@@ -133,7 +137,7 @@ func (m *StreamStore) DeleteStream(_ context.Context, id string) error {
 }
 
 // SetSubjectRule implements storage.StreamStore.
-func (m *StreamStore) SetSubjectRule(_ context.Context, streamID string, rule storage.SubjectRule) error {
+func (m *StreamStore) SetSubjectRule(_ context.Context, streamID string, rule storage.SubjectRule, maxRules int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.streams[streamID]
@@ -145,6 +149,9 @@ func (m *StreamStore) SetSubjectRule(_ context.Context, streamID string, rule st
 			e.rules[i].Included = rule.Included
 			return nil
 		}
+	}
+	if maxRules > 0 && len(e.rules) >= maxRules {
+		return storage.ErrTooManySubjectRules
 	}
 	e.rules = append(e.rules, rule)
 	return nil
@@ -162,12 +169,15 @@ func (m *StreamStore) SubjectRules(_ context.Context, streamID string) ([]storag
 }
 
 // Enqueue implements storage.StreamStore.
-func (m *StreamStore) Enqueue(_ context.Context, streamID string, q storage.QueuedEvent) error {
+func (m *StreamStore) Enqueue(_ context.Context, streamID string, q storage.QueuedEvent, maxQueued int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.streams[streamID]
 	if !ok {
 		return storage.ErrNotFound
+	}
+	if maxQueued > 0 && len(e.queue) >= maxQueued {
+		return storage.ErrQueueFull
 	}
 	e.queue = append(e.queue, q)
 	return nil
@@ -201,7 +211,11 @@ func (m *StreamStore) AckEvents(_ context.Context, streamID string, jtis []strin
 	if !ok {
 		return storage.ErrNotFound
 	}
-	e.queue = slices.DeleteFunc(e.queue, func(q storage.QueuedEvent) bool { return slices.Contains(jtis, q.JTI) })
+	acked := make(map[string]bool, len(jtis))
+	for _, j := range jtis {
+		acked[j] = true
+	}
+	e.queue = slices.DeleteFunc(e.queue, func(q storage.QueuedEvent) bool { return acked[q.JTI] })
 	return nil
 }
 

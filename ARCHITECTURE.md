@@ -226,7 +226,9 @@ verification rate limiting) cannot lose updates in a durable backend.
 | Receiver asks for poll with its own `endpoint_url` | Ignored: the Transmitter supplies poll URLs (§6.1.2) |
 | `authorization_header` in read responses | Returned to the owning Receiver, so read-modify-replace (§8.1.1.4) keeps it |
 | Transmitter-supplied property in PATCH/PUT | Must equal the current value, else 400 (§8.1.1.3) |
-| Receiver-requested status change | Applied without a stream-updated event (§8.1.2 requires one only for Transmitter-initiated changes) |
+| Receiver-requested status change | Applied without a stream-updated event (§8.1.2 requires one only for Transmitter-initiated changes); refused with 403 while a status the Transmitter set with `SetStreamStatus` is in force |
+| Which Receiver may see which events | `Config.PermitEvent`, checked per stream at `Emit` (§9.2) |
+| How much one Receiver may store | `Config.Limits`: streams, subject rules and queued SETs |
 | Verification on a disabled stream | 204, but nothing is queued (§8.1.2.1: disabled holds no events) |
 | `min_verification_interval` exceeded | 429 with `Retry-After` |
 

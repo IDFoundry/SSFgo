@@ -1,6 +1,7 @@
 package transmitter
 
 import (
+	"context"
 	"crypto"
 	"errors"
 	"fmt"
@@ -94,6 +95,19 @@ type Config struct {
 	// PushRetry controls how failed push deliveries are retried.
 	PushRetry PushRetryPolicy
 
+	// Limits bound what one Receiver can make the Transmitter store.
+	Limits Limits
+
+	// PermitEvent, if set, decides whether the Receiver that owns a stream
+	// may receive a given event about a given subject. Emit consults it
+	// for every stream the event would otherwise be queued on. SSF 1.0
+	// §9.2 asks Transmitters to check they are permitted to share an
+	// event before transmitting it: a multi-tenant Transmitter must set
+	// this, or any Receiver can obtain events about any subject — with
+	// default_subjects "ALL" simply by creating a stream, and with "NONE"
+	// by adding the subject. Optional; nil permits every event.
+	PermitEvent func(ctx context.Context, receiverID string, subject ssf.Subject, event ssf.Event) bool
+
 	// LongPollTimeout is how long a poll request that asks to wait
 	// (returnImmediately false, RFC 8936 §2.5) waits for a SET before
 	// returning none. Defaults to 20 seconds.
@@ -103,6 +117,21 @@ type Config struct {
 	// errors) that are reported to the Receiver only as 500. Defaults to
 	// slog.Default().
 	Logger *slog.Logger
+}
+
+// Limits bound the state an authenticated Receiver can create. Zero
+// fields take the defaults shown; there is deliberately no "unlimited".
+type Limits struct {
+	// StreamsPerReceiver caps how many streams one Receiver may own when
+	// MultipleStreamsPerReceiver is set. Defaults to 10.
+	StreamsPerReceiver int
+	// SubjectRulesPerStream caps Add and Remove Subject rules per stream.
+	// Defaults to 10,000.
+	SubjectRulesPerStream int
+	// QueuedSETsPerStream caps the SETs waiting on one stream. Once a
+	// Receiver stops collecting, further SETs for that stream are dropped
+	// and logged rather than held without bound. Defaults to 10,000.
+	QueuedSETsPerStream int
 }
 
 // PushRetryPolicy controls retries of push deliveries that fail
@@ -170,6 +199,9 @@ func (c *Config) validate() error {
 	if c.PushRetry.MinBackoff < 0 || c.PushRetry.MaxBackoff < 0 || c.PushRetry.MaxAttempts < 0 {
 		errs = append(errs, errors.New("PushRetry values must not be negative"))
 	}
+	if c.Limits.StreamsPerReceiver < 0 || c.Limits.SubjectRulesPerStream < 0 || c.Limits.QueuedSETsPerStream < 0 {
+		errs = append(errs, errors.New("Limits values must not be negative"))
+	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("transmitter: invalid config: %w", err)
 	}
@@ -180,7 +212,17 @@ func (c *Config) validate() error {
 		c.PushRetry.MaxBackoff = 5 * time.Minute
 	}
 	c.PushRetry.MaxBackoff = max(c.PushRetry.MaxBackoff, c.PushRetry.MinBackoff)
+	c.Limits.StreamsPerReceiver = defaultInt(c.Limits.StreamsPerReceiver, 10)
+	c.Limits.SubjectRulesPerStream = defaultInt(c.Limits.SubjectRulesPerStream, 10_000)
+	c.Limits.QueuedSETsPerStream = defaultInt(c.Limits.QueuedSETsPerStream, 10_000)
 	return nil
+}
+
+func defaultInt(v, def int) int {
+	if v == 0 {
+		return def
+	}
+	return v
 }
 
 func (c *Config) supportsDelivery(m ssf.DeliveryMethod) bool {

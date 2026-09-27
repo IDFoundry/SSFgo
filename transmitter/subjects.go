@@ -2,6 +2,7 @@ package transmitter
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
@@ -34,8 +35,8 @@ func (t *Transmitter) addSubject(w http.ResponseWriter, r *http.Request, rx Rece
 		return
 	}
 	rule := storage.SubjectRule{Subject: req.Subject, Included: true}
-	if err := t.cfg.Store.SetSubjectRule(r.Context(), req.StreamID, rule); err != nil {
-		t.writeAPIError(w, r, "add subject", t.notFoundOr(err))
+	if err := t.cfg.Store.SetSubjectRule(r.Context(), req.StreamID, rule, t.cfg.Limits.SubjectRulesPerStream); err != nil {
+		t.writeAPIError(w, r, "add subject", t.subjectError(err))
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -54,9 +55,18 @@ func (t *Transmitter) removeSubject(w http.ResponseWriter, r *http.Request, rx R
 		return
 	}
 	rule := storage.SubjectRule{Subject: req.Subject, Included: false}
-	if err := t.cfg.Store.SetSubjectRule(r.Context(), req.StreamID, rule); err != nil {
-		t.writeAPIError(w, r, "remove subject", t.notFoundOr(err))
+	if err := t.cfg.Store.SetSubjectRule(r.Context(), req.StreamID, rule, t.cfg.Limits.SubjectRulesPerStream); err != nil {
+		t.writeAPIError(w, r, "remove subject", t.subjectError(err))
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+var errTooManySubjects = &apiError{http.StatusForbidden, "subject_limit", "this stream has the maximum number of subject rules"}
+
+func (t *Transmitter) subjectError(err error) error {
+	if errors.Is(err, storage.ErrTooManySubjectRules) {
+		return errTooManySubjects
+	}
+	return t.notFoundOr(err)
 }

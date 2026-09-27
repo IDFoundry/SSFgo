@@ -17,10 +17,15 @@ var (
 	ErrNotFound = errors.New("storage: not found")
 	// ErrExists is returned by CreateStream when the stream ID is taken.
 	ErrExists = errors.New("storage: already exists")
-	// ErrReceiverHasStream is returned by CreateStream when
-	// CreateOptions.SingleStreamPerReceiver is set and the receiver
-	// already owns a stream.
-	ErrReceiverHasStream = errors.New("storage: receiver already has a stream")
+	// ErrTooManyStreams is returned by CreateStream when the receiver
+	// already owns CreateOptions.MaxStreamsPerReceiver streams.
+	ErrTooManyStreams = errors.New("storage: receiver has the maximum number of streams")
+	// ErrTooManySubjectRules is returned by SetSubjectRule when a new rule
+	// would exceed the limit.
+	ErrTooManySubjectRules = errors.New("storage: stream has the maximum number of subject rules")
+	// ErrQueueFull is returned by Enqueue when the stream's queue is at
+	// the limit.
+	ErrQueueFull = errors.New("storage: stream queue is full")
 )
 
 // Stream is a Transmitter's record of one event stream. The Transmitter
@@ -39,6 +44,10 @@ type Stream struct {
 
 	Status       ssf.StreamStatus
 	StatusReason string
+	// StatusSetByTransmitter records that the current status was set by
+	// the Transmitter itself (for example an operator disabling an
+	// abusive Receiver), so the Receiver may not change it.
+	StatusSetByTransmitter bool
 
 	// LastVerificationRequest is when the Receiver last asked for a
 	// verification event; zero if never. It enforces
@@ -50,10 +59,10 @@ type Stream struct {
 
 // CreateOptions constrain CreateStream.
 type CreateOptions struct {
-	// SingleStreamPerReceiver makes CreateStream fail with
-	// ErrReceiverHasStream if the receiver already owns a stream. The
-	// check and the insert must be atomic.
-	SingleStreamPerReceiver bool
+	// MaxStreamsPerReceiver, if positive, makes CreateStream fail with
+	// ErrTooManyStreams when the receiver already owns that many streams.
+	// The check and the insert must be atomic.
+	MaxStreamsPerReceiver int
 }
 
 // QueuedEvent is a signed SET waiting for delivery on a stream.
@@ -106,14 +115,18 @@ type StreamStore interface {
 
 	// SetSubjectRule records rule on a stream, replacing any earlier rule
 	// for an equal subject (by ssf.SubjectsEqual) rather than adding a
-	// second one.
-	SetSubjectRule(ctx context.Context, streamID string, rule SubjectRule) error
+	// second one. If maxRules is positive and adding a new rule would
+	// exceed it, it returns ErrTooManySubjectRules; replacing a rule is
+	// always allowed. The check and the write must be atomic.
+	SetSubjectRule(ctx context.Context, streamID string, rule SubjectRule, maxRules int) error
 	// SubjectRules returns a stream's rules, oldest first. A replaced
 	// rule keeps its original position.
 	SubjectRules(ctx context.Context, streamID string) ([]SubjectRule, error)
 
-	// Enqueue appends a SET to a stream's delivery queue.
-	Enqueue(ctx context.Context, streamID string, e QueuedEvent) error
+	// Enqueue appends a SET to a stream's delivery queue. If maxQueued is
+	// positive and the queue already holds that many SETs, it returns
+	// ErrQueueFull. The check and the append must be atomic.
+	Enqueue(ctx context.Context, streamID string, e QueuedEvent, maxQueued int) error
 	// PendingEvents returns up to max queued SETs, oldest first, without
 	// removing them. max <= 0 means no limit. With controlOnly set it
 	// returns only Control events.

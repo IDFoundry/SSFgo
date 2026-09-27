@@ -65,6 +65,12 @@ func NewPushClient(timeout time.Duration) *http.Client {
 // isPublic reports whether ip is a globally routable unicast address.
 func isPublic(ip netip.Addr) bool {
 	ip = ip.Unmap()
+	// NAT64 (RFC 6052) addresses reach the IPv4 address in their last 32
+	// bits through a translator; judge that address instead.
+	if nat64WellKnown.Contains(ip) {
+		b := ip.As16()
+		return isPublic(netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]}))
+	}
 	switch {
 	case !ip.IsValid(), ip.IsUnspecified(), ip.IsLoopback(), ip.IsPrivate(),
 		ip.IsLinkLocalUnicast(), ip.IsLinkLocalMulticast(), ip.IsInterfaceLocalMulticast(),
@@ -92,4 +98,10 @@ var nonPublicPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("240.0.0.0/4"),     // reserved
 	netip.MustParsePrefix("64:ff9b:1::/48"),  // local-use NAT64
 	netip.MustParsePrefix("2001:db8::/32"),   // documentation
+	netip.MustParsePrefix("::/96"),           // deprecated IPv4-compatible (RFC 4291 §2.5.5.1)
+	netip.MustParsePrefix("2002::/16"),       // 6to4: embeds an IPv4 address
+	netip.MustParsePrefix("2001::/32"),       // Teredo: embeds an IPv4 address
 }
+
+// nat64WellKnown is the NAT64 well-known prefix (RFC 6052 §2.1).
+var nat64WellKnown = netip.MustParsePrefix("64:ff9b::/96")

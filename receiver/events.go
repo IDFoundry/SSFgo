@@ -67,7 +67,16 @@ func (r *Receiver) process(ctx context.Context, token string) (string, error) {
 	if err := r.checkCriticalMembers(set.Subject); err != nil {
 		return set.JWTID, err
 	}
-	fresh, err := r.cfg.ReplayStore.MarkSET(ctx, set.Issuer, set.JWTID, r.cfg.Now().Add(r.cfg.ReplayWindow))
+	// A SET is accepted only within ReplayWindow of its "iat", and its
+	// replay record lasts until that window (plus clock skew) ends, so
+	// there is no moment at which a captured SET is both acceptable and
+	// forgotten.
+	expires := set.IssuedAt.Add(r.cfg.ReplayWindow)
+	if r.cfg.Now().After(expires) {
+		return set.JWTID, &rejectedSET{code: setcodec.CodeInvalidRequest,
+			description: "the SET is older than the Receiver's replay window"}
+	}
+	fresh, err := r.cfg.ReplayStore.MarkSET(ctx, set.Issuer, set.JWTID, expires.Add(r.cfg.MaxClockSkew))
 	if err != nil {
 		return set.JWTID, fmt.Errorf("receiver: replay store: %w", err)
 	}
@@ -76,13 +85,28 @@ func (r *Receiver) process(ctx context.Context, token string) (string, error) {
 		// without handling it twice.
 		return set.JWTID, nil
 	}
-	if err := r.dispatch(ctx, set); err != nil {
-		if ferr := r.cfg.ReplayStore.ForgetSET(ctx, set.Issuer, set.JWTID); ferr != nil {
-			r.cfg.Logger.ErrorContext(ctx, "ssf receiver: forget failed SET", "jti", set.JWTID, "error", ferr)
-		}
+	if err := r.dispatchOrForget(ctx, set); err != nil {
 		return set.JWTID, err
 	}
 	return set.JWTID, nil
+}
+
+// dispatchOrForget runs dispatch and, if it fails or panics, forgets the
+// SET so that its redelivery is handled rather than dismissed as a
+// duplicate. A panic is re-raised after the record is removed.
+func (r *Receiver) dispatchOrForget(ctx context.Context, set ssf.SET) (err error) {
+	done := false
+	defer func() {
+		if done && err == nil {
+			return
+		}
+		if ferr := r.cfg.ReplayStore.ForgetSET(context.WithoutCancel(ctx), set.Issuer, set.JWTID); ferr != nil {
+			r.cfg.Logger.ErrorContext(ctx, "ssf receiver: forget failed SET", "jti", set.JWTID, "error", ferr)
+		}
+	}()
+	err = r.dispatch(ctx, set)
+	done = true
+	return err
 }
 
 func (r *Receiver) decode(ctx context.Context, token string) (ssf.SET, error) {
