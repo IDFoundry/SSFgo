@@ -95,6 +95,8 @@ func (p *pushState) release(id string, failed bool, now time.Time) {
 
 // Run delivers SETs queued on push streams (RFC 8935) until ctx is done,
 // then waits for in-flight deliveries to finish and returns ctx.Err().
+// If Config.Inactivity is set, it also applies inactivity timeouts every
+// 30 seconds.
 // SETs on each stream are delivered one at a time, oldest first. Start Run
 // once per process if any stream may use push delivery.
 func (t *Transmitter) Run(ctx context.Context) error {
@@ -102,7 +104,14 @@ func (t *Transmitter) Run(ctx context.Context) error {
 	defer wg.Wait()
 	ticker := time.NewTicker(pushScanInterval)
 	defer ticker.Stop()
+	nextExpiry := time.Now()
 	for {
+		if t.cfg.Inactivity.Timeout > 0 && !time.Now().Before(nextExpiry) {
+			if err := t.ExpireInactiveStreams(ctx); err != nil && ctx.Err() == nil {
+				t.log.ErrorContext(ctx, "ssf transmitter: inactivity", "error", err)
+			}
+			nextExpiry = time.Now().Add(inactivityCheckInterval)
+		}
 		wake := t.notify.wait(anyStream)
 		streams, err := t.cfg.Store.AllStreams(ctx)
 		if err != nil && ctx.Err() == nil {

@@ -385,11 +385,11 @@ func testConcurrentUpdates(t *testing.T, st storage.StreamStore) {
 
 func streamsEqual(a, b storage.Stream) bool {
 	return a.CreatedAt.Equal(b.CreatedAt) && a.LastVerificationRequest.Equal(b.LastVerificationRequest) &&
-		reflect.DeepEqual(withoutTimes(a), withoutTimes(b))
+		a.LastActivity.Equal(b.LastActivity) && reflect.DeepEqual(withoutTimes(a), withoutTimes(b))
 }
 
 func withoutTimes(s storage.Stream) storage.Stream {
-	s.CreatedAt, s.LastVerificationRequest = time.Time{}, time.Time{}
+	s.CreatedAt, s.LastVerificationRequest, s.LastActivity = time.Time{}, time.Time{}, time.Time{}
 	return s
 }
 

@@ -30,10 +30,12 @@ func (t *Transmitter) addSubject(w http.ResponseWriter, r *http.Request, rx Rece
 		t.writeAPIError(w, r, "add subject", err)
 		return
 	}
-	if _, err := t.ownedStream(r, req.StreamID, rx); err != nil {
+	s, err := t.ownedStream(r, req.StreamID, rx)
+	if err != nil {
 		t.writeAPIError(w, r, "add subject", err)
 		return
 	}
+	t.touch(r.Context(), s)
 	rule := storage.SubjectRule{Subject: req.Subject, Included: true}
 	if err := t.cfg.Store.SetSubjectRule(r.Context(), req.StreamID, rule, t.cfg.Limits.SubjectRulesPerStream); err != nil {
 		t.writeAPIError(w, r, "add subject", t.subjectError(err))
@@ -50,10 +52,12 @@ func (t *Transmitter) removeSubject(w http.ResponseWriter, r *http.Request, rx R
 		t.writeAPIError(w, r, "remove subject", err)
 		return
 	}
-	if _, err := t.ownedStream(r, req.StreamID, rx); err != nil {
+	s, err := t.ownedStream(r, req.StreamID, rx)
+	if err != nil {
 		t.writeAPIError(w, r, "remove subject", err)
 		return
 	}
+	t.touch(r.Context(), s)
 	rule := storage.SubjectRule{Subject: req.Subject, Included: false}
 	if err := t.cfg.Store.SetSubjectRule(r.Context(), req.StreamID, rule, t.cfg.Limits.SubjectRulesPerStream); err != nil {
 		t.writeAPIError(w, r, "remove subject", t.subjectError(err))

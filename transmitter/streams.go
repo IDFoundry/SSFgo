@@ -165,6 +165,7 @@ func (t *Transmitter) configuration(s storage.Stream) ssf.StreamConfiguration {
 		Delivery:                s.Delivery,
 		MinVerificationInterval: int(t.cfg.MinVerificationInterval.Seconds()),
 		Description:             s.Description,
+		InactivityTimeout:       int(t.cfg.Inactivity.Timeout.Seconds()),
 	}
 }
 
@@ -216,6 +217,13 @@ func (t *Transmitter) createStream(w http.ResponseWriter, r *http.Request, rx Re
 		t.serverError(w, r, "create stream", err)
 		return
 	}
+	if t.cfg.VerifyNewStreams {
+		if err := t.SendVerification(r.Context(), s.ID); err != nil {
+			// The stream exists; a failed verification must not fail
+			// its creation.
+			t.log.ErrorContext(r.Context(), "ssf transmitter: verify new stream", "stream_id", s.ID, "error", err)
+		}
+	}
 	writeJSON(w, http.StatusCreated, t.configuration(s))
 }
 
@@ -251,6 +259,7 @@ func (t *Transmitter) readStreams(w http.ResponseWriter, r *http.Request, rx Rec
 			t.writeAPIError(w, r, "read stream", err)
 			return
 		}
+		t.touch(r.Context(), s)
 		writeJSON(w, http.StatusOK, t.configuration(s))
 		return
 	}
@@ -326,6 +335,7 @@ func (t *Transmitter) modifyStream(w http.ResponseWriter, r *http.Request, rx Re
 		t.writeAPIError(w, r, op, err)
 		return
 	}
+	t.touch(r.Context(), s)
 	writeJSON(w, http.StatusOK, t.configuration(s))
 }
 

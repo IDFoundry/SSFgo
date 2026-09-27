@@ -229,6 +229,9 @@ verification rate limiting) cannot lose updates in a durable backend.
 | Receiver-requested status change | Applied without a stream-updated event (§8.1.2 requires one only for Transmitter-initiated changes); refused with 403 while a status the Transmitter set with `SetStreamStatus` is in force |
 | Which Receiver may see which events | `Config.PermitEvent`, checked per stream at `Emit` (§9.2) |
 | How much one Receiver may store | `Config.Limits`: streams, subject rules and queued SETs |
+| Transmitter-initiated verification | On demand (`SendVerification`) or on every new stream (`Config.VerifyNewStreams`); never limited by `min_verification_interval`, which binds Receivers |
+| What restarts `inactivity_timeout` | Any management request that references the stream, and polls on a poll stream; listing all streams does not. Recorded at most once per tenth of the timeout |
+| Inactivity pause or disable | Sends stream-updated, but — unlike `SetStreamStatus` — does not lock the status, so the Receiver can re-enable the stream |
 | Verification on a disabled stream | 204, but nothing is queued (§8.1.2.1: disabled holds no events) |
 | `min_verification_interval` exceeded | 429 with `Retry-After` |
 
