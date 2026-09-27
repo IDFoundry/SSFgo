@@ -45,7 +45,7 @@ func FuzzWireTypes(f *testing.F) {
 		if json.Unmarshal(data, &aud) == nil {
 			var back Audience
 			roundTrip(t, "Audience", aud, &back)
-			if !slices.Equal(aud, back) && !(len(aud) == 0 && len(back) == 0) {
+			if !slices.Equal(aud, back) {
 				t.Fatalf("Audience changed: %v -> %v", aud, back)
 			}
 		}
