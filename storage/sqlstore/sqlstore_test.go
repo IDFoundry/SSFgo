@@ -26,7 +26,7 @@ import (
 )
 
 // postgresEnv names the variable holding a PostgreSQL URL
-// (postgres://user:pass@host/db?sslmode=disable) to run the tests against.
+// (postgres://user@host/db?sslmode=disable) to run the tests against.
 // Without it only SQLite is tested.
 const postgresEnv = "SSFGO_TEST_POSTGRES"
 
