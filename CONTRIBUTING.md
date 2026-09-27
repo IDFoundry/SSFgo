@@ -16,6 +16,9 @@ or suite behaviour that is not obvious from the code.
   `golangci-lint run ./...` are clean — CI enforces them, along with
   `govulncheck` and `actionlint`.
 - Behaviour changes come with tests, including the rejection paths.
+- New parsers of untrusted input come with a fuzz target, listed in
+  `.github/workflows/fuzz.yml` (CI checks). A failing input the fuzzer
+  finds is committed under `testdata/fuzz/<FuzzName>/` with the fix.
 - Changes to protocol behaviour are checked against the suite:
   [`conformance/scripts/run-all.sh`](conformance/scripts/run-all.sh) runs
   the full matrix against a local suite (see

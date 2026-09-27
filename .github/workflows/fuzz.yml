@@ -1,0 +1,95 @@
+name: Fuzz
+
+# Runs every native Go fuzz target with real mutation-based fuzzing
+# (go test -fuzz). Plain `go test` in ci.yml only replays each target's seed
+# corpus and the committed regression inputs under testdata/fuzz/; this is
+# what looks for new failures. It is scheduled rather than run on pull
+# requests because each target needs wall-clock time to be worth anything.
+#
+# The corpus carries over between runs. go test -fuzz keeps the inputs it
+# finds interesting under $(go env GOCACHE)/fuzz, which a fresh runner
+# would lose. Each job restores the newest saved corpus for its target
+# (restore-keys prefix match), fuzzes from there, and saves under a
+# run-unique key, so every run resumes from the last one's coverage.
+# The save runs even when the job fails: a failing input is written to
+# testdata/ (and uploaded as an artifact), not to the corpus, so saving
+# never discards progress. setup-go's own cache is off: it would cache the
+# same GOCACHE directory under a key that never changes and so only ever
+# save once.
+#
+# A failure uploads the failing input for a maintainer to inspect and, once
+# fixed, commit under testdata/fuzz/<FuzzName>/ as a permanent regression
+# case. This workflow never commits anything itself.
+
+on:
+  schedule:
+    - cron: '0 7 * * *' # daily, 7am UTC — an hour after conformance.yml
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          # Untrusted network input first.
+          - { pkg: ./receiver, name: FuzzPushHandler }
+          - { pkg: ./receiver, name: FuzzPollResponse }
+          - { pkg: ./transmitter, name: FuzzManagementAPI }
+          - { pkg: ./internal/setcodec, name: FuzzDecode }
+          - { pkg: ./internal/jose, name: FuzzParseCompact }
+          - { pkg: ./internal/jose, name: FuzzSignVerifyTamper }
+          - { pkg: ./internal/jose, name: FuzzParseJWKSet }
+          - { pkg: ./internal/jose, name: FuzzParseJWK }
+          - { pkg: ., name: FuzzParseSubject }
+          - { pkg: ., name: FuzzWireTypes }
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: false
+
+      - name: Locate fuzz corpus
+        id: corpus
+        run: echo "dir=$(go env GOCACHE)/fuzz" >> "$GITHUB_OUTPUT"
+
+      - name: Restore fuzz corpus
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.corpus.outputs.dir }}
+          key: fuzz-corpus-${{ matrix.target.pkg }}-${{ matrix.target.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            fuzz-corpus-${{ matrix.target.pkg }}-${{ matrix.target.name }}-
+
+      - name: Corpus size before fuzzing
+        run: find "${{ steps.corpus.outputs.dir }}" -type f 2>/dev/null | wc -l
+
+      - name: go test -fuzz=${{ matrix.target.name }}
+        run: go test "${{ matrix.target.pkg }}" -run='^$' -fuzz='^${{ matrix.target.name }}$' -fuzztime=10m
+
+      - name: Corpus size after fuzzing
+        if: always()
+        run: find "${{ steps.corpus.outputs.dir }}" -type f 2>/dev/null | wc -l
+
+      - name: Save fuzz corpus
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.corpus.outputs.dir }}
+          key: fuzz-corpus-${{ matrix.target.pkg }}-${{ matrix.target.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Upload failing input
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-failure-${{ matrix.target.name }}
+          path: '**/testdata/fuzz/${{ matrix.target.name }}/'
+          retention-days: 30

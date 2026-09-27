@@ -57,6 +57,15 @@ func TestAudience(t *testing.T) {
 	if b, _ := json.Marshal(Audience{"x", "y"}); string(b) != `["x","y"]` {
 		t.Errorf("several aud values encode as %s", b)
 	}
+	// Found by FuzzWireTypes: an empty Audience encoded as null, which
+	// Audience itself refuses to decode.
+	for _, empty := range []Audience{nil, {}} {
+		b, _ := json.Marshal(empty)
+		var back Audience
+		if string(b) != `[]` || json.Unmarshal(b, &back) != nil {
+			t.Errorf("empty aud encodes as %s, which must decode", b)
+		}
+	}
 }
 
 func TestStreamConfigurationAlwaysHasEventsDelivered(t *testing.T) {

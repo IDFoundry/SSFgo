@@ -30,7 +30,7 @@ var (
 	testKey *rsa.PrivateKey
 )
 
-func signingKey(t *testing.T) *rsa.PrivateKey {
+func signingKey(t testing.TB) *rsa.PrivateKey {
 	t.Helper()
 	keyOnce.Do(func() {
 		var err error
@@ -57,7 +57,7 @@ var tokens = map[string]transmitter.Receiver{
 }
 
 type fixture struct {
-	t      *testing.T
+	t      testing.TB
 	srv    *httptest.Server
 	store  *memstore.StreamStore
 	tx     *transmitter.Transmitter
@@ -65,7 +65,7 @@ type fixture struct {
 	now    time.Time
 }
 
-func newFixture(t *testing.T, mutate ...func(*transmitter.Config)) *fixture {
+func newFixture(t testing.TB, mutate ...func(*transmitter.Config)) *fixture {
 	t.Helper()
 	f := &fixture{t: t, store: memstore.NewStreamStore(), now: time.Unix(1700000000, 0)}
 	f.srv = httptest.NewUnstartedServer(nil)
@@ -113,7 +113,7 @@ type response struct {
 	body   []byte
 }
 
-func (r response) json(t *testing.T, v any) {
+func (r response) json(t testing.TB, v any) {
 	t.Helper()
 	if err := json.Unmarshal(r.body, v); err != nil {
 		t.Fatalf("decode %s: %v", r.body, err)
@@ -152,7 +152,7 @@ func (f *fixture) do(method, url, token string, body any) response {
 
 func (f *fixture) metadata() ssf.TransmitterMetadata { return f.tx.Metadata() }
 
-func expect(t *testing.T, r response, status int) {
+func expect(t testing.TB, r response, status int) {
 	t.Helper()
 	if r.status != status {
 		t.Fatalf("status = %d, want %d; body %s", r.status, status, r.body)

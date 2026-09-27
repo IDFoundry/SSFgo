@@ -55,15 +55,20 @@ type Delivery struct {
 }
 
 // Audience is a JWT "aud" value: one string or an array of strings
-// (RFC 7519 §4.1.3). It encodes a single value as a string.
+// (RFC 7519 §4.1.3). It encodes a single value as a string, and no values
+// as an empty array rather than null, so every encoding decodes again.
 type Audience []string
 
 // MarshalJSON implements json.Marshaler.
 func (a Audience) MarshalJSON() ([]byte, error) {
-	if len(a) == 1 {
+	switch len(a) {
+	case 0:
+		return []byte("[]"), nil
+	case 1:
 		return json.Marshal(a[0])
+	default:
+		return json.Marshal([]string(a))
 	}
-	return json.Marshal([]string(a))
 }
 
 // UnmarshalJSON implements json.Unmarshaler.

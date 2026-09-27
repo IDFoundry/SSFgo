@@ -85,3 +85,16 @@ jobs:
 
       - name: actionlint
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+      # Every fuzz target must be scheduled in fuzz.yml, or it only ever
+      # replays its seeds.
+      - name: fuzz targets are all scheduled
+        run: |
+          missing=0
+          for target in $(grep -rhoE '^func Fuzz[A-Za-z0-9_]+' --include='*_test.go' . | sed 's/^func //'); do
+            if ! grep -q "name: $target }" .github/workflows/fuzz.yml; then
+              echo "::error::$target is not listed in .github/workflows/fuzz.yml"
+              missing=1
+            fi
+          done
+          exit $missing
