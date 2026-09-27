@@ -59,7 +59,9 @@ credentials or network connections.
 - **JWKS refetch** is rate-limited, so forged SETs cannot make a Receiver
   hammer the Transmitter.
 - **Dependencies.** None beyond the standard library; `govulncheck` runs
-  in CI.
+  in CI. (Since this review, `storage/sqlstore` was added as a separate
+  module; its database drivers are needed only by its tests, and
+  `govulncheck` scans it too.)
 
 ## Accepted risks and guidance
 
@@ -67,7 +69,8 @@ credentials or network connections.
   verification and use static credentials. They are test harnesses, are
   not importable, and must never be deployed.
 - `storage/memstore` keeps everything in memory; production deployments
-  supply durable storage.
+  supply durable storage, such as `storage/sqlstore` (added since this
+  review).
 - A Receiver push endpoint without `PushOptions.AuthorizationHeader`
   accepts pushes from anyone. SETs still need a valid signature and are
   de-duplicated, but setting the header is recommended.

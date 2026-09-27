@@ -11,8 +11,8 @@ capabilities with a focus on standards compliance and interoperability.
 > Receiver passes every module of the Receiver plan except one blocked by
 > a conformance-suite defect — see
 > [conformance/README.md](conformance/README.md). The full matrix runs
-> daily in CI. OIDF has not yet opened SSF certification. See [ROADMAP.md](ROADMAP.md) and
-> [conformance/README.md](conformance/README.md).
+> daily in CI. OIDF has not yet opened SSF certification. See
+> [ROADMAP.md](ROADMAP.md).
 
 ## Specifications
 

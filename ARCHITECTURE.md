@@ -72,6 +72,7 @@ caep        ──► ssf
 risc        ──► ssf, caep (value types only: credential_type)
 transmitter ──► ssf, storage, internal/*
 receiver    ──► ssf, storage, internal/*
+caep/interop ─► ssf, caep, transmitter, receiver
 ```
 
 - `transmitter` and `receiver` never import each other. They share
@@ -134,15 +135,18 @@ needed because under `ALL`, removing a subject must be remembered.
 
 **Status.** An enabled stream delivers everything; a paused one holds
 SETs; a disabled one discards its queue and accepts nothing new. The one
-exception is the stream-updated event `SetStreamStatus` sends when the
-Transmitter changes a status itself (§8.1.5): it is a control event,
+exception is the stream-updated event sent when the Transmitter changes a
+status itself — with `SetStreamStatus` or on an inactivity timeout
+(§8.1.5): it is a control event,
 delivered even though the stream is no longer enabled, because the spec
 requires the Receiver to be told before the stream stops. Status changes
 the Receiver requests send no event.
 
-**Scale.** `Run` and `Emit` scan `AllStreams`. That is fine for the
-in-memory store and modest stream counts; a large deployment's storage
-backend is where an index belongs, and the contract can grow one without
+**Scale.** `Run` and `Emit` scan `AllStreams`, and `Run` then reads each
+push stream's queue every second. That is fine for modest stream counts
+in `memstore` or `storage/sqlstore`; a large deployment's storage backend
+is where a better index belongs, and the contract can grow one (as an
+optional interface, see [COMPATIBILITY.md](COMPATIBILITY.md)) without
 changing the Transmitter's behaviour.
 
 ## Hardening (v0.5)
@@ -181,6 +185,7 @@ Transmitter's JWKS.
   the stream is returned with `ErrAudienceMismatch` so the caller can
   delete it). Access tokens come from a `TokenSource` — `StaticToken`, or
   `ClientCredentials`, which caches and is invalidated once on a 401.
+  `KeepAlive` keeps a stream inside its `inactivity_timeout`.
 - **Delivery.** `PushHandler` answers 202 once a SET is verified and
   handled, 400 with an RFC 8935 error body for a SET it rejects, and 500
   when a handler fails, so the Transmitter retries. `Poll` acknowledges
@@ -196,9 +201,9 @@ Transmitter's JWKS.
   (§8.1.4). A SET whose complex subject carries a member the Transmitter
   declares critical, and the Receiver does not process, is rejected
   (§3.6): the §3.3 members always count as processed, others only when
-  listed in `Config.SubjectMembers`. Handlers are registered per event type, typed with
-  `receiver.On[E]`; an event of a registered type with no handler is
-  acknowledged and ignored.
+  listed in `Config.SubjectMembers`. Handlers are registered per event
+  type, typed with `receiver.On[E]`; an event of a registered type with no
+  handler is acknowledged and ignored.
 
 ## Stream management (v0.2)
 
@@ -260,7 +265,7 @@ below passes reliably**; certification is submitted once OIDF opens it.
 
 | Plan | Variants | Gate |
 |---|---|---|
-| CAEP Interop Transmitter | push, poll | required |
+| CAEP Interop Transmitter | push, poll × static, dynamic auth | required |
 | CAEP Interop Receiver | push, poll × static, dynamic auth | required |
 | Base Receiver "supported events" (CAEP + RISC) | push, poll | required (only external check of RISC) |
 | Remaining base SSF plans | — | reported, non-blocking |

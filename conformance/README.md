@@ -24,15 +24,17 @@ test plan variant against a local suite, and stops it:
 ```bash
 # once, in a checkout of https://gitlab.com/openid/conformance-suite
 docker compose -f docker-compose-prebuilt.yml up -d
-pip install -r scripts/requirements.txt
+# the suite's script dependencies, pinned with hashes by this repo
+pip install --require-hashes -r /path/to/SSFgo/conformance/scripts/requirements.txt
 
 # from this repo: [static|dynamic] [poll|push] [module,module,...]
 ./conformance/transmitter/run.sh dynamic poll
 ```
 
 The suite reaches the harness at `https://host.docker.internal:9443/ssfgo`
-(Docker Desktop defines that hostname; on Linux add the host-gateway
-mapping FAPIgo's `suite-host-gateway.override.yml` uses). Set `PLAN` to run
+(Docker Desktop defines that hostname; on Linux also pass
+[`scripts/suite-host-gateway.override.yml`](scripts/suite-host-gateway.override.yml)
+to `docker compose -f`, which maps it to the host). Set `PLAN` to run
 a plan other than `openid-ssf-transmitter-caep-test-plan`, for example
 `PLAN='openid-ssf-transmitter-test-plan[ssf_profile=default]'`.
 

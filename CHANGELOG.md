@@ -3,8 +3,9 @@
 ## Unreleased — v1.0.0
 
 Not yet tagged. The API has been reviewed and frozen for v1.0.0; this
-entry becomes the release notes when it is. The first stable release: an embeddable SSF Transmitter and Receiver with
-CAEP and RISC, verified against the OpenID Foundation conformance suite.
+entry becomes the release notes when it is. The first stable release: an
+embeddable SSF Transmitter and Receiver with CAEP and RISC, verified
+against the OpenID Foundation conformance suite.
 See [COMPATIBILITY.md](COMPATIBILITY.md) for what v1 guarantees.
 
 ### Implemented
@@ -38,15 +39,13 @@ conformance-suite defect (millisecond `event_timestamp`), documented in
 - `inactivity_timeout` (SSF §8.1.1): `transmitter.Config.Inactivity`
   advertises the timeout and pauses, disables or deletes streams whose
   Receiver has gone quiet, with the stream-updated event SSF requires.
-  On the Receiver side, `r.KeepAlive` keeps a stream from reaching its
-  timeout until its context is done.
+  Enforced by `Run`, or by calling `tx.ExpireInactiveStreams`. New
+  `storage.Stream.LastActivity`. On the Receiver side, `r.KeepAlive`
+  keeps a stream from reaching its timeout until its context is done.
 - `storage/sqlstore`, a separate module: durable `StreamStore` and
   `ReplayStore` implementations on `database/sql` for PostgreSQL and
   SQLite, passing the `storagetest` contract on both. The core module
   still has no dependencies.
-  Enforced by `Run`, or by calling `tx.ExpireInactiveStreams`. New
-  `storage.Stream.LastActivity`.
-
 - Receiver-side CAEP Interoperability Profile preset:
   `interop.ApplyReceiver` checks the Receiver's configuration (RS256
   accepted, a profile event type registered) and installs
@@ -97,7 +96,6 @@ each finding was reproduced by a failing test before it was fixed.
   `null`, which `Audience` itself refused to decode (it now encodes `[]`);
   `ssf.NumericDate` accepted values below one second that encoded as `0`
   and then failed to decode (it now requires at least one second).
-
 - The Receiver now enforces SSF 1.0 §3.6: a SET whose complex subject
   carries a member the Transmitter declared critical
   (`critical_subject_members`) and the Receiver does not process is
