@@ -6,6 +6,10 @@ import (
 	"time"
 )
 
+// keepAliveUnknownInterval stands in for the keep-alive interval until
+// the stream's timeout is known; a variable so tests can shorten it.
+var keepAliveUnknownInterval = 10 * time.Second
+
 // KeepAlive keeps a stream from reaching its inactivity_timeout
 // (SSF 1.0 §8.1.1) until ctx is done, then returns ctx.Err().
 //
@@ -41,7 +45,7 @@ func (r *Receiver) KeepAlive(ctx context.Context, streamID string) error {
 			r.cfg.Logger.WarnContext(ctx, "ssf receiver: keep-alive failed", "stream_id", streamID, "error", err)
 			if interval == 0 {
 				// The timeout is not yet known.
-				interval = 10 * time.Second
+				interval = keepAliveUnknownInterval
 			}
 		}
 		wait := interval
