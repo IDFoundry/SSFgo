@@ -110,15 +110,8 @@ func (m *StreamStore) CreateStream(ctx context.Context, s storage.Stream, opts s
 	}
 	return m.d.inTx(ctx, m.db, func(q querier) error {
 		if opts.MaxStreamsPerReceiver > 0 {
-			if err := m.d.lockReceiver(ctx, q, s.ReceiverID); err != nil {
+			if err := m.checkStreamLimit(ctx, q, s.ReceiverID, opts.MaxStreamsPerReceiver); err != nil {
 				return err
-			}
-			var owned int
-			if err := q.QueryRowContext(ctx, m.d.rebind(`SELECT COUNT(*) FROM ssf_streams WHERE receiver_id = ?`), s.ReceiverID).Scan(&owned); err != nil {
-				return err
-			}
-			if owned >= opts.MaxStreamsPerReceiver {
-				return storage.ErrTooManyStreams
 			}
 		}
 		res, err := q.ExecContext(ctx, m.d.rebind(`INSERT INTO ssf_streams (`+streamColumns+`)
@@ -133,6 +126,23 @@ func (m *StreamStore) CreateStream(ctx context.Context, s storage.Stream, opts s
 		}
 		return nil
 	})
+}
+
+// checkStreamLimit returns storage.ErrTooManyStreams if receiverID already
+// owns limit streams. It locks the Receiver first, so the count stays true
+// until the transaction ends.
+func (m *StreamStore) checkStreamLimit(ctx context.Context, q querier, receiverID string, limit int) error {
+	if err := m.d.lockReceiver(ctx, q, receiverID); err != nil {
+		return err
+	}
+	var owned int
+	if err := q.QueryRowContext(ctx, m.d.rebind(`SELECT COUNT(*) FROM ssf_streams WHERE receiver_id = ?`), receiverID).Scan(&owned); err != nil {
+		return err
+	}
+	if owned >= limit {
+		return storage.ErrTooManyStreams
+	}
+	return nil
 }
 
 // Stream implements storage.StreamStore.
