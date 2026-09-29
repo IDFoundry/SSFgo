@@ -149,7 +149,45 @@ push stream's queue every second. That is fine for modest stream counts
 in `memstore` or `storage/sqlstore`; a large deployment's storage backend
 is where a better index belongs, and the contract can grow one (as an
 optional interface, see [COMPATIBILITY.md](COMPATIBILITY.md)) without
-changing the Transmitter's behaviour.
+changing the Transmitter's behaviour. See [Performance](#performance).
+
+## Performance
+
+Benchmarks live next to the code they measure; CI runs each once so they
+keep working, but does not compare timings. Run them with:
+
+```bash
+go test -run '^$' -bench . ./transmitter ./receiver
+(cd storage/sqlstore && go test -run '^$' -bench . ./...)   # SSFGO_TEST_POSTGRES for PostgreSQL
+```
+
+Measured September 2026 on an Intel Xeon W-2140B (8 cores), Go 1.27,
+RS256 with a 2048-bit key:
+
+| Benchmark | Result |
+|---|---|
+| `transmitter` `Emit`, 1 / 10 / 100 poll streams (memstore) | 1.2 / 12 / 124 ms per event — about 800 SETs/s |
+| `transmitter` `Poll`, 10 SETs over HTTPS | 0.14 ms |
+| `transmitter` `Push`, one stream over HTTPS | about 4,500 SETs/s |
+| `receiver` `PushHandler` (verify, replay check, dispatch) | 0.05 ms per SET |
+| `sqlstore` `Emit`, 10 streams, SQLite | 16 ms per event — about 630 SETs/s |
+| `sqlstore` operations, SQLite | 0.05–0.35 ms each |
+
+- **Signing dominates `Emit`.** Each stream gets its own signed SET (its
+  own `aud` and `jti`), and `Emit` signs them one after another, so
+  throughput is about one RS256 signature (1.2 ms) per SET whatever the
+  number of streams. ES256 (35 µs) and EdDSA (24 µs) keys sign 35–50
+  times faster, but a Transmitter following the CAEP Interoperability
+  Profile must sign with RS256 (§2.6); others can choose.
+- **Verification is cheap.** A Receiver verifies an RS256 SET in a small
+  fraction of the time the Transmitter takes to sign it.
+- **Push is sequential per stream** — one SET at a time, oldest first, by
+  design (see Delivery) — while different streams are pushed concurrently.
+- **Databases add round trips.** `Emit` makes a few queries per stream
+  (subject rules, then a locked count and insert), so on PostgreSQL its
+  cost follows network latency: against PostgreSQL 17 in Docker Desktop,
+  where each query took about 0.7 ms, it managed about 220 SETs/s for ten
+  streams.
 
 ## Hardening (v0.5)
 

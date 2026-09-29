@@ -21,6 +21,9 @@ or suite behaviour that is not obvious from the code.
   `postgres://postgres@localhost:5432/postgres?sslmode=disable`
   (`docker run -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432:5432 postgres:17-alpine`).
 - Behaviour changes come with tests, including the rejection paths.
+  Changes to a hot path (emitting, delivery, verification, storage) say
+  what the benchmarks in [ARCHITECTURE.md](ARCHITECTURE.md#performance)
+  show before and after.
 - New parsers of untrusted input come with a fuzz target, listed in
   `.github/workflows/fuzz.yml` (CI checks). A failing input the fuzzer
   finds is committed under `testdata/fuzz/<FuzzName>/` with the fix.

@@ -57,6 +57,12 @@ jobs:
       - name: coverage summary
         run: go tool cover -func=coverage.out | tail -1
 
+      # One iteration of each benchmark, so they keep compiling and
+      # working; timings from CI runners are too noisy to compare.
+      - name: benchmarks (smoke)
+        if: matrix.go == 'minimum'
+        run: go test -run '^$' -bench . -benchtime 1x ./...
+
       # For SonarQube's test reporting (sonar.go.tests.reportPaths). A
       # separate run, so the step above keeps readable output.
       - name: go test (json, for SonarQube)
@@ -136,6 +142,12 @@ jobs:
         env:
           SSFGO_TEST_POSTGRES: postgres://postgres@localhost:5432/postgres?sslmode=disable
         run: go test -race ./... -json > report.json
+
+      - name: benchmarks (smoke)
+        if: matrix.go == 'minimum'
+        env:
+          SSFGO_TEST_POSTGRES: postgres://postgres@localhost:5432/postgres?sslmode=disable
+        run: go test -run '^$' -bench . -benchtime 1x ./...
 
       - name: upload results for SonarQube
         if: matrix.go == 'minimum'
