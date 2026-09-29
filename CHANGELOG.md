@@ -45,7 +45,8 @@ conformance-suite defect (millisecond `event_timestamp`), documented in
 - `storage/sqlstore`, a separate module: durable `StreamStore` and
   `ReplayStore` implementations on `database/sql` for PostgreSQL and
   SQLite, passing the `storagetest` contract on both. The core module
-  still has no dependencies.
+  still has no dependencies. The daily conformance run also exercises it:
+  the Transmitter matrix runs on SQLite as well as in memory.
 - Receiver-side CAEP Interoperability Profile preset:
   `interop.ApplyReceiver` checks the Receiver's configuration (RS256
   accepted, a profile event type registered) and installs

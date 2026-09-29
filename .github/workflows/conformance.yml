@@ -21,7 +21,9 @@ jobs:
         with:
           go-version-file: go.mod
           check-latest: true
-          cache-dependency-path: go.mod
+          cache-dependency-path: |
+            go.mod
+            storage/sqlstore/go.sum
 
       - uses: actions/setup-python@v7
         with:
@@ -44,6 +46,8 @@ jobs:
           CONFORMANCE_SUITE_CHECKOUT: /tmp/conformance-suite
           PYTHON: python3
           WORKDIR: ${{ runner.temp }}/conformance-results
+          # The Transmitter matrix also runs on storage/sqlstore (SQLite).
+          STORES: memory sqlite
         run: ./conformance/scripts/run-all.sh
 
       - name: Add summary to job summary

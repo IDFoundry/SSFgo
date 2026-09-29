@@ -16,8 +16,9 @@ The public API is every exported identifier in these packages:
 | `.../transmitter`, `.../receiver` | the two roles |
 | `.../storage`, `.../storage/memstore`, `.../storage/storagetest` | persistence contracts and implementations |
 
-Not covered: `internal/...` (not importable), `cmd/...` (conformance
-harnesses), `examples/...` and `conformance/...`.
+Not covered: `internal/...` (not importable), `cmd/...` and
+`storage/sqlstore/cmd/...` (conformance harnesses), `examples/...` and
+`conformance/...`.
 
 `github.com/idfoundry/ssfgo/storage/sqlstore` is a separate module with
 its own version tags (`storage/sqlstore/vX.Y.Z`), so the core module stays

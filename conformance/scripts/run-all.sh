@@ -2,7 +2,8 @@
 # Runs SSFgo's full conformance matrix against a locally running OIDF
 # conformance suite and prints one summary:
 #
-#   Transmitter — CAEP Interop plan, {static, dynamic} x {poll, push}
+#   Transmitter — CAEP Interop plan, {static, dynamic} x {poll, push}, on
+#                 each store in STORES
 #   Receiver    — CAEP Interop plan, {static, dynamic} x {poll, push}
 #               — dynamic auth with client_secret_post, client_secret_jwt
 #                 and private_key_jwt
@@ -19,7 +20,8 @@
 #
 # Environment: CONFORMANCE_SUITE_CHECKOUT, CONFORMANCE_SERVER, PYTHON,
 # WORKDIR (default: a temp dir), ONLY (transmitter or receiver: run one
-# half of the matrix).
+# half of the matrix), STORES (the Transmitter's stores, default "memory";
+# see conformance/transmitter/run.sh for sqlite and postgres).
 set -uo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -46,19 +48,23 @@ record() { # name status
 only="${ONLY:-}"
 
 # --- Transmitter ---
-[[ "$only" == receiver ]] || for auth in static dynamic; do
-	for delivery in poll push; do
-		name="transmitter $auth/$delivery"
-		status=FAILED
-		for attempt in 1 2; do
-			log="$workdir/tx-$auth-$delivery-$attempt.log"
-			if WORKDIR="$workdir/tx-$auth-$delivery-$attempt" "$repo/conformance/transmitter/run.sh" "$auth" "$delivery" >"$log" 2>&1; then
-				status=PASSED
-				break
-			fi
-			echo "$name: attempt $attempt failed (see $log)"
+[[ "$only" == receiver ]] || for store in ${STORES:-memory}; do
+	for auth in static dynamic; do
+		for delivery in poll push; do
+			name="transmitter $auth/$delivery"
+			[[ "$store" == memory ]] || name="$name/$store"
+			slug="tx-$store-$auth-$delivery"
+			status=FAILED
+			for attempt in 1 2; do
+				log="$workdir/$slug-$attempt.log"
+				if STORE="$store" WORKDIR="$workdir/$slug-$attempt" "$repo/conformance/transmitter/run.sh" "$auth" "$delivery" >"$log" 2>&1; then
+					status=PASSED
+					break
+				fi
+				echo "$name: attempt $attempt failed (see $log)"
+			done
+			record "$name" "$status"
 		done
-		record "$name" "$status"
 	done
 done
 
