@@ -184,7 +184,7 @@ func (m *StreamStore) Enqueue(_ context.Context, streamID string, q storage.Queu
 }
 
 // PendingEvents implements storage.StreamStore.
-func (m *StreamStore) PendingEvents(_ context.Context, streamID string, max int, controlOnly bool) ([]storage.QueuedEvent, error) {
+func (m *StreamStore) PendingEvents(_ context.Context, streamID string, limit int, controlOnly bool) ([]storage.QueuedEvent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.streams[streamID]
@@ -193,7 +193,7 @@ func (m *StreamStore) PendingEvents(_ context.Context, streamID string, max int,
 	}
 	var out []storage.QueuedEvent
 	for _, q := range e.queue {
-		if max > 0 && len(out) == max {
+		if limit > 0 && len(out) == limit {
 			break
 		}
 		if !controlOnly || q.Control {

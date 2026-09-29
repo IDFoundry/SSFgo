@@ -40,6 +40,10 @@ type Receiver struct {
 // maxResponseBytes bounds every response read from the Transmitter.
 const maxResponseBytes = 1 << 20
 
+// contentTypeJSON is the media type of the JSON bodies the Receiver sends
+// and accepts.
+const contentTypeJSON = "application/json"
+
 // New validates cfg, fetches the Transmitter Configuration Metadata and
 // checks it names cfg.Issuer (SSF 1.0 §7.2.4), then fetches the
 // Transmitter's signing keys.
@@ -170,7 +174,7 @@ func (r *Receiver) get(ctx context.Context, u string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", contentTypeJSON)
 	res, err := r.cfg.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -225,50 +229,58 @@ func (r *Receiver) call(ctx context.Context, method, endpoint string, in, out an
 			return fmt.Errorf("receiver: encode request: %w", err)
 		}
 	}
-	for attempt := 0; ; attempt++ {
-		token, err := r.cfg.TokenSource.Token(ctx)
-		if err != nil {
-			return fmt.Errorf("receiver: access token: %w", err)
-		}
-		var body io.Reader
-		if payload != nil {
-			body = bytes.NewReader(payload)
-		}
-		req, err := http.NewRequestWithContext(ctx, method, endpoint, body)
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("Accept", "application/json")
-		if payload != nil {
-			req.Header.Set("Content-Type", "application/json")
-		}
-		res, err := r.cfg.HTTPClient.Do(req)
-		if err != nil {
-			return fmt.Errorf("receiver: %s %s: %w", method, endpoint, err)
-		}
-		respBody, err := io.ReadAll(io.LimitReader(res.Body, maxResponseBytes))
-		_ = res.Body.Close()
-		if err != nil {
-			return fmt.Errorf("receiver: %s %s: read response: %w", method, endpoint, err)
-		}
-		if res.StatusCode == http.StatusUnauthorized && attempt == 0 {
-			if inv, ok := r.cfg.TokenSource.(tokenInvalidator); ok {
-				inv.Invalidate()
-				continue
-			}
-		}
-		for _, w := range want {
-			if res.StatusCode == w {
-				if out == nil || len(respBody) == 0 {
-					return nil
-				}
-				if err := json.Unmarshal(respBody, out); err != nil {
-					return fmt.Errorf("receiver: %s %s: decode response: %w", method, endpoint, err)
-				}
-				return nil
-			}
-		}
-		return &APIError{Method: method, URL: endpoint, StatusCode: res.StatusCode, Body: string(respBody)}
+	status, respBody, err := r.send(ctx, method, endpoint, payload)
+	if err != nil {
+		return err
 	}
+	if status == http.StatusUnauthorized {
+		if inv, ok := r.cfg.TokenSource.(tokenInvalidator); ok {
+			inv.Invalidate()
+			if status, respBody, err = r.send(ctx, method, endpoint, payload); err != nil {
+				return err
+			}
+		}
+	}
+	if !slices.Contains(want, status) {
+		return &APIError{Method: method, URL: endpoint, StatusCode: status, Body: string(respBody)}
+	}
+	if out == nil || len(respBody) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(respBody, out); err != nil {
+		return fmt.Errorf("receiver: %s %s: decode response: %w", method, endpoint, err)
+	}
+	return nil
+}
+
+// send makes one authorized request and returns the response status and
+// (size-limited) body.
+func (r *Receiver) send(ctx context.Context, method, endpoint string, payload []byte) (int, []byte, error) {
+	token, err := r.cfg.TokenSource.Token(ctx)
+	if err != nil {
+		return 0, nil, fmt.Errorf("receiver: access token: %w", err)
+	}
+	var body io.Reader
+	if payload != nil {
+		body = bytes.NewReader(payload)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, endpoint, body)
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", contentTypeJSON)
+	if payload != nil {
+		req.Header.Set("Content-Type", contentTypeJSON)
+	}
+	res, err := r.cfg.HTTPClient.Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("receiver: %s %s: %w", method, endpoint, err)
+	}
+	respBody, err := io.ReadAll(io.LimitReader(res.Body, maxResponseBytes))
+	_ = res.Body.Close()
+	if err != nil {
+		return 0, nil, fmt.Errorf("receiver: %s %s: read response: %w", method, endpoint, err)
+	}
+	return res.StatusCode, respBody, nil
 }

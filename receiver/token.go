@@ -127,7 +127,7 @@ func (c *ClientCredentials) fetch(ctx context.Context) (string, time.Duration, e
 		return "", 0, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", contentTypeJSON)
 	if c.AuthMethod == ClientSecretBasic {
 		// RFC 6749 §2.3.1: the credentials are form-encoded before being
 		// used as the Basic user name and password.

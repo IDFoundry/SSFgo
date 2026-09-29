@@ -1,6 +1,7 @@
 package transmitter
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"io"
@@ -170,14 +171,15 @@ func (t *Transmitter) configuration(s storage.Stream) ssf.StreamConfiguration {
 }
 
 func (t *Transmitter) createStream(w http.ResponseWriter, r *http.Request, rx Receiver) {
+	const op = "create stream"
 	obj, err := readObject(w, r)
 	if err != nil {
-		t.writeAPIError(w, r, "create stream", err)
+		t.writeAPIError(w, r, op, err)
 		return
 	}
 	fields, err := t.parseReceiverFields(obj, rx)
 	if err != nil {
-		t.writeAPIError(w, r, "create stream", err)
+		t.writeAPIError(w, r, op, err)
 		return
 	}
 	s := storage.Stream{
@@ -196,7 +198,7 @@ func (t *Transmitter) createStream(w http.ResponseWriter, r *http.Request, rx Re
 		t.applyEventsRequested(&s, nil)
 	}
 	if err := t.applyDelivery(&s, fields.delivery); err != nil {
-		t.writeAPIError(w, r, "create stream", err)
+		t.writeAPIError(w, r, op, err)
 		return
 	}
 
@@ -214,7 +216,7 @@ func (t *Transmitter) createStream(w http.ResponseWriter, r *http.Request, rx Re
 		return
 	}
 	if err != nil {
-		t.serverError(w, r, "create stream", err)
+		t.serverError(w, r, op, err)
 		return
 	}
 	if t.cfg.VerifyNewStreams {
@@ -344,38 +346,31 @@ func (t *Transmitter) modifyStream(w http.ResponseWriter, r *http.Request, rx Re
 // §8.1.1.3, §8.1.1.4).
 func (t *Transmitter) checkTransmitterFields(obj map[string]json.RawMessage, s storage.Stream) error {
 	current := t.configuration(s)
-	if v, ok, err := member[string](obj, "iss"); err != nil {
+	// cmp.Or returns the first failure, in this order.
+	return cmp.Or(
+		unchanged(obj, "iss", current.Issuer, equal, "iss does not match"),
+		unchanged(obj, "aud", current.Audience, sameSet, "aud cannot be changed"),
+		unchanged(obj, "events_supported", current.EventsSupported, sameSet, "events_supported does not match"),
+		unchanged(obj, "events_delivered", current.EventsDelivered, sameSet, "events_delivered does not match"),
+		unchanged(obj, "min_verification_interval", current.MinVerificationInterval, equal, "min_verification_interval does not match"),
+		unchanged(obj, "inactivity_timeout", current.InactivityTimeout, equal, "inactivity_timeout does not match"),
+	)
+}
+
+// unchanged returns a bad request error with message if obj carries member
+// name with a value that differs from current.
+func unchanged[T any](obj map[string]json.RawMessage, name string, current T, same func(a, b T) bool, message string) error {
+	v, ok, err := member[T](obj, name)
+	if err != nil {
 		return err
-	} else if ok && v != current.Issuer {
-		return badRequest("iss does not match")
 	}
-	if v, ok, err := member[ssf.Audience](obj, "aud"); err != nil {
-		return err
-	} else if ok && !sameSet(v, current.Audience) {
-		return badRequest("aud cannot be changed")
-	}
-	if v, ok, err := member[[]ssf.EventType](obj, "events_supported"); err != nil {
-		return err
-	} else if ok && !sameSet(v, current.EventsSupported) {
-		return badRequest("events_supported does not match")
-	}
-	if v, ok, err := member[[]ssf.EventType](obj, "events_delivered"); err != nil {
-		return err
-	} else if ok && !sameSet(v, current.EventsDelivered) {
-		return badRequest("events_delivered does not match")
-	}
-	if v, ok, err := member[int](obj, "min_verification_interval"); err != nil {
-		return err
-	} else if ok && v != current.MinVerificationInterval {
-		return badRequest("min_verification_interval does not match")
-	}
-	if v, ok, err := member[int](obj, "inactivity_timeout"); err != nil {
-		return err
-	} else if ok && v != current.InactivityTimeout {
-		return badRequest("inactivity_timeout does not match")
+	if ok && !same(v, current) {
+		return badRequest("%s", message)
 	}
 	return nil
 }
+
+func equal[T comparable](a, b T) bool { return a == b }
 
 func sameSet[S ~[]E, E comparable](a, b S) bool {
 	for _, x := range a {
@@ -392,22 +387,23 @@ func sameSet[S ~[]E, E comparable](a, b S) bool {
 }
 
 func (t *Transmitter) deleteStream(w http.ResponseWriter, r *http.Request, rx Receiver) {
+	const op = "delete stream"
 	id := r.URL.Query().Get("stream_id")
 	if id == "" {
-		t.writeAPIError(w, r, "delete stream", badRequest("the stream_id query parameter is required"))
+		t.writeAPIError(w, r, op, badRequest("the stream_id query parameter is required"))
 		return
 	}
 	if _, err := t.ownedStream(r, id, rx); err != nil {
-		t.writeAPIError(w, r, "delete stream", err)
+		t.writeAPIError(w, r, op, err)
 		return
 	}
 	err := t.cfg.Store.DeleteStream(r.Context(), id)
 	if errors.Is(err, storage.ErrNotFound) {
-		t.writeAPIError(w, r, "delete stream", errStreamNotFound)
+		t.writeAPIError(w, r, op, errStreamNotFound)
 		return
 	}
 	if err != nil {
-		t.serverError(w, r, "delete stream", err)
+		t.serverError(w, r, op, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

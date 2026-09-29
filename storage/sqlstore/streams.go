@@ -355,7 +355,7 @@ func (m *StreamStore) Enqueue(ctx context.Context, streamID string, e storage.Qu
 }
 
 // PendingEvents implements storage.StreamStore.
-func (m *StreamStore) PendingEvents(ctx context.Context, streamID string, max int, controlOnly bool) ([]storage.QueuedEvent, error) {
+func (m *StreamStore) PendingEvents(ctx context.Context, streamID string, limit int, controlOnly bool) ([]storage.QueuedEvent, error) {
 	if err := m.exists(ctx, streamID); err != nil {
 		return nil, err
 	}
@@ -366,9 +366,9 @@ func (m *StreamStore) PendingEvents(ctx context.Context, streamID string, max in
 		args = append(args, true)
 	}
 	query += ` ORDER BY seq`
-	if max > 0 {
+	if limit > 0 {
 		query += ` LIMIT ?`
-		args = append(args, max)
+		args = append(args, limit)
 	}
 	rows, err := m.db.QueryContext(ctx, m.d.rebind(query), args...)
 	if err != nil {

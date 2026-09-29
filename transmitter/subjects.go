@@ -25,20 +25,21 @@ func readBody(w http.ResponseWriter, r *http.Request, v json.Unmarshaler) error 
 // addSubject implements SSF 1.0 §8.1.3.2 by recording an include rule.
 // The "verified" flag is accepted but not acted on.
 func (t *Transmitter) addSubject(w http.ResponseWriter, r *http.Request, rx Receiver) {
+	const op = "add subject"
 	var req ssf.AddSubjectRequest
 	if err := readBody(w, r, &req); err != nil {
-		t.writeAPIError(w, r, "add subject", err)
+		t.writeAPIError(w, r, op, err)
 		return
 	}
 	s, err := t.ownedStream(r, req.StreamID, rx)
 	if err != nil {
-		t.writeAPIError(w, r, "add subject", err)
+		t.writeAPIError(w, r, op, err)
 		return
 	}
 	t.touch(r.Context(), s)
 	rule := storage.SubjectRule{Subject: req.Subject, Included: true}
 	if err := t.cfg.Store.SetSubjectRule(r.Context(), req.StreamID, rule, t.cfg.Limits.SubjectRulesPerStream); err != nil {
-		t.writeAPIError(w, r, "add subject", t.subjectError(err))
+		t.writeAPIError(w, r, op, t.subjectError(err))
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -47,20 +48,21 @@ func (t *Transmitter) addSubject(w http.ResponseWriter, r *http.Request, rx Rece
 // removeSubject implements SSF 1.0 §8.1.3.3 by recording an exclude rule,
 // which also overrides default_subjects "ALL" for that subject.
 func (t *Transmitter) removeSubject(w http.ResponseWriter, r *http.Request, rx Receiver) {
+	const op = "remove subject"
 	var req ssf.RemoveSubjectRequest
 	if err := readBody(w, r, &req); err != nil {
-		t.writeAPIError(w, r, "remove subject", err)
+		t.writeAPIError(w, r, op, err)
 		return
 	}
 	s, err := t.ownedStream(r, req.StreamID, rx)
 	if err != nil {
-		t.writeAPIError(w, r, "remove subject", err)
+		t.writeAPIError(w, r, op, err)
 		return
 	}
 	t.touch(r.Context(), s)
 	rule := storage.SubjectRule{Subject: req.Subject, Included: false}
 	if err := t.cfg.Store.SetSubjectRule(r.Context(), req.StreamID, rule, t.cfg.Limits.SubjectRulesPerStream); err != nil {
-		t.writeAPIError(w, r, "remove subject", t.subjectError(err))
+		t.writeAPIError(w, r, op, t.subjectError(err))
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

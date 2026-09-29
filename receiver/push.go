@@ -60,7 +60,7 @@ func (r *Receiver) PushHandler(opts PushOptions) http.Handler {
 
 // pushError writes an RFC 8935 §2.3 error response.
 func pushError(w http.ResponseWriter, status int, code, description string) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", contentTypeJSON)
 	w.Header().Set("Content-Language", "en")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"err": code, "description": description})

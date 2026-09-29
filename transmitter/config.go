@@ -191,10 +191,20 @@ type PushRetryPolicy struct {
 }
 
 func (c *Config) validate() error {
-	var errs []error
-	if err := ssf.ValidateIssuer(c.Issuer); err != nil {
-		errs = append(errs, err)
+	errs := c.requiredErrors()
+	errs = append(errs, c.signingKeyErrors()...)
+	errs = append(errs, c.tuningErrors()...)
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("transmitter: invalid config: %w", err)
 	}
+	c.applyDefaults()
+	return nil
+}
+
+// signingKeyErrors checks SigningKeys: at least one, each with a Signer
+// suited to its algorithm and a unique KeyID.
+func (c *Config) signingKeyErrors() []error {
+	var errs []error
 	if len(c.SigningKeys) == 0 {
 		errs = append(errs, errors.New("SigningKeys is required"))
 	}
@@ -213,6 +223,15 @@ func (c *Config) validate() error {
 			}
 		}
 		kids[k.KeyID] = true
+	}
+	return errs
+}
+
+// requiredErrors checks the settings every Transmitter must have.
+func (c *Config) requiredErrors() []error {
+	var errs []error
+	if err := ssf.ValidateIssuer(c.Issuer); err != nil {
+		errs = append(errs, err)
 	}
 	if len(c.EventsSupported) == 0 {
 		errs = append(errs, errors.New("EventsSupported is required"))
@@ -234,6 +253,12 @@ func (c *Config) validate() error {
 	if c.Authorize == nil {
 		errs = append(errs, errors.New("an Authorize function is required"))
 	}
+	return errs
+}
+
+// tuningErrors checks the optional durations and limits.
+func (c *Config) tuningErrors() []error {
+	var errs []error
 	if c.MinVerificationInterval < 0 || c.MinVerificationInterval%time.Second != 0 {
 		errs = append(errs, errors.New("MinVerificationInterval must be a non-negative whole number of seconds"))
 	}
@@ -253,9 +278,11 @@ func (c *Config) validate() error {
 			errs = append(errs, errors.New(`Inactivity.Action must be "pause", "disable" or "delete"`))
 		}
 	}
-	if err := errors.Join(errs...); err != nil {
-		return fmt.Errorf("transmitter: invalid config: %w", err)
-	}
+	return errs
+}
+
+// applyDefaults fills in the optional settings left at zero.
+func (c *Config) applyDefaults() {
 	if c.PushRetry.MinBackoff == 0 {
 		c.PushRetry.MinBackoff = time.Second
 	}
@@ -266,7 +293,6 @@ func (c *Config) validate() error {
 	c.Limits.StreamsPerReceiver = defaultInt(c.Limits.StreamsPerReceiver, 10)
 	c.Limits.SubjectRulesPerStream = defaultInt(c.Limits.SubjectRulesPerStream, 10_000)
 	c.Limits.QueuedSETsPerStream = defaultInt(c.Limits.QueuedSETsPerStream, 10_000)
-	return nil
 }
 
 func defaultInt(v, def int) int {

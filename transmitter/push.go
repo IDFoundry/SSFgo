@@ -107,31 +107,42 @@ func (t *Transmitter) Run(ctx context.Context) error {
 	nextExpiry := time.Now()
 	for {
 		if t.cfg.Inactivity.Timeout > 0 && !time.Now().Before(nextExpiry) {
-			if err := t.ExpireInactiveStreams(ctx); err != nil && ctx.Err() == nil {
-				t.log.ErrorContext(ctx, "ssf transmitter: inactivity", "error", err)
-			}
+			t.expireInactive(ctx)
 			nextExpiry = time.Now().Add(inactivityCheckInterval)
 		}
 		wake := t.notify.wait(anyStream)
-		streams, err := t.cfg.Store.AllStreams(ctx)
-		if err != nil && ctx.Err() == nil {
-			t.log.ErrorContext(ctx, "ssf transmitter: list streams for push", "error", err)
-		}
-		for _, s := range streams {
-			if s.Delivery.Method != ssf.DeliveryPush || !t.pushes.claim(s.ID, time.Now()) {
-				continue
-			}
-			wg.Go(func() {
-				failed := t.drain(ctx, s.ID)
-				t.pushes.release(s.ID, failed, time.Now())
-			})
-		}
+		t.startPushes(ctx, &wg)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-wake:
 		case <-ticker.C:
 		}
+	}
+}
+
+// expireInactive applies inactivity timeouts, logging a failure.
+func (t *Transmitter) expireInactive(ctx context.Context) {
+	if err := t.ExpireInactiveStreams(ctx); err != nil && ctx.Err() == nil {
+		t.log.ErrorContext(ctx, "ssf transmitter: inactivity", "error", err)
+	}
+}
+
+// startPushes starts draining, in wg, every push stream no other
+// goroutine is draining and whose backoff has passed.
+func (t *Transmitter) startPushes(ctx context.Context, wg *sync.WaitGroup) {
+	streams, err := t.cfg.Store.AllStreams(ctx)
+	if err != nil && ctx.Err() == nil {
+		t.log.ErrorContext(ctx, "ssf transmitter: list streams for push", "error", err)
+	}
+	for _, s := range streams {
+		if s.Delivery.Method != ssf.DeliveryPush || !t.pushes.claim(s.ID, time.Now()) {
+			continue
+		}
+		wg.Go(func() {
+			failed := t.drain(ctx, s.ID)
+			t.pushes.release(s.ID, failed, time.Now())
+		})
 	}
 }
 
@@ -147,7 +158,7 @@ func (t *Transmitter) drain(ctx context.Context, id string) (failed bool) {
 		if err != nil || len(events) == 0 {
 			return false
 		}
-		if retry := t.deliverOne(ctx, s, events[0]); retry {
+		if t.deliverOne(ctx, s, events[0]) {
 			return true
 		}
 	}

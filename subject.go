@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"net/url"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -36,6 +37,10 @@ const (
 	FormatIPAddresses     SubjectFormat = "ip-addresses"
 	FormatComplex         SubjectFormat = "complex"
 )
+
+// ipAddressesMember is the member holding an ip-addresses subject's
+// addresses (SSF 1.0 §3.5.3).
+const ipAddressesMember = "ip-addresses"
 
 // ErrInvalidSubject is wrapped by every error that reports a malformed or
 // incomplete subject.
@@ -506,7 +511,7 @@ func (s IPAddressesSubject) MarshalJSON() ([]byte, error) {
 	for i, a := range s.Addresses {
 		addrs[i] = a.String()
 	}
-	return encodeObject(s, member{"ip-addresses", addrs})
+	return encodeObject(s, member{ipAddressesMember, addrs})
 }
 
 // MarshalJSON implements json.Marshaler. Defined members are encoded in
@@ -629,7 +634,7 @@ func parseSubject(data []byte, depth int) (Subject, error) {
 		}
 		s = v
 	case FormatIPAddresses:
-		s, err = parseIPAddresses(obj["ip-addresses"])
+		s, err = parseIPAddresses(obj[ipAddressesMember])
 	case FormatAliases:
 		s, err = parseAliases(obj["identifiers"], depth)
 	case FormatComplex:
@@ -753,54 +758,47 @@ func SubjectsEqual(a, b Subject) bool {
 	}
 	switch x := a.(type) {
 	case AliasesSubject:
-		y := b.(AliasesSubject)
-		if len(x.Identifiers) != len(y.Identifiers) {
-			return false
-		}
-		for i := range x.Identifiers {
-			if !SubjectsEqual(x.Identifiers[i], y.Identifiers[i]) {
-				return false
-			}
-		}
-		return true
+		return slices.EqualFunc(x.Identifiers, b.(AliasesSubject).Identifiers, SubjectsEqual)
 	case IPAddressesSubject:
-		y := b.(IPAddressesSubject)
-		if len(x.Addresses) != len(y.Addresses) {
-			return false
-		}
-		for i := range x.Addresses {
-			if x.Addresses[i] != y.Addresses[i] {
-				return false
-			}
-		}
-		return true
+		return slices.Equal(x.Addresses, b.(IPAddressesSubject).Addresses)
 	case ComplexSubject:
-		ma, mb := x.members(), b.(ComplexSubject).members()
-		if len(ma) != len(mb) {
-			return false
-		}
-		for name, m := range ma {
-			if !SubjectsEqual(m, mb[name]) {
-				return false
-			}
-		}
-		return true
+		return complexEqual(x, b.(ComplexSubject))
 	case ProprietarySubject:
-		y := b.(ProprietarySubject)
-		if len(x.Members) != len(y.Members) {
-			return false
-		}
-		for k, v := range x.Members {
-			w, ok := y.Members[k]
-			if !ok || !jsonEqual(v, w) {
-				return false
-			}
-		}
-		return true
+		return proprietaryEqual(x, b.(ProprietarySubject))
 	default:
 		// Every remaining type is a comparable struct of strings.
 		return a == b
 	}
+}
+
+// complexEqual reports whether two complex subjects have the same members
+// with equal values.
+func complexEqual(a, b ComplexSubject) bool {
+	ma, mb := a.members(), b.members()
+	if len(ma) != len(mb) {
+		return false
+	}
+	for name, m := range ma {
+		if !SubjectsEqual(m, mb[name]) {
+			return false
+		}
+	}
+	return true
+}
+
+// proprietaryEqual reports whether two proprietary subjects have the same
+// members with equal JSON values.
+func proprietaryEqual(a, b ProprietarySubject) bool {
+	if len(a.Members) != len(b.Members) {
+		return false
+	}
+	for k, v := range a.Members {
+		w, ok := b.Members[k]
+		if !ok || !jsonEqual(v, w) {
+			return false
+		}
+	}
+	return true
 }
 
 // jsonEqual reports whether a and b encode the same JSON value. It compares
