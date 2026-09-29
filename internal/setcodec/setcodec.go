@@ -189,33 +189,56 @@ func decodeClaims(payload []byte, opts VerifyOptions) (ssf.SET, error) {
 	}
 
 	var set ssf.SET
+	if err := decodeIdentity(raw, opts, &set); err != nil {
+		return ssf.SET{}, err
+	}
+	iat, err := decodeIssuedAt(raw, opts)
+	if err != nil {
+		return ssf.SET{}, err
+	}
+	set.IssuedAt = iat
+	if err := decodeEvent(raw, opts, &set); err != nil {
+		return ssf.SET{}, err
+	}
+	if err := set.Validate(); err != nil {
+		return ssf.SET{}, &DecodeError{Code: CodeInvalidRequest, Err: err}
+	}
+	return set, nil
+}
+
+// decodeIdentity decodes "iss", "aud", "jti" and "txn", requiring the
+// issuer to match and the audience to include the Receiver's.
+func decodeIdentity(raw map[string]json.RawMessage, opts VerifyOptions, set *ssf.SET) error {
 	var err error
 	if set.Issuer, err = stringClaim(raw, "iss", true); err != nil {
-		return ssf.SET{}, err
+		return err
 	}
 	if set.Issuer != opts.Issuer {
-		return ssf.SET{}, reject(CodeInvalidIssuer, "iss %q does not match %q", set.Issuer, opts.Issuer)
+		return reject(CodeInvalidIssuer, "iss %q does not match %q", set.Issuer, opts.Issuer)
 	}
 	if set.Audience, err = audienceClaim(raw["aud"]); err != nil {
-		return ssf.SET{}, err
+		return err
 	}
 	if !slices.Contains(set.Audience, opts.Audience) {
-		return ssf.SET{}, reject(CodeInvalidAudience, "aud does not contain %q", opts.Audience)
+		return reject(CodeInvalidAudience, "aud does not contain %q", opts.Audience)
 	}
 	if set.JWTID, err = stringClaim(raw, "jti", true); err != nil {
-		return ssf.SET{}, err
+		return err
 	}
-	if set.TransactionID, err = stringClaim(raw, "txn", false); err != nil {
-		return ssf.SET{}, err
-	}
+	set.TransactionID, err = stringClaim(raw, "txn", false)
+	return err
+}
 
+// decodeIssuedAt decodes the required "iat", refusing one further in the
+// future than the allowed clock skew.
+func decodeIssuedAt(raw map[string]json.RawMessage, opts VerifyOptions) (time.Time, error) {
 	rawIat, ok := raw["iat"]
 	if !ok {
-		return ssf.SET{}, reject(CodeInvalidRequest, "claim \"iat\" is required")
+		return time.Time{}, reject(CodeInvalidRequest, "claim \"iat\" is required")
 	}
 	var iat ssf.NumericDate
 	if err := json.Unmarshal(rawIat, &iat); err != nil {
-		return ssf.SET{}, reject(CodeInvalidRequest, "iat: %w", err)
+		return time.Time{}, reject(CodeInvalidRequest, "iat: %w", err)
 	}
 	now, skew := time.Now, time.Minute
 	if opts.Now != nil {
@@ -225,16 +248,20 @@ func decodeClaims(payload []byte, opts VerifyOptions) (ssf.SET, error) {
 		skew = opts.MaxClockSkew
 	}
 	if iat.After(now().Add(skew)) {
-		return ssf.SET{}, reject(CodeInvalidRequest, "iat is in the future")
+		return time.Time{}, reject(CodeInvalidRequest, "iat is in the future")
 	}
-	set.IssuedAt = iat.Time
+	return iat.Time, nil
+}
 
+// decodeEvent decodes the single event in "events" and the subject, from
+// "sub_id" or, for legacy Transmitters when allowed, the event itself.
+func decodeEvent(raw map[string]json.RawMessage, opts VerifyOptions, set *ssf.SET) error {
 	var events map[ssf.EventType]json.RawMessage
 	if err := json.Unmarshal(raw["events"], &events); err != nil || events == nil {
-		return ssf.SET{}, reject(CodeInvalidRequest, "claim \"events\" must be a JSON object")
+		return reject(CodeInvalidRequest, "claim \"events\" must be a JSON object")
 	}
 	if len(events) != 1 {
-		return ssf.SET{}, reject(CodeInvalidRequest, "events must hold exactly one event, got %d", len(events))
+		return reject(CodeInvalidRequest, "events must hold exactly one event, got %d", len(events))
 	}
 
 	rawSub, ok := raw["sub_id"]
@@ -242,24 +269,21 @@ func decodeClaims(payload []byte, opts VerifyOptions) (ssf.SET, error) {
 		rawSub, ok = eventSubject(events)
 	}
 	if !ok {
-		return ssf.SET{}, reject(CodeInvalidRequest, "claim \"sub_id\" is required")
+		return reject(CodeInvalidRequest, "claim \"sub_id\" is required")
 	}
 	if opts.LegacySubjectType {
 		rawSub = normalizeSubjectType(rawSub)
 	}
+	var err error
 	if set.Subject, err = ssf.ParseSubject(rawSub); err != nil {
-		return ssf.SET{}, reject(CodeInvalidRequest, "sub_id: %w", err)
+		return reject(CodeInvalidRequest, "sub_id: %w", err)
 	}
 	for typ, payload := range events {
 		if set.Event, err = opts.Registry.Decode(typ, payload); err != nil {
-			return ssf.SET{}, &DecodeError{Code: CodeInvalidRequest, Err: err}
+			return &DecodeError{Code: CodeInvalidRequest, Err: err}
 		}
 	}
-
-	if err := set.Validate(); err != nil {
-		return ssf.SET{}, &DecodeError{Code: CodeInvalidRequest, Err: err}
-	}
-	return set, nil
+	return nil
 }
 
 // eventSubject returns the "subject" member of the single event object.

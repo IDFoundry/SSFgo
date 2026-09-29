@@ -24,6 +24,28 @@ var ErrUnsupportedEvent = errors.New("transmitter: event type is not in EventsSu
 // Emit returns once the SETs are queued. Delivery happens through each
 // stream's poll endpoint, or through Run for push streams.
 func (t *Transmitter) Emit(ctx context.Context, subject ssf.Subject, event ssf.Event) error {
+	if err := t.checkEmit(subject, event); err != nil {
+		return err
+	}
+	streams, err := t.cfg.Store.AllStreams(ctx)
+	if err != nil {
+		return fmt.Errorf("transmitter: emit: %w", err)
+	}
+	txn := randomID()
+	var errs []error
+	for _, s := range streams {
+		if err := t.emitTo(ctx, s, subject, event, txn); err != nil {
+			errs = append(errs, fmt.Errorf("stream %s: %w", s.ID, err))
+		}
+	}
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("transmitter: emit: %w", err)
+	}
+	return nil
+}
+
+// checkEmit validates an event and its subject before anything is queued.
+func (t *Transmitter) checkEmit(subject ssf.Subject, event ssf.Event) error {
 	if subject == nil || event == nil {
 		return errors.New("transmitter: Emit requires a subject and an event")
 	}
@@ -46,37 +68,31 @@ func (t *Transmitter) Emit(ctx context.Context, subject ssf.Subject, event ssf.E
 			return fmt.Errorf("transmitter: emit: %w", err)
 		}
 	}
+	return nil
+}
 
-	streams, err := t.cfg.Store.AllStreams(ctx)
+// emitTo queues event on stream s if the stream should get it: not
+// disabled, the event type delivered, the subject included, and
+// PermitEvent allowing it. A stream deleted meanwhile is skipped.
+func (t *Transmitter) emitTo(ctx context.Context, s storage.Stream, subject ssf.Subject, event ssf.Event, txn string) error {
+	if s.Status == ssf.StreamDisabled || !slices.Contains(s.EventsDelivered, event.EventType()) {
+		return nil
+	}
+	rules, err := t.cfg.Store.SubjectRules(ctx, s.ID)
+	if errors.Is(err, storage.ErrNotFound) {
+		return nil
+	}
 	if err != nil {
-		return fmt.Errorf("transmitter: emit: %w", err)
+		return err
 	}
-	txn := randomID()
-	var errs []error
-	for _, s := range streams {
-		if s.Status == ssf.StreamDisabled || !slices.Contains(s.EventsDelivered, event.EventType()) {
-			continue
-		}
-		rules, err := t.cfg.Store.SubjectRules(ctx, s.ID)
-		if errors.Is(err, storage.ErrNotFound) {
-			continue // deleted meanwhile
-		}
-		if err != nil {
-			errs = append(errs, fmt.Errorf("stream %s: %w", s.ID, err))
-			continue
-		}
-		if !t.includes(rules, subject) {
-			continue
-		}
-		if t.cfg.PermitEvent != nil && !t.cfg.PermitEvent(ctx, s.ReceiverID, subject, event) {
-			continue
-		}
-		if err := t.enqueue(ctx, s, subject, event, txn, false); err != nil && !errors.Is(err, storage.ErrNotFound) {
-			errs = append(errs, fmt.Errorf("stream %s: %w", s.ID, err))
-		}
+	if !t.includes(rules, subject) {
+		return nil
 	}
-	if err := errors.Join(errs...); err != nil {
-		return fmt.Errorf("transmitter: emit: %w", err)
+	if t.cfg.PermitEvent != nil && !t.cfg.PermitEvent(ctx, s.ReceiverID, subject, event) {
+		return nil
+	}
+	if err := t.enqueue(ctx, s, subject, event, txn, false); err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return err
 	}
 	return nil
 }

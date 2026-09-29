@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	// The database/sql drivers the tests open: "pgx" and "sqlite".
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 

@@ -42,20 +42,9 @@ type pollResponse struct {
 // and is returned again by later polls, until it is acknowledged.
 func (t *Transmitter) poll(w http.ResponseWriter, r *http.Request, rx Receiver) {
 	id := r.PathValue("stream_id")
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequestBytes))
+	req, err := readPollRequest(w, r)
 	if err != nil {
-		t.writeAPIError(w, r, "poll", badRequest("the request body could not be read: %v", err))
-		return
-	}
-	var req pollRequest
-	if len(body) > 0 {
-		if err := json.Unmarshal(body, &req); err != nil {
-			t.writeAPIError(w, r, "poll", badRequest("the request body must be a poll request object: %v", err))
-			return
-		}
-	}
-	if req.MaxEvents != nil && *req.MaxEvents < 0 {
-		t.writeAPIError(w, r, "poll", badRequest("maxEvents must not be negative"))
+		t.writeAPIError(w, r, "poll", err)
 		return
 	}
 	s, err := t.ownedStream(r, id, rx)
@@ -69,6 +58,47 @@ func (t *Transmitter) poll(w http.ResponseWriter, r *http.Request, rx Receiver) 
 	}
 	t.touch(r.Context(), s)
 
+	if err := t.acknowledge(r, id, req); err != nil {
+		t.writeAPIError(w, r, "poll", t.notFoundOr(err))
+		return
+	}
+	if req.MaxEvents != nil && *req.MaxEvents == 0 {
+		// Acknowledge-only request (RFC 8936 §2.4.2).
+		writeJSON(w, http.StatusOK, pollResponse{Sets: map[string]string{}})
+		return
+	}
+	resp, err := t.awaitSETs(r, id, req)
+	if err != nil {
+		t.writeAPIError(w, r, "poll", t.notFoundOr(err))
+		return
+	}
+	if resp != nil {
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// readPollRequest reads and checks a poll request body; an empty body is
+// a poll with every member at its default.
+func readPollRequest(w http.ResponseWriter, r *http.Request) (pollRequest, error) {
+	var req pollRequest
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequestBytes))
+	if err != nil {
+		return req, badRequest("the request body could not be read: %v", err)
+	}
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, &req); err != nil {
+			return req, badRequest("the request body must be a poll request object: %v", err)
+		}
+	}
+	if req.MaxEvents != nil && *req.MaxEvents < 0 {
+		return req, badRequest("maxEvents must not be negative")
+	}
+	return req, nil
+}
+
+// acknowledge removes the SETs a poll acknowledges or reports as rejected,
+// logging at most maxLoggedSetErrs of the rejections.
+func (t *Transmitter) acknowledge(r *http.Request, id string, req pollRequest) error {
 	done := slices.Clone(req.Ack)
 	logged := 0
 	for jti, e := range req.SetErrs {
@@ -81,19 +111,16 @@ func (t *Transmitter) poll(w http.ResponseWriter, r *http.Request, rx Receiver) 
 	if n := len(req.SetErrs); n > logged {
 		t.log.WarnContext(r.Context(), "ssf transmitter: receiver rejected further SETs", "stream_id", id, "count", n-logged)
 	}
-	if len(done) > 0 {
-		if err := t.cfg.Store.AckEvents(r.Context(), id, done); err != nil {
-			t.writeAPIError(w, r, "poll", t.notFoundOr(err))
-			return
-		}
+	if len(done) == 0 {
+		return nil
 	}
+	return t.cfg.Store.AckEvents(r.Context(), id, done)
+}
 
-	resp := pollResponse{Sets: map[string]string{}}
-	if req.MaxEvents != nil && *req.MaxEvents == 0 {
-		// Acknowledge-only request (RFC 8936 §2.4.2).
-		writeJSON(w, http.StatusOK, resp)
-		return
-	}
+// awaitSETs returns the SETs to answer a poll with, waiting up to
+// LongPollTimeout for one unless the Receiver asked to return
+// immediately. It returns nil, nil if the request was cancelled.
+func (t *Transmitter) awaitSETs(r *http.Request, id string, req pollRequest) (*pollResponse, error) {
 	limit := 0
 	if req.MaxEvents != nil {
 		limit = *req.MaxEvents + 1 // one extra, to report moreAvailable
@@ -103,18 +130,17 @@ func (t *Transmitter) poll(w http.ResponseWriter, r *http.Request, rx Receiver) 
 		wake := t.notify.wait(id)
 		events, err := t.deliverable(r, id, limit)
 		if err != nil {
-			t.writeAPIError(w, r, "poll", t.notFoundOr(err))
-			return
+			return nil, err
 		}
 		if len(events) > 0 || req.ReturnImmediately || !time.Now().Before(deadline) {
+			resp := &pollResponse{Sets: map[string]string{}}
 			if req.MaxEvents != nil && len(events) > *req.MaxEvents {
 				events, resp.MoreAvailable = events[:*req.MaxEvents], true
 			}
 			for _, e := range events {
 				resp.Sets[e.JTI] = e.SET
 			}
-			writeJSON(w, http.StatusOK, resp)
-			return
+			return resp, nil
 		}
 		timer := time.NewTimer(min(pollRecheck, time.Until(deadline)))
 		select {
@@ -122,7 +148,7 @@ func (t *Transmitter) poll(w http.ResponseWriter, r *http.Request, rx Receiver) 
 		case <-timer.C:
 		case <-r.Context().Done():
 			timer.Stop()
-			return
+			return nil, nil
 		}
 		timer.Stop()
 	}

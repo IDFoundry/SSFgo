@@ -33,9 +33,10 @@ func (t *Transmitter) readStatus(w http.ResponseWriter, r *http.Request, rx Rece
 // is not announced with a stream-updated event: §8.1.2 requires that only
 // for changes the Transmitter makes on its own.
 func (t *Transmitter) updateStatus(w http.ResponseWriter, r *http.Request, rx Receiver) {
+	const op = "update status"
 	obj, err := readObject(w, r)
 	if err != nil {
-		t.writeAPIError(w, r, "update status", err)
+		t.writeAPIError(w, r, op, err)
 		return
 	}
 	id, _, err := member[string](obj, "stream_id")
@@ -43,7 +44,7 @@ func (t *Transmitter) updateStatus(w http.ResponseWriter, r *http.Request, rx Re
 		err = badRequest("stream_id is required")
 	}
 	if err != nil {
-		t.writeAPIError(w, r, "update status", err)
+		t.writeAPIError(w, r, op, err)
 		return
 	}
 	status, _, err := member[ssf.StreamStatus](obj, "status")
@@ -51,12 +52,12 @@ func (t *Transmitter) updateStatus(w http.ResponseWriter, r *http.Request, rx Re
 		err = badRequest("status must be enabled, paused or disabled")
 	}
 	if err != nil {
-		t.writeAPIError(w, r, "update status", err)
+		t.writeAPIError(w, r, op, err)
 		return
 	}
 	reason, _, err := member[string](obj, "reason")
 	if err != nil {
-		t.writeAPIError(w, r, "update status", err)
+		t.writeAPIError(w, r, op, err)
 		return
 	}
 	s, err := t.updateOwned(r, id, rx, func(s *storage.Stream) error {
@@ -67,13 +68,13 @@ func (t *Transmitter) updateStatus(w http.ResponseWriter, r *http.Request, rx Re
 		return nil
 	})
 	if err != nil {
-		t.writeAPIError(w, r, "update status", err)
+		t.writeAPIError(w, r, op, err)
 		return
 	}
 	if status == ssf.StreamDisabled {
 		// A disabled stream holds no events (SSF 1.0 §8.1.2.1).
 		if err := t.cfg.Store.PurgeEvents(r.Context(), id); err != nil {
-			t.writeAPIError(w, r, "update status", t.notFoundOr(err))
+			t.writeAPIError(w, r, op, t.notFoundOr(err))
 			return
 		}
 	}

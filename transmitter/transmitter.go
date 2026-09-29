@@ -178,13 +178,13 @@ func (t *Transmitter) authorized(required Access, h handlerFunc) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		token := bearerToken(r)
 		if token == "" {
-			w.Header().Set("WWW-Authenticate", `Bearer`)
+			w.Header().Set(headerWWWAuthenticate, `Bearer`)
 			writeError(w, http.StatusUnauthorized, "invalid_request", "a bearer access token is required in the Authorization header")
 			return
 		}
 		rx, err := t.cfg.Authorize(r.Context(), token)
 		if errors.Is(err, ErrInvalidToken) {
-			w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+			w.Header().Set(headerWWWAuthenticate, `Bearer error="invalid_token"`)
 			writeError(w, http.StatusUnauthorized, "invalid_token", "the access token is invalid")
 			return
 		}
@@ -197,7 +197,7 @@ func (t *Transmitter) authorized(required Access, h handlerFunc) http.Handler {
 			return
 		}
 		if rx.Access < required {
-			w.Header().Set("WWW-Authenticate", `Bearer error="insufficient_scope"`)
+			w.Header().Set(headerWWWAuthenticate, `Bearer error="insufficient_scope"`)
 			writeError(w, http.StatusForbidden, "insufficient_scope", "the access token does not permit this operation")
 			return
 		}
@@ -219,6 +219,10 @@ type apiError struct {
 }
 
 func (e *apiError) Error() string { return e.description }
+
+// headerWWWAuthenticate is the RFC 6750 §3 challenge header sent with 401
+// and 403 responses.
+const headerWWWAuthenticate = "WWW-Authenticate"
 
 func badRequest(format string, args ...any) *apiError {
 	return &apiError{http.StatusBadRequest, "invalid_request", fmt.Sprintf(format, args...)}

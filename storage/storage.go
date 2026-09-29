@@ -135,10 +135,10 @@ type StreamStore interface {
 	// positive and the queue already holds that many SETs, it returns
 	// ErrQueueFull. The check and the append must be atomic.
 	Enqueue(ctx context.Context, streamID string, e QueuedEvent, maxQueued int) error
-	// PendingEvents returns up to max queued SETs, oldest first, without
-	// removing them. max <= 0 means no limit. With controlOnly set it
+	// PendingEvents returns up to limit queued SETs, oldest first, without
+	// removing them. limit <= 0 means no limit. With controlOnly set it
 	// returns only Control events.
-	PendingEvents(ctx context.Context, streamID string, max int, controlOnly bool) ([]QueuedEvent, error)
+	PendingEvents(ctx context.Context, streamID string, limit int, controlOnly bool) ([]QueuedEvent, error)
 	// AckEvents removes the queued SETs with the given JTIs. Unknown JTIs
 	// are ignored: a Receiver may acknowledge a SET twice.
 	AckEvents(ctx context.Context, streamID string, jtis []string) error

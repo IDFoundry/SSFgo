@@ -226,7 +226,7 @@ func TestSubjectsMatch(t *testing.T) {
 			if got := SubjectsMatch(c.a, c.b); got != c.want {
 				t.Errorf("SubjectsMatch = %v, want %v", got, c.want)
 			}
-			if got := SubjectsMatch(c.b, c.a); got != c.want {
+			if SubjectsMatch(c.b, c.a) != c.want {
 				t.Errorf("SubjectsMatch is not symmetric")
 			}
 		})
