@@ -1,0 +1,38 @@
+version: 2
+updates:
+  # The core module has no third-party dependencies (see go.mod), so this
+  # finds nothing today; it is enabled so a dependency added later is
+  # watched from the start.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+
+  # storage/sqlstore's database drivers (pgx, modernc.org/sqlite) and what
+  # they pull in. Its requirement on the core module is left alone: a
+  # replace directive points it at this repository, and the pseudo-version
+  # is moved deliberately when sqlstore is released.
+  - package-ecosystem: gomod
+    directory: /storage/sqlstore
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: github.com/idfoundry/ssfgo
+    groups:
+      sqlstore:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # The third-party actions pinned by commit SHA and GitHub's own actions
+  # pinned by major version, across ci.yml, conformance.yml and fuzz.yml.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  # The conformance suite's Python script dependencies, pinned with hashes
+  # for conformance.yml.
+  - package-ecosystem: pip
+    directory: /conformance/scripts
+    schedule:
+      interval: weekly

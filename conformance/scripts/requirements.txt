@@ -1,7 +1,7 @@
 # Pinned, hash-checked dependencies of the OIDF conformance suite's
 # scripts/run-test-plan.py (its own requirements.txt lists httpx and
-# pyparsing unpinned). Update deliberately: pip download the new wheels
-# and replace the hashes.
+# pyparsing unpinned). Dependabot proposes updates with new hashes; to
+# update by hand, pip download the new wheels and replace the hashes.
 anyio==4.15.1 --hash=sha256:6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101
 certifi==2026.7.22 --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
 h11==0.16.0 --hash=sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86
