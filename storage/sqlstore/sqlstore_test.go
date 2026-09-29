@@ -34,12 +34,12 @@ const postgresEnv = "SSFGO_TEST_POSTGRES"
 var ctx = context.Background()
 
 // openSQLite opens a new, empty SQLite database with its schema.
-func openSQLite(t *testing.T) *sql.DB {
+func openSQLite(t testing.TB) *sql.DB {
 	t.Helper()
 	return openSQLiteAt(t, filepath.Join(t.TempDir(), "ssf.db"))
 }
 
-func openSQLiteAt(t *testing.T, path string) *sql.DB {
+func openSQLiteAt(t testing.TB, path string) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)")
 	if err != nil {
@@ -54,7 +54,7 @@ func openSQLiteAt(t *testing.T, path string) *sql.DB {
 
 // openPostgres opens a connection to a new, empty PostgreSQL schema with
 // the tables created in it, and drops the schema when the test ends.
-func openPostgres(t *testing.T) *sql.DB {
+func openPostgres(t testing.TB) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv(postgresEnv)
 	if dsn == "" {
@@ -94,7 +94,7 @@ func openPostgres(t *testing.T) *sql.DB {
 var dialects = []struct {
 	name    string
 	dialect sqlstore.Dialect
-	open    func(*testing.T) *sql.DB
+	open    func(testing.TB) *sql.DB
 }{
 	{"SQLite", sqlstore.SQLite, openSQLite},
 	{"Postgres", sqlstore.Postgres, openPostgres},
