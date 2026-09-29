@@ -13,6 +13,13 @@ self-signed TLS certificate, and a minimal client-credentials OAuth server
 for the suite to obtain access tokens from. The OAuth server is test
 scaffolding, not part of the library.
 
+The same harness runs on durable storage:
+[`storage/sqlstore/cmd/conformance-transmitter`](../storage/sqlstore/cmd/conformance-transmitter)
+passes it `storage/sqlstore` instead of in-memory storage, on a new SQLite
+database by default or on PostgreSQL with `-postgres`. `run.sh` picks it
+with `STORE=sqlite` or `STORE=postgres` (with `POSTGRES_URL`), and the daily
+workflow runs the Transmitter matrix on both memory and SQLite.
+
 The harness also turns on SSFgo's optional features the suite can
 observe: a Transmitter-initiated verification event on every new stream,
 which the suite logs as accepted, and a one-hour `inactivity_timeout`,

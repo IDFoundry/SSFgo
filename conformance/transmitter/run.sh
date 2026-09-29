@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Runs an OIDF SSF Transmitter test plan against cmd/conformance-transmitter.
+# Runs an OIDF SSF Transmitter test plan against cmd/conformance-transmitter,
+# or against storage/sqlstore/cmd/conformance-transmitter (see STORE).
 #
 # Usage: run.sh [static|dynamic] [poll|push] [module,module,...]
 #
@@ -16,6 +17,8 @@
 #   PLAN                        test plan (default openid-ssf-transmitter-caep-test-plan)
 #   PORT                        harness port (default 9443)
 #   WORKDIR                     where logs and results go (default a temp dir)
+#   STORE                       memory (default), sqlite (a new database per run),
+#                               or postgres (the database at POSTGRES_URL)
 set -euo pipefail
 
 auth="${1:-dynamic}"
@@ -40,7 +43,7 @@ static_token="ssfgo-static-$RANDOM$RANDOM"
 variants="[ssf_delivery_mode=$delivery][ssf_server_metadata=discovery][ssf_auth_mode=$auth]"
 case "$auth" in
 static) ;;
-dynamic) variants="$variants[server_metadata=discovery][client_registration=static_client][client_auth_type=client_secret_basic]" ;;
+dynamic) variants="${variants}[server_metadata=discovery][client_registration=static_client][client_auth_type=client_secret_basic]" ;;
 *) echo "auth must be static or dynamic" >&2; exit 2 ;;
 esac
 
@@ -48,9 +51,21 @@ config="$workdir/config-$auth.json"
 sed -e "s#{ORIGIN}#$origin#g" -e "s#{ISSUER_PATH}#$issuer_path#g" -e "s#{STATIC_TOKEN}#$static_token#g" \
 	"$repo/conformance/transmitter/config-$auth.json" >"$config"
 
-(cd "$repo" && go build -o "$workdir/conformance-transmitter" ./cmd/conformance-transmitter)
+store_args=()
+case "${STORE:-memory}" in
+memory) (cd "$repo" && go build -o "$workdir/conformance-transmitter" ./cmd/conformance-transmitter) ;;
+sqlite | postgres)
+	(cd "$repo/storage/sqlstore" && go build -o "$workdir/conformance-transmitter" ./cmd/conformance-transmitter)
+	if [[ "$STORE" == sqlite ]]; then
+		store_args=(-sqlite "$workdir/ssf.db")
+	else
+		store_args=(-postgres "${POSTGRES_URL:?STORE=postgres needs POSTGRES_URL}")
+	fi
+	;;
+*) echo "STORE must be memory, sqlite or postgres" >&2; exit 2 ;;
+esac
 "$workdir/conformance-transmitter" -addr ":$port" -issuer "$origin$issuer_path" -static-token "$static_token" -insecure-push-tls \
-	>"$workdir/transmitter.log" 2>&1 &
+	${store_args[@]+"${store_args[@]}"} >"$workdir/transmitter.log" 2>&1 &
 harness=$!
 trap 'kill $harness 2>/dev/null || true' EXIT
 

@@ -1,4 +1,4 @@
-package main
+package txharness
 
 import (
 	"context"
@@ -84,7 +84,10 @@ func TestAuthServer(t *testing.T) {
 }
 
 func TestSupportedEventsExcludeDeprecatedAndSSFEvents(t *testing.T) {
-	events := supportedEvents()
+	events, err := supportedEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(events) != 8+13 {
 		t.Errorf("%d events, want 21 (8 CAEP + 13 non-deprecated RISC)", len(events))
 	}

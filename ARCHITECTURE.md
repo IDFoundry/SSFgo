@@ -28,14 +28,16 @@ github.com/idfoundry/ssfgo     // package ssf: shared value types only
 ├── storage/                   // storage contracts
 │   ├── memstore/              // in-memory implementation
 │   ├── sqlstore/              // PostgreSQL and SQLite (a separate module)
+│   │   └── cmd/conformance-transmitter/ // the conformance Transmitter on sqlstore
 │   └── storagetest/           // exported contract tests for third-party backends
 ├── internal/
 │   ├── jose/                  // minimal JWS: RS256, PS256, ES256, EdDSA; JWK/JWKS
 │   ├── critical/              // RFC 7515 "crit" check
 │   ├── setcodec/              // SET encode (sign) / decode (verify) per SSF §4
 │   ├── clientassertion/       // RFC 7523 client assertions (HS256 kept out of jose)
+│   ├── conformance/txharness/ // the conformance Transmitter, on any StreamStore
 │   └── testcert/              // throwaway TLS certificates for the harnesses
-├── cmd/conformance-transmitter/ // Transmitter wired up for the OIDF suite
+├── cmd/conformance-transmitter/ // the conformance Transmitter on memstore
 ├── cmd/conformance-receiver/  // drives the Receiver through OIDF Receiver plans
 ├── examples/session-revocation/ // both roles in one process
 └── conformance/               // suite configs, run scripts, recorded results
@@ -252,7 +254,7 @@ since equal subjects can be encoded differently.
 | Verification on a disabled stream | 204, but nothing is queued (§8.1.2.1: disabled holds no events) |
 | `min_verification_interval` exceeded | 429 with `Retry-After` |
 
-The conformance harness in `cmd/conformance-transmitter` adds a minimal
+The conformance harness in `internal/conformance/txharness` adds a minimal
 client-credentials token endpoint for the suite; it is not part of the
 library.
 
