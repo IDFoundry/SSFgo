@@ -321,6 +321,9 @@ func TestSetStreamStatus(t *testing.T) {
 		if !ssf.SubjectsEqual(set.Subject, ssf.OpaqueSubject{ID: c.StreamID}) {
 			t.Errorf("sub_id = %v", set.Subject)
 		}
+		if set.TransactionID == "" {
+			t.Error("stream-updated SET has no txn")
+		}
 	}
 	r := f.do("GET", f.metadata().StatusEndpoint+"?stream_id="+c.StreamID, "alice", nil)
 	var st ssf.StreamState

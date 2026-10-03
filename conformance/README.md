@@ -93,8 +93,9 @@ waits for the Receiver to act. [`cmd/conformance-receiver`](../cmd/conformance-r
 drives that: it creates the plan, and for each module reads the emulated
 Transmitter's issuer and credentials from the suite API ("exposed
 values"), then runs one SSFgo Receiver session — discover, create a
-stream, read it and its status, request verification, take delivery until
-events stop, delete the stream. Push deliveries arrive on a self-signed
+stream, read it and its status, request verification (again every 15s
+until one is accepted), take delivery until events stop, delete the
+stream. Push deliveries arrive on a self-signed
 HTTPS listener the suite reaches at `https://host.docker.internal:9444`.
 
 ```bash
@@ -120,14 +121,18 @@ configuration). All four pass the create-delete and verification modules
 
 [`scripts/run-all.sh`](scripts/run-all.sh) runs the whole matrix — both
 roles, every variant, every client authentication method — and prints one
-summary, treating the documented suite defect below as expected.
+summary.
 `.github/workflows/conformance.yml` runs it daily and on demand.
 
-### Results — v0.4
+### Results
 
-Run 2026-09-26 against the suite's `latest` prebuilt image.
+Transmitter: v0.4, run 2026-09-26 against the suite's `latest` prebuilt
+image, and still passing every module on both stores on 2026-10-03.
 
-**CAEP Interop Receiver plan:**
+**CAEP Interop Receiver plan** — rerun 2026-10-03 against upstream master
+(2026-09-30), which added the verification-wrong-state and -wrong-subject
+modules and fixed the millisecond `event_timestamp` the caep-interop module
+used to send:
 
 | Module | static · poll | static · push | dynamic · poll | dynamic · push |
 |---|---|---|---|---|
@@ -135,26 +140,19 @@ Run 2026-09-26 against the suite's `latest` prebuilt image.
 | openid-ssf-receiver-stream-verification | PASSED | PASSED | PASSED | PASSED |
 | openid-ssf-receiver-unsolicited-stream-verification | PASSED | PASSED | PASSED | PASSED |
 | openid-ssf-receiver-stream-supported-events | PASSED | PASSED | PASSED | PASSED |
-| openid-ssf-receiver-stream-caep-interop | FAILED² | FAILED² | FAILED² | FAILED² |
+| openid-ssf-receiver-invalid-set-rejection | PASSED | PASSED | PASSED | PASSED |
+| openid-ssf-receiver-verification-wrong-state | PASSED | PASSED | PASSED | PASSED |
+| openid-ssf-receiver-verification-wrong-subject | PASSED | PASSED | PASSED | PASSED |
+| openid-ssf-receiver-stream-issuer-mismatch | PASSED | PASSED | PASSED | PASSED |
+| openid-ssf-receiver-verification-behind-queued-events | PASSED | PASSED | PASSED | PASSED |
+| openid-ssf-receiver-redelivered-set | PASSED | PASSED | PASSED | PASSED |
+| openid-ssf-receiver-access-token-expiry | — | — | PASSED | PASSED |
+| openid-ssf-receiver-stream-caep-interop | PASSED | PASSED | PASSED | PASSED |
 
 **Base SSF Receiver plan**, `openid-ssf-receiver-stream-supported-events`
 with CAEP and RISC registered: PASSED for poll and push. Each run
 delivered 23 distinct event types — verification, all 8 CAEP and all 14
 RISC types — every one verified, handled and acknowledged.
-
-² **Conformance suite defect, not an SSFgo one.**
-`OIDSSFReceiverStreamCaepInteropTest.afterInitialStreamVerification`
-sets `event_timestamp` from `System.currentTimeMillis()` (line 183, still
-so on upstream master), so every CAEP event it generates carries a
-timestamp in **milliseconds**, e.g. `1790407364112`. CAEP 1.0 §2 defines
-`event_timestamp` as a JSON number of **seconds**, the suite's own
-Transmitter-side check (`OIDSSFValidateCaepCommonOptionalFields`) says the
-same, and the suite's supported-events test correctly uses
-`Instant.now().getEpochSecond()`. SSFgo rejects the malformed SETs —
-`invalid_request: NumericDate 1790407364112 is out of range` — as 400 on
-push and in `setErrs` on poll, so the module records them as not
-acknowledged. The one-line fix in the suite is
-`Instant.now().getEpochSecond()`.
 
 **Subjects for the base plan.** The supported-events test sends every
 event about every configured subject, including RISC `identifier-changed`

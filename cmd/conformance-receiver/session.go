@@ -18,6 +18,14 @@ import (
 	"github.com/idfoundry/ssfgo/storage/memstore"
 )
 
+const (
+	// verificationRetry is how long a session waits for a verification
+	// event before it requests another.
+	verificationRetry = 15 * time.Second
+	// cleanupTimeout bounds the final acknowledgement and stream deletion.
+	cleanupTimeout = 30 * time.Second
+)
+
 // session is one Receiver run against one test module's emulated
 // Transmitter.
 type session struct {
@@ -107,6 +115,7 @@ func (s *session) run(ctx context.Context) error {
 	if _, err := rx.RequestVerification(ctx, stream.StreamID); err != nil {
 		return fmt.Errorf("request verification: %w", err)
 	}
+	lastRequest := time.Now()
 
 	// Take delivery until the module is satisfied, or events stop.
 	lastCount, lastChange := int64(-1), time.Now()
@@ -116,6 +125,15 @@ func (s *session) run(ctx context.Context) error {
 				slog.Warn("poll", "module", s.moduleID, "error", err)
 			}
 		}
+		// The verification-wrong-state and -wrong-subject modules answer
+		// the first request with an event the Receiver must reject, and
+		// only a later request with one it accepts.
+		if !s.verification.Load() && time.Since(lastRequest) > verificationRetry {
+			if _, err := rx.RequestVerification(ctx, stream.StreamID); err != nil {
+				slog.Warn("request verification again", "module", s.moduleID, "error", err)
+			}
+			lastRequest = time.Now()
+		}
 		if n := s.events.Load(); n != lastCount {
 			lastCount, lastChange = n, time.Now()
 		}
@@ -124,6 +142,10 @@ func (s *session) run(ctx context.Context) error {
 		}
 		time.Sleep(time.Second)
 	}
+	// Clean up even when the module ran out of time: most modules finish
+	// only once the stream is deleted.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+	defer cancel()
 	if s.o.delivery == "poll" {
 		if err := rx.Acknowledge(ctx, stream); err != nil {
 			slog.Warn("final acknowledgement", "module", s.moduleID, "error", err)

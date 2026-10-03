@@ -26,10 +26,9 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for what v1 guarantees.
 
 The full matrix runs daily in CI (`conformance/scripts/run-all.sh`):
 every module of the CAEP Interop Transmitter plan passes in all four
-auth × delivery variants; the Receiver passes every module except
-`openid-ssf-receiver-stream-caep-interop`, which fails because of a
-conformance-suite defect (millisecond `event_timestamp`), documented in
-[conformance/README.md](conformance/README.md).
+auth × delivery variants, on both the in-memory and SQLite stores, and so
+does every module of the CAEP Interop Receiver plan, as of the suite's
+2026-09-30 master. See [conformance/README.md](conformance/README.md).
 
 ### Added since v0.5
 
@@ -102,6 +101,9 @@ each finding was reproduced by a failing test before it was fixed.
   (`critical_subject_members`) and the Receiver does not process is
   rejected instead of handled. New `receiver.Config.SubjectMembers` lists
   non-standard members the application does process.
+- Every SET the Transmitter sends now carries a `txn` (SSF 1.0 §4.1.9).
+  Verification and stream-updated SETs used to omit it, which the
+  conformance suite now warns about; each gets a `txn` of its own.
 
 ### Changed since v0.5
 
