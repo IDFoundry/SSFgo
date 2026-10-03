@@ -53,12 +53,10 @@ Transmitter plan passes in all four auth × delivery variants — see
 
 **Exit:** CAEP Interop Receiver plan passes for {push, poll} × {static,
 dynamic}; base Receiver supported-events test passes with CAEP + RISC
-registered. Met except `openid-ssf-receiver-stream-caep-interop`, which
-fails in every variant because the suite sends `event_timestamp` in
-milliseconds (CAEP 1.0 §2 requires seconds) — see
-[conformance/README.md](conformance/README.md). Everything else passes in
-all four variants, and the base supported-events test passes for push and
-poll.
+registered. Met in full since 2026-10-03, when the suite fixed the
+millisecond `event_timestamp` that had failed
+`openid-ssf-receiver-stream-caep-interop` — see
+[conformance/README.md](conformance/README.md).
 
 ## v0.5 — Hardening ✅
 

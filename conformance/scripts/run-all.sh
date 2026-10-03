@@ -11,9 +11,6 @@
 #
 # A Transmitter variant that fails is retried once: the suite occasionally
 # cannot connect to the harness at all (see conformance/README.md).
-# openid-ssf-receiver-stream-caep-interop is an expected failure — a
-# conformance-suite defect documented in conformance/README.md.
-#
 # Prerequisites: the suite running (docker compose -f
 # docker-compose-prebuilt.yml up -d, plus suite-host-gateway.override.yml on
 # Linux) and its script requirements installed for $PYTHON.
@@ -90,10 +87,9 @@ run_receiver() { # name, driver args...
 	grep -E '^(PASSED|FAILED|WARNING|ERROR|TIMEOUT|INTERRUPTED|REVIEW|SKIPPED)' "$log" | sed 's/^/    /'
 	return 0
 }
-expected=openid-ssf-receiver-stream-caep-interop
 for auth in static dynamic; do
 	for delivery in poll push; do
-		run_receiver "$auth/$delivery" -auth "$auth" -delivery "$delivery" -expected-failures "$expected"
+		run_receiver "$auth/$delivery" -auth "$auth" -delivery "$delivery"
 	done
 done
 for ca in client_secret_post client_secret_jwt private_key_jwt; do

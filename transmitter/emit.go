@@ -157,13 +157,19 @@ func (t *Transmitter) setStatus(ctx context.Context, streamID string, status ssf
 	return nil
 }
 
-// enqueue signs one SET for stream s and queues it. Unless control is set,
-// a disabled stream drops it (SSF 1.0 §8.1.2.1).
+// enqueue signs one SET for stream s and queues it. An empty txn gets a
+// fresh one. Unless control is set, a disabled stream drops it
+// (SSF 1.0 §8.1.2.1).
 func (t *Transmitter) enqueue(ctx context.Context, s storage.Stream, subject ssf.Subject, event ssf.Event, txn string, control bool) error {
 	if s.Status == ssf.StreamDisabled && !control {
 		return nil
 	}
 	jti := randomID()
+	if txn == "" {
+		// A SET with no related SETs is its own transaction. Giving it a
+		// txn anyway lets a Receiver correlate every SET the same way.
+		txn = randomID()
+	}
 	now := t.now()
 	token, err := setcodec.Encode(t.signer, ssf.SET{
 		Issuer:        t.cfg.Issuer,

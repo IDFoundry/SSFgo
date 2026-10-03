@@ -32,6 +32,9 @@ func TestSendVerification(t *testing.T) {
 	if !ssf.SubjectsEqual(set.Subject, ssf.OpaqueSubject{ID: c.StreamID}) {
 		t.Errorf("sub_id = %v", set.Subject)
 	}
+	if set.TransactionID == "" {
+		t.Error("verification SET has no txn")
+	}
 	// Not limited by min_verification_interval, which applies to Receivers.
 	if err := f.tx.SendVerification(ctx, c.StreamID); err != nil {
 		t.Errorf("second SendVerification: %v", err)
