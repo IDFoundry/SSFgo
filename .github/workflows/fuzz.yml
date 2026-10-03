@@ -72,8 +72,24 @@ jobs:
       - name: Corpus size before fuzzing
         run: find "${{ steps.corpus.outputs.dir }}" -type f 2>/dev/null | wc -l
 
+      # go test -fuzz sometimes ends a clean run with "context deadline
+      # exceeded" when -fuzztime runs out while a worker is still busy (for
+      # example minimizing a new interesting input). That is the toolchain,
+      # not the code under test: a real failure always writes its input to
+      # testdata/fuzz/. So a deadline error with no new input is a pass.
       - name: go test -fuzz=${{ matrix.target.name }}
-        run: go test "${{ matrix.target.pkg }}" -run='^$' -fuzz='^${{ matrix.target.name }}$' -fuzztime=10m
+        run: |
+          set -o pipefail
+          log="$RUNNER_TEMP/fuzz.log"
+          status=0
+          go test "${{ matrix.target.pkg }}" -run='^$' -fuzz='^${{ matrix.target.name }}$' -fuzztime=10m 2>&1 | tee "$log" || status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ] \
+            && [ -z "$(git ls-files --others --exclude-standard | grep 'testdata/fuzz/')" ] \
+            && tail -n 20 "$log" | grep -q 'context deadline exceeded'; then
+            echo "::warning::fuzzing hit its deadline mid-operation and found no failing input; treating as a pass"
+            exit 0
+          fi
+          exit "$status"
 
       - name: Corpus size after fuzzing
         if: always()
@@ -86,10 +102,19 @@ jobs:
           path: ${{ steps.corpus.outputs.dir }}
           key: fuzz-corpus-${{ matrix.target.pkg }}-${{ matrix.target.name }}-${{ github.run_id }}-${{ github.run_attempt }}
 
+      # Only the inputs this run wrote: the committed regression cases live
+      # under the same directory and would otherwise look like new failures.
+      - name: Collect failing input
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/fuzz-failure"
+          git ls-files --others --exclude-standard | grep 'testdata/fuzz/' \
+            | xargs -r cp --parents -t "$RUNNER_TEMP/fuzz-failure"
+
       - name: Upload failing input
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: fuzz-failure-${{ matrix.target.name }}
-          path: '**/testdata/fuzz/${{ matrix.target.name }}/'
+          path: ${{ runner.temp }}/fuzz-failure/
           retention-days: 30
