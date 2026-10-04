@@ -8,8 +8,10 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
+	"slices"
 
 	ssf "github.com/idfoundry/ssfgo"
 )
@@ -175,6 +177,9 @@ func parseOKPPublicKey(raw rawJWK) (crypto.PublicKey, error) {
 	if err != nil || len(x) != ed25519.PublicKeySize {
 		return nil, fmt.Errorf("jose: jwk x must be %d base64url bytes for Ed25519", ed25519.PublicKeySize)
 	}
+	if hasSmallOrder(x) {
+		return nil, errSmallOrderKey
+	}
 	return ed25519.PublicKey(x), nil
 }
 
@@ -206,6 +211,9 @@ func ValidateKeyForAlgorithm(pub crypto.PublicKey, alg ssf.SignatureAlgorithm) e
 		if len(key) != ed25519.PublicKeySize {
 			return fmt.Errorf("jose: EdDSA requires a %d-byte Ed25519 public key, got %d", ed25519.PublicKeySize, len(key))
 		}
+		if hasSmallOrder(key) {
+			return errSmallOrderKey
+		}
 	default:
 		return fmt.Errorf("jose: unsupported algorithm %v", alg)
 	}
@@ -236,4 +244,42 @@ func decodeExponent(s string) (int, error) {
 		return 0, fmt.Errorf("exponent out of range or not a valid RSA public exponent")
 	}
 	return int(v), nil
+}
+
+var errSmallOrderKey = errors.New("jose: Ed25519 public key is a point of small order, for which signatures can be forged")
+
+// smallOrder holds every encoding of an Ed25519 point of small order —
+// the eight points of order 1, 2, 4 and 8, and the non-canonical encodings
+// p and p+1 — with the sign bit cleared (libsodium's blocklist). With such
+// a public key, one signature verifies for many messages.
+var smallOrder = [][32]byte{
+	{0x00}, // order 4
+	{0x01}, // the identity, order 1
+	{0x26, 0xe8, 0x95, 0x8f, 0xc2, 0xb2, 0x27, 0xb0, 0x45, 0xc3, 0xf4, 0x89, 0xf2, 0xef, 0x98, 0xf0,
+		0xd5, 0xdf, 0xac, 0x05, 0xd3, 0xc6, 0x33, 0x39, 0xb1, 0x38, 0x02, 0x88, 0x6d, 0x53, 0xfc, 0x05}, // order 8
+	{0xc7, 0x17, 0x6a, 0x70, 0x3d, 0x4d, 0xd8, 0x4f, 0xba, 0x3c, 0x0b, 0x76, 0x0d, 0x10, 0x67, 0x0f,
+		0x2a, 0x20, 0x53, 0xfa, 0x2c, 0x39, 0xcc, 0xc6, 0x4e, 0xc7, 0xfd, 0x77, 0x92, 0xac, 0x03, 0x7a}, // order 8
+	ffff(0xec), // p-1: order 2
+	ffff(0xed), // p: non-canonical 0, order 4
+	ffff(0xee), // p+1: non-canonical 1, order 1
+}
+
+// ffff is first followed by 30 0xff bytes and 0x7f.
+func ffff(first byte) [32]byte {
+	var b [32]byte
+	b[0] = first
+	for i := 1; i < 31; i++ {
+		b[i] = 0xff
+	}
+	b[31] = 0x7f
+	return b
+}
+
+// hasSmallOrder reports whether key encodes a point of small order,
+// whichever its sign bit.
+func hasSmallOrder(key []byte) bool {
+	var k [32]byte
+	copy(k[:], key)
+	k[31] &= 0x7f
+	return slices.Contains(smallOrder, k)
 }

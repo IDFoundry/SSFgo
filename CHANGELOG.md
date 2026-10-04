@@ -123,6 +123,11 @@ each finding was reproduced by a failing test before it was fixed.
   site-local, discard-only and benchmarking IPv6 ranges, and NAT64's
   `64:ff9b::/32` beyond the well-known prefix. New
   `transmitter.PublicAddressControl` lets a custom push client keep it.
+- Ed25519 public keys of small order, for which one signature verifies
+  for many messages, are refused. A compact JWS must use strict
+  base64url, so a signed token has a single encoding, and its header is
+  read by exact member names, refusing repeated members and an empty
+  `crit`.
 - Storage contract: `CreateOptions.MaxStreamsPerReceiver` replaces
   `SingleStreamPerReceiver` (`ErrTooManyStreams` replaces
   `ErrReceiverHasStream`); `SetSubjectRule` and `Enqueue` take a limit
