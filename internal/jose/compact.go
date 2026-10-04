@@ -68,6 +68,25 @@ type Compact struct {
 	signature    []byte
 }
 
+// b64 decodes compact JWS segments strictly: unpadded base64url whose
+// unused bits are zero. Together with isBase64URL this gives every
+// segment exactly one encoding, so a signed token cannot be re-encoded
+// into a different string that still verifies.
+var b64 = base64.RawURLEncoding.Strict()
+
+// isBase64URL reports whether s uses only the base64url alphabet. The
+// decoder alone would skip CR and LF.
+func isBase64URL(s string) bool {
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case 'A' <= c && c <= 'Z', 'a' <= c && c <= 'z', '0' <= c && c <= '9', c == '-', c == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // ParseCompact splits and decodes a compact JWS without verifying its
 // signature, rejecting one longer than DefaultMaxCompactBytes.
 func ParseCompact(s string) (Compact, error) {
@@ -88,7 +107,12 @@ func ParseCompactMax(s string, maxBytes int) (Compact, error) {
 		return Compact{}, ErrMalformed
 	}
 
-	headerJSON, err := base64.RawURLEncoding.DecodeString(headerB64)
+	for _, part := range parts {
+		if !isBase64URL(part) {
+			return Compact{}, fmt.Errorf("%w: a segment has a character outside the base64url alphabet", ErrMalformed)
+		}
+	}
+	headerJSON, err := b64.DecodeString(headerB64)
 	if err != nil {
 		return Compact{}, fmt.Errorf("%w: header: %v", ErrMalformed, err)
 	}
@@ -96,11 +120,11 @@ func ParseCompactMax(s string, maxBytes int) (Compact, error) {
 	if err != nil {
 		return Compact{}, err
 	}
-	payload, err := base64.RawURLEncoding.DecodeString(payloadB64)
+	payload, err := b64.DecodeString(payloadB64)
 	if err != nil {
 		return Compact{}, fmt.Errorf("%w: payload: %v", ErrMalformed, err)
 	}
-	sig, err := base64.RawURLEncoding.DecodeString(sigB64)
+	sig, err := b64.DecodeString(sigB64)
 	if err != nil {
 		return Compact{}, fmt.Errorf("%w: signature: %v", ErrMalformed, err)
 	}
