@@ -146,7 +146,7 @@ func (m *StreamStore) SetSubjectRule(_ context.Context, streamID string, rule st
 	}
 	for i, have := range e.rules {
 		if ssf.SubjectsEqual(have.Subject, rule.Subject) {
-			e.rules[i].Included = rule.Included
+			e.rules = append(slices.Delete(e.rules, i, i+1), rule)
 			return nil
 		}
 	}

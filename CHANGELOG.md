@@ -108,6 +108,21 @@ each finding was reproduced by a failing test before it was fixed.
 - `interop.ValidateEvent` now also requires a non-empty `reason_admin` on
   device-compliance-change (CAEP Interop §3.3), and checks events passed
   by pointer, which used to skip the `reason_admin` check entirely.
+- A subject re-added to a stream could stay excluded: a replaced subject
+  rule kept its original position, so a later rule for a broader subject
+  still decided (SSF 1.0 §8.1.3). A replaced rule is now the newest. This
+  changes the `storage.StreamStore` contract for `SetSubjectRule` and
+  `SubjectRules`; `memstore`, `sqlstore` and `storagetest` follow it.
+- The Receiver could lose a SET redelivered while its first copy was still
+  being handled: the retry was acknowledged at once, and if the handling
+  then failed nothing redelivered it. A redelivery now waits for the first
+  copy's outcome and reports it (RFC 8935 §2).
+- A nil `receiver.StreamRequest.Delivery` now sends poll explicitly instead
+  of leaving out `delivery`, which SSF 1.0 §8.1.1 makes required.
+- `UpdateStream`, `ReplaceStream` and `SetStatus` return the new
+  `receiver.ErrNotProcessed` when the Transmitter answers 202 "accepted,
+  not processed" (SSF 1.0 §8.1.1.3, §8.1.1.4, §8.1.2.2), instead of a
+  generic `*APIError`.
 - Every SET the Transmitter sends now carries a `txn` (SSF 1.0 §4.1.9).
   Verification and stream-updated SETs used to omit it, which the
   conformance suite now warns about; each gets a `txn` of its own.

@@ -20,7 +20,8 @@ type StreamRequest struct {
 	// Delivery is how SETs should reach the Receiver. For push, set
 	// Method, EndpointURL and optionally AuthorizationHeader; for poll,
 	// set only Method — the Transmitter supplies the endpoint. Nil asks
-	// for poll, the SSF default.
+	// for poll: the request then names poll explicitly, since SSF 1.0
+	// §8.1.1 makes "delivery" required.
 	Delivery *ssf.Delivery
 	// EventsRequested defaults to every event type in the Registry
 	// except SSF's own verification and stream-updated events, which are
@@ -45,7 +46,11 @@ func (r *Receiver) wire(id string, req StreamRequest) streamRequestWire {
 			}
 		}
 	}
-	return streamRequestWire{StreamID: id, EventsRequested: events, Delivery: req.Delivery, Description: req.Description}
+	delivery := req.Delivery
+	if delivery == nil {
+		delivery = &ssf.Delivery{Method: ssf.DeliveryPoll}
+	}
+	return streamRequestWire{StreamID: id, EventsRequested: events, Delivery: delivery, Description: req.Description}
 }
 
 // ErrIssuerMismatch is returned, together with the stream, when a stream's
@@ -114,7 +119,8 @@ type StreamUpdate struct {
 	Description     *string
 }
 
-// UpdateStream applies update with PATCH (SSF 1.0 §8.1.1.3).
+// UpdateStream applies update with PATCH (SSF 1.0 §8.1.1.3). A 202 from
+// the Transmitter returns ErrNotProcessed.
 func (r *Receiver) UpdateStream(ctx context.Context, streamID string, update StreamUpdate) (ssf.StreamConfiguration, error) {
 	body := map[string]any{"stream_id": streamID}
 	if update.EventsRequested != nil {
@@ -127,7 +133,7 @@ func (r *Receiver) UpdateStream(ctx context.Context, streamID string, update Str
 		body["description"] = *update.Description
 	}
 	var c ssf.StreamConfiguration
-	if err := r.call(ctx, http.MethodPatch, r.metadata.ConfigurationEndpoint, body, &c, http.StatusOK); err != nil {
+	if err := r.call(ctx, http.MethodPatch, r.metadata.ConfigurationEndpoint, body, &c, http.StatusOK, http.StatusAccepted); err != nil {
 		return ssf.StreamConfiguration{}, err
 	}
 	return c, r.checkStream(c)
@@ -135,10 +141,11 @@ func (r *Receiver) UpdateStream(ctx context.Context, streamID string, update Str
 
 // ReplaceStream replaces every Receiver-supplied property with PUT
 // (SSF 1.0 §8.1.1.4). Unlike CreateStream, a nil EventsRequested is sent
-// as the Registry's event types.
+// as the Registry's event types. A 202 from the Transmitter returns
+// ErrNotProcessed.
 func (r *Receiver) ReplaceStream(ctx context.Context, streamID string, req StreamRequest) (ssf.StreamConfiguration, error) {
 	var c ssf.StreamConfiguration
-	if err := r.call(ctx, http.MethodPut, r.metadata.ConfigurationEndpoint, r.wire(streamID, req), &c, http.StatusOK); err != nil {
+	if err := r.call(ctx, http.MethodPut, r.metadata.ConfigurationEndpoint, r.wire(streamID, req), &c, http.StatusOK, http.StatusAccepted); err != nil {
 		return ssf.StreamConfiguration{}, err
 	}
 	return c, r.checkStream(c)
@@ -164,12 +171,15 @@ func (r *Receiver) Status(ctx context.Context, streamID string) (ssf.StreamState
 }
 
 // SetStatus asks the Transmitter to change a stream's status
-// (SSF 1.0 §8.1.2.2).
+// (SSF 1.0 §8.1.2.2). A 202 from the Transmitter returns ErrNotProcessed.
 func (r *Receiver) SetStatus(ctx context.Context, streamID string, status ssf.StreamStatus, reason string) (ssf.StreamState, error) {
 	var s ssf.StreamState
 	err := r.call(ctx, http.MethodPost, r.metadata.StatusEndpoint,
-		ssf.StreamState{StreamID: streamID, Status: status, Reason: reason}, &s, http.StatusOK)
-	return s, err
+		ssf.StreamState{StreamID: streamID, Status: status, Reason: reason}, &s, http.StatusOK, http.StatusAccepted)
+	if err != nil {
+		return ssf.StreamState{}, err
+	}
+	return s, nil
 }
 
 // AddSubject asks for events about subject on a stream (SSF 1.0

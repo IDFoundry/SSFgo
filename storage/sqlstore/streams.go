@@ -292,17 +292,25 @@ func (m *StreamStore) SetSubjectRule(ctx context.Context, streamID string, rule 
 		// JSON: equal subjects can be encoded differently.
 		for i, have := range rules {
 			if ssf.SubjectsEqual(have.Subject, rule.Subject) {
-				_, err := q.ExecContext(ctx, m.d.rebind(`UPDATE ssf_subject_rules SET included = ? WHERE seq = ?`), rule.Included, seqs[i])
-				return err
+				// Re-insert rather than update, so the rule takes a new,
+				// highest seq and is the newest.
+				if _, err := q.ExecContext(ctx, m.d.rebind(`DELETE FROM ssf_subject_rules WHERE seq = ?`), seqs[i]); err != nil {
+					return err
+				}
+				return m.insertRule(ctx, q, streamID, subject, rule.Included)
 			}
 		}
 		if maxRules > 0 && len(rules) >= maxRules {
 			return storage.ErrTooManySubjectRules
 		}
-		_, err = q.ExecContext(ctx, m.d.rebind(`INSERT INTO ssf_subject_rules (stream_id, subject, included) VALUES (?, ?, ?)`),
-			streamID, string(subject), rule.Included)
-		return err
+		return m.insertRule(ctx, q, streamID, subject, rule.Included)
 	})
+}
+
+func (m *StreamStore) insertRule(ctx context.Context, q querier, streamID string, subject []byte, included bool) error {
+	_, err := q.ExecContext(ctx, m.d.rebind(`INSERT INTO ssf_subject_rules (stream_id, subject, included) VALUES (?, ?, ?)`),
+		streamID, string(subject), included)
+	return err
 }
 
 // SubjectRules implements storage.StreamStore.

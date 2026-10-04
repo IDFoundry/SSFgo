@@ -76,19 +76,70 @@ func (r *Receiver) process(ctx context.Context, token string) (string, error) {
 		return set.JWTID, &rejectedSET{code: setcodec.CodeInvalidRequest,
 			description: "the SET is older than the Receiver's replay window"}
 	}
+	// A redelivery that arrives while this Receiver is still handling the
+	// first copy waits for that outcome and reports it, as it would have
+	// had the SET not been received before (RFC 8935 §2): acknowledging it
+	// at once would lose the SET if the handling then failed.
+	h, first := r.startHandling(set)
+	if !first {
+		select {
+		case <-h.done:
+			return set.JWTID, h.err
+		case <-ctx.Done():
+			return set.JWTID, ctx.Err()
+		}
+	}
+	defer r.finishHandling(set, h)
 	fresh, err := r.cfg.ReplayStore.MarkSET(ctx, set.Issuer, set.JWTID, expires.Add(r.cfg.MaxClockSkew))
 	if err != nil {
-		return set.JWTID, fmt.Errorf("receiver: replay store: %w", err)
+		h.err = fmt.Errorf("receiver: replay store: %w", err)
+		return set.JWTID, h.err
 	}
 	if !fresh {
-		// A redelivery (RFC 8935 §2, RFC 8936 §2.4): acknowledge it again
-		// without handling it twice.
+		// A redelivery (RFC 8935 §2, RFC 8936 §2.4) of a SET already
+		// handled: acknowledge it again without handling it twice.
+		h.err = nil
 		return set.JWTID, nil
 	}
-	if err := r.dispatchOrForget(ctx, set); err != nil {
-		return set.JWTID, err
+	h.err = r.dispatchOrForget(ctx, set)
+	return set.JWTID, h.err
+}
+
+// setKey identifies a SET across Transmitters.
+type setKey struct{ issuer, jti string }
+
+// errHandlingAborted is what a waiting redelivery reports when the first
+// copy's handling ended without an outcome — a handler panic — so that the
+// Transmitter retries rather than taking the SET as handled.
+var errHandlingAborted = errors.New("receiver: handling of an earlier copy of this SET did not complete")
+
+// handling is one SET being handled; done is closed once err is final.
+type handling struct {
+	done chan struct{}
+	err  error
+}
+
+// startHandling registers set as being handled by this Receiver. If another
+// copy of it already is, it returns that handling and false instead. Only
+// copies reaching the same Receiver value are coordinated; across
+// processes the ReplayStore alone de-duplicates.
+func (r *Receiver) startHandling(set ssf.SET) (*handling, bool) {
+	key := setKey{set.Issuer, set.JWTID}
+	r.inflightMu.Lock()
+	defer r.inflightMu.Unlock()
+	if h, ok := r.inflight[key]; ok {
+		return h, false
 	}
-	return set.JWTID, nil
+	h := &handling{done: make(chan struct{}), err: errHandlingAborted}
+	r.inflight[key] = h
+	return h, true
+}
+
+func (r *Receiver) finishHandling(set ssf.SET, h *handling) {
+	r.inflightMu.Lock()
+	delete(r.inflight, setKey{set.Issuer, set.JWTID})
+	r.inflightMu.Unlock()
+	close(h.done)
 }
 
 // dispatchOrForget runs dispatch and, if it fails or panics, forgets the
