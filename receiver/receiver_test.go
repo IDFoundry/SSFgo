@@ -1,6 +1,7 @@
 package receiver_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -510,6 +511,47 @@ func TestPushReplayAndRetry(t *testing.T) {
 	}
 }
 
+func TestPushRedeliveryDuringHandling(t *testing.T) {
+	e := newEnv(t)
+	started, release := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	receiver.On(e.rx, func(context.Context, ssf.SET, caep.SessionRevoked) error {
+		if calls.Add(1) == 1 {
+			close(started)
+			<-release
+			return errors.New("handler failed")
+		}
+		return nil
+	})
+	h := e.rx.PushHandler(receiver.PushOptions{})
+	token := sign(t, e, nil)
+
+	// The Transmitter gives up on a slow first delivery and retries while
+	// it is still being handled. The retry must not be acknowledged before
+	// the first copy's outcome is known (RFC 8935 §2).
+	first := make(chan pushResult, 1)
+	go func() { first <- push(t, h, "", token) }()
+	<-started
+	retry := make(chan pushResult, 1)
+	go func() { retry <- push(t, h, "", token) }()
+	select {
+	case got := <-retry:
+		t.Fatalf("retry answered %d while the first copy was being handled", got.status)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	if got := <-first; got.status != 500 {
+		t.Errorf("first delivery: %d, want 500", got.status)
+	}
+	if got := <-retry; got.status != 500 {
+		t.Errorf("retry during the failed handling: %d, want 500 so the Transmitter retries again", got.status)
+	}
+	// The next retry is handled afresh.
+	if got := push(t, h, "", token); got.status != 202 || calls.Load() != 2 {
+		t.Errorf("later retry: %d after %d handler calls, want 202 after 2", got.status, calls.Load())
+	}
+}
+
 func TestKeyRotation(t *testing.T) {
 	now := time.Now()
 	e := newEnv(t, func(c *receiver.Config) { c.Now = func() time.Time { return now } })
@@ -707,6 +749,71 @@ func TestIssuerMismatch(t *testing.T) {
 	// The caller can still remove the stream it refused.
 	if err := e.rx.DeleteStream(ctx, c.StreamID); err != nil {
 		t.Errorf("DeleteStream: %v", err)
+	}
+}
+
+func TestNilDeliveryRequestsPoll(t *testing.T) {
+	e := newEnv(t)
+	var bodies []map[string]any
+	tx := e.txSrv.Config.Handler
+	e.txSrv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost || r.Method == http.MethodPut {
+			raw, _ := io.ReadAll(r.Body)
+			var body map[string]any
+			if json.Unmarshal(raw, &body) == nil {
+				bodies = append(bodies, body)
+			}
+			r.Body = io.NopCloser(bytes.NewReader(raw))
+		}
+		tx.ServeHTTP(w, r)
+	})
+	ctx := context.Background()
+	c, err := e.rx.CreateStream(ctx, receiver.StreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.rx.ReplaceStream(ctx, c.StreamID, receiver.StreamRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	// "delivery" is required (SSF 1.0 §8.1.1): a nil Delivery is sent as
+	// poll, not left for the Transmitter to default.
+	if len(bodies) != 2 {
+		t.Fatalf("saw %d create/replace requests, want 2", len(bodies))
+	}
+	for i, body := range bodies {
+		d, _ := body["delivery"].(map[string]any)
+		if d["method"] != string(ssf.DeliveryPoll) {
+			t.Errorf("request %d delivery = %v, want poll", i, body["delivery"])
+		}
+	}
+}
+
+func TestNotProcessed(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	c, err := e.rx.CreateStream(ctx, receiver.StreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The Transmitter accepts every change but cannot decide yet
+	// (SSF 1.0 §8.1.1.3, §8.1.1.4, §8.1.2.2).
+	tx := e.txSrv.Config.Handler
+	e.txSrv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			tx.ServeHTTP(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	})
+	desc := "changed"
+	if _, err := e.rx.UpdateStream(ctx, c.StreamID, receiver.StreamUpdate{Description: &desc}); !errors.Is(err, receiver.ErrNotProcessed) {
+		t.Errorf("UpdateStream = %v, want ErrNotProcessed", err)
+	}
+	if _, err := e.rx.ReplaceStream(ctx, c.StreamID, receiver.StreamRequest{}); !errors.Is(err, receiver.ErrNotProcessed) {
+		t.Errorf("ReplaceStream = %v, want ErrNotProcessed", err)
+	}
+	if s, err := e.rx.SetStatus(ctx, c.StreamID, ssf.StreamPaused, ""); !errors.Is(err, receiver.ErrNotProcessed) || s.Status != "" {
+		t.Errorf("SetStatus = %+v, %v; want an empty state and ErrNotProcessed", s, err)
 	}
 }
 

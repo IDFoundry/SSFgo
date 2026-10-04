@@ -121,14 +121,17 @@ type StreamStore interface {
 	// queued events.
 	DeleteStream(ctx context.Context, id string) error
 
-	// SetSubjectRule records rule on a stream, replacing any earlier rule
-	// for an equal subject (by ssf.SubjectsEqual) rather than adding a
-	// second one. If maxRules is positive and adding a new rule would
-	// exceed it, it returns ErrTooManySubjectRules; replacing a rule is
-	// always allowed. The check and the write must be atomic.
+	// SetSubjectRule records rule on a stream as its newest rule,
+	// removing any earlier rule for an equal subject (by
+	// ssf.SubjectsEqual) rather than keeping a second one: the newest
+	// matching rule decides, so a re-added subject must not stay behind a
+	// later rule for a broader one. If maxRules is positive and adding a
+	// new rule would exceed it, it returns ErrTooManySubjectRules;
+	// replacing a rule is always allowed. The check and the write must be
+	// atomic.
 	SetSubjectRule(ctx context.Context, streamID string, rule SubjectRule, maxRules int) error
 	// SubjectRules returns a stream's rules, oldest first. A replaced
-	// rule keeps its original position.
+	// rule counts as new.
 	SubjectRules(ctx context.Context, streamID string) ([]SubjectRule, error)
 
 	// Enqueue appends a SET to a stream's delivery queue. If maxQueued is

@@ -35,6 +35,9 @@ type Receiver struct {
 
 	pollMu sync.Mutex
 	acks   map[string]*pendingAcks // stream ID -> acknowledgements for the next poll
+
+	inflightMu sync.Mutex
+	inflight   map[setKey]*handling // SETs being handled right now
 }
 
 // maxResponseBytes bounds every response read from the Transmitter.
@@ -58,6 +61,7 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 		handlers: map[ssf.EventType]HandlerFunc{},
 		states:   map[string][]string{},
 		acks:     map[string]*pendingAcks{},
+		inflight: map[setKey]*handling{},
 	}
 	wellKnown, err := ssf.WellKnownURL(cfg.Issuer)
 	if err != nil {
@@ -215,6 +219,13 @@ func (e *APIError) Is(target error) bool {
 // advertise the endpoint an operation needs.
 var ErrUnsupported = errors.New("receiver: the transmitter does not support this operation")
 
+// ErrNotProcessed is returned by UpdateStream, ReplaceStream and SetStatus
+// when the Transmitter answers 202: it accepted the request but has not
+// processed it yet (SSF 1.0 §8.1.1.3, §8.1.1.4, §8.1.2.2). The returned
+// configuration or state is empty; the caller may repeat the request later
+// to learn the outcome.
+var ErrNotProcessed = errors.New("receiver: the transmitter accepted the request but has not processed it yet")
+
 // call makes an authorized JSON request to a Transmitter endpoint and
 // decodes the response into out if out is non-nil. want lists acceptable
 // status codes. A 401 makes it fetch a fresh token and retry once.
@@ -243,6 +254,9 @@ func (r *Receiver) call(ctx context.Context, method, endpoint string, in, out an
 	}
 	if !slices.Contains(want, status) {
 		return &APIError{Method: method, URL: endpoint, StatusCode: status, Body: string(respBody)}
+	}
+	if status == http.StatusAccepted {
+		return ErrNotProcessed
 	}
 	if out == nil || len(respBody) == 0 {
 		return nil

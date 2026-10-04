@@ -262,6 +262,35 @@ func TestEmitWithDefaultSubjectsNone(t *testing.T) {
 	}
 }
 
+func TestReaddedSubjectAfterBroaderRemoval(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	c := pollStream(f, "alice")
+	email := map[string]any{"format": "email", "email": "alice@example.com"}
+	narrow := map[string]any{"format": "complex", "user": email, "tenant": map[string]any{"format": "opaque", "id": "tenant-1"}}
+	subject := func(endpoint string, s map[string]any, status int) {
+		t.Helper()
+		expect(t, f.do("POST", endpoint, "alice", map[string]any{"stream_id": c.StreamID, "subject": s}), status)
+	}
+	// Add the narrow subject, remove a broader one that covers it, then
+	// add the narrow one again: the newest matching rule decides, so its
+	// events are delivered (SSF 1.0 §8.1.3.1, §8.1.3.2).
+	subject(f.metadata().AddSubjectEndpoint, narrow, http.StatusOK)
+	subject(f.metadata().RemoveSubjectEndpoint, map[string]any{"format": "complex", "user": email}, http.StatusNoContent)
+	subject(f.metadata().AddSubjectEndpoint, narrow, http.StatusOK)
+
+	if err := f.tx.Emit(ctx, ssf.ComplexSubject{User: alice, Tenant: ssf.OpaqueSubject{ID: "tenant-1"}}, revoked()); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tx.Emit(ctx, ssf.ComplexSubject{User: alice, Tenant: ssf.OpaqueSubject{ID: "tenant-2"}}, revoked()); err != nil {
+		t.Fatal(err)
+	}
+	q, _ := f.store.PendingEvents(ctx, c.StreamID, 0, false)
+	if len(q) != 1 {
+		t.Fatalf("got %d SETs, want only the re-added tenant-1 event", len(q))
+	}
+}
+
 func TestEmitRejects(t *testing.T) {
 	sentinel := errors.New("profile says no")
 	f := newFixture(t, func(c *transmitter.Config) {

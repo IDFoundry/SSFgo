@@ -278,29 +278,35 @@ func testSubjectRules(t *testing.T, st storage.StreamStore) {
 	a := ssf.EmailSubject{Email: "a@example.com"}
 	b := ssf.ComplexSubject{User: ssf.OpaqueSubject{ID: "u"}, Tenant: ssf.OpaqueSubject{ID: "t"}}
 	bReordered := ssf.ComplexSubject{Tenant: ssf.OpaqueSubject{ID: "t"}, User: ssf.OpaqueSubject{ID: "u"}}
-	for _, r := range []storage.SubjectRule{
-		{Subject: a, Included: true},
-		{Subject: b, Included: true},
-		{Subject: a, Included: false},
-		{Subject: bReordered, Included: true},
-	} {
+	set := func(r storage.SubjectRule) {
+		t.Helper()
 		if err := st.SetSubjectRule(ctx, "s1", r, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
-	rules, err := st.SubjectRules(ctx, "s1")
-	if err != nil {
-		t.Fatal(err)
+	want := func(step string, first, second storage.SubjectRule) {
+		t.Helper()
+		rules, err := st.SubjectRules(ctx, "s1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rules) != 2 {
+			t.Fatalf("%s: SubjectRules = %v, want one rule per distinct subject", step, rules)
+		}
+		for i, w := range []storage.SubjectRule{first, second} {
+			if !ssf.SubjectsEqual(rules[i].Subject, w.Subject) || rules[i].Included != w.Included {
+				t.Errorf("%s: rule %d = %+v, want %+v", step, i, rules[i], w)
+			}
+		}
 	}
-	if len(rules) != 2 {
-		t.Fatalf("SubjectRules = %v, want one rule per distinct subject", rules)
-	}
-	if !ssf.SubjectsEqual(rules[0].Subject, a) || rules[0].Included {
-		t.Errorf("rule 0 = %+v, want a excluded (replaced in place)", rules[0])
-	}
-	if !ssf.SubjectsEqual(rules[1].Subject, b) || !rules[1].Included {
-		t.Errorf("rule 1 = %+v, want b included", rules[1])
-	}
+	set(storage.SubjectRule{Subject: a, Included: true})
+	set(storage.SubjectRule{Subject: b, Included: true})
+	// Replacing a rule makes it the newest.
+	set(storage.SubjectRule{Subject: a, Included: false})
+	want("after replacing a", storage.SubjectRule{Subject: b, Included: true}, storage.SubjectRule{Subject: a, Included: false})
+	// Equal subjects are matched by ssf.SubjectsEqual, not encoding.
+	set(storage.SubjectRule{Subject: bReordered, Included: false})
+	want("after replacing b", storage.SubjectRule{Subject: a, Included: false}, storage.SubjectRule{Subject: b, Included: false})
 }
 
 func testQueue(t *testing.T, st storage.StreamStore) {

@@ -7,9 +7,8 @@ capabilities with a focus on standards compliance and interoperability.
 > **Status: API frozen for v1.0, not yet released.** Both roles are
 > implemented; once `v1.0.0` is tagged the API is covered by
 > [COMPATIBILITY.md](COMPATIBILITY.md). The Transmitter passes every
-> module of the OIDF CAEP Interoperability Profile Transmitter plan; the
-> Receiver passes every module of the Receiver plan except one blocked by
-> a conformance-suite defect — see
+> module of the OIDF CAEP Interoperability Profile Transmitter plan, and
+> the Receiver every module of the Receiver plan — see
 > [conformance/README.md](conformance/README.md). The full matrix runs
 > daily in CI. OIDF has not yet opened SSF certification. See
 > [ROADMAP.md](ROADMAP.md).
