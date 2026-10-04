@@ -14,7 +14,10 @@ const (
 	// AccessNone grants nothing: every request is refused with 403.
 	AccessNone Access = iota
 	// AccessRead allows reading stream configurations and statuses — the
-	// CAEP Interoperability Profile's "ssf.read" scope (§2.7.3).
+	// CAEP Interoperability Profile's "ssf.read" scope (§2.7.3) — and
+	// polling a poll stream, acknowledgements included: for poll delivery
+	// it is the credential events are delivered on. Configurations read
+	// with it omit the push delivery's authorization_header.
 	AccessRead
 	// AccessManage allows every operation — the "ssf.manage" scope.
 	AccessManage

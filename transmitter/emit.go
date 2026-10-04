@@ -88,7 +88,7 @@ func (t *Transmitter) emitTo(ctx context.Context, s storage.Stream, subject ssf.
 	if !t.includes(rules, subject) {
 		return nil
 	}
-	if t.cfg.PermitEvent != nil && !t.cfg.PermitEvent(ctx, s.ReceiverID, subject, event) {
+	if !t.cfg.PermitEvent(ctx, s.ReceiverID, subject, event) {
 		return nil
 	}
 	if err := t.enqueue(ctx, s, subject, event, txn, false); err != nil && !errors.Is(err, storage.ErrNotFound) {
@@ -114,8 +114,9 @@ func (t *Transmitter) includes(rules []storage.SubjectRule, subject ssf.Subject)
 // initiative — for example an operator pausing a misbehaving Receiver —
 // and tells the Receiver with a stream-updated event (SSF 1.0 §8.1.5).
 // While a status set this way is paused or disabled, the Receiver cannot
-// change it (its status update gets 403, SSF 1.0 §8.1.2.2); setting the
-// stream enabled again releases it.
+// change it (its status update gets 403, SSF 1.0 §8.1.2.2), delete the
+// stream, or create another; setting the stream enabled again releases it.
+// To cut a Receiver off for good, stop authorizing its credentials.
 // That event is delivered even though the stream is no longer enabled.
 // Disabling a stream first discards everything queued on it. Setting the current
 // status again does nothing.

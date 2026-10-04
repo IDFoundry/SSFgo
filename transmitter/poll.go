@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"sync"
 	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
@@ -67,6 +68,16 @@ func (t *Transmitter) poll(w http.ResponseWriter, r *http.Request, rx Receiver) 
 		writeJSON(w, http.StatusOK, pollResponse{Sets: map[string]string{}})
 		return
 	}
+	if !req.ReturnImmediately {
+		// One long poll per stream waits at a time; another is answered
+		// at once, as RFC 8936 §2.5 allows, so a Receiver cannot tie up
+		// any number of requests rechecking storage every second.
+		if t.polling.start(id) {
+			defer t.polling.end(id)
+		} else {
+			req.ReturnImmediately = true
+		}
+	}
 	resp, err := t.awaitSETs(r, id, req)
 	if err != nil {
 		t.writeAPIError(w, r, "poll", t.notFoundOr(err))
@@ -117,6 +128,29 @@ func (t *Transmitter) acknowledge(r *http.Request, id string, req pollRequest) e
 	return t.cfg.Store.AckEvents(r.Context(), id, done)
 }
 
+// longPolls tracks which streams have a long poll waiting.
+type longPolls struct {
+	mu     sync.Mutex
+	active map[string]bool
+}
+
+// start marks stream id as long-polled, unless it already is.
+func (l *longPolls) start(id string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.active[id] {
+		return false
+	}
+	l.active[id] = true
+	return true
+}
+
+func (l *longPolls) end(id string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.active, id)
+}
+
 // awaitSETs returns the SETs to answer a poll with, waiting up to
 // LongPollTimeout for one unless the Receiver asked to return
 // immediately. It returns nil, nil if the request was cancelled.
@@ -127,12 +161,14 @@ func (t *Transmitter) awaitSETs(r *http.Request, id string, req pollRequest) (*p
 	}
 	deadline := time.Now().Add(t.cfg.LongPollTimeout)
 	for {
-		wake := t.notify.wait(id)
+		wake, done := t.notify.wait(id)
 		events, err := t.deliverable(r, id, limit)
 		if err != nil {
+			done()
 			return nil, err
 		}
 		if len(events) > 0 || req.ReturnImmediately || !time.Now().Before(deadline) {
+			done()
 			resp := &pollResponse{Sets: map[string]string{}}
 			if req.MaxEvents != nil && len(events) > *req.MaxEvents {
 				events, resp.MoreAvailable = events[:*req.MaxEvents], true
@@ -148,9 +184,11 @@ func (t *Transmitter) awaitSETs(r *http.Request, id string, req pollRequest) (*p
 		case <-timer.C:
 		case <-r.Context().Done():
 			timer.Stop()
+			done()
 			return nil, nil
 		}
 		timer.Stop()
+		done()
 	}
 }
 

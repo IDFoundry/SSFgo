@@ -92,6 +92,8 @@ func run(ctx context.Context, w io.Writer) error {
 	var rpServer atomic.Pointer[httptest.Server] // the relying party, created below
 
 	txCfg := transmitter.Config{
+
+		PermitEvent:     transmitter.PermitAll,
 		Issuer:          issuer,
 		SigningKeys:     []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "idp-2026"}},
 		EventsSupported: interop.EventTypes(),

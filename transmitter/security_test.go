@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/transmitter"
@@ -119,5 +120,98 @@ func TestPushSettingsValidated(t *testing.T) {
 		if r := f.do("POST", url, "alice", map[string]any{"delivery": delivery}); r.status != http.StatusBadRequest {
 			t.Errorf("%s: status %d, want 400", name, r.status)
 		}
+	}
+}
+
+// A Receiver cannot escape a status the Transmitter set by deleting the
+// stream and creating another.
+func TestOperatorStatusLockSurvivesRecreate(t *testing.T) {
+	for _, multiple := range []bool{false, true} {
+		f := newFixture(t, func(c *transmitter.Config) { c.MultipleStreamsPerReceiver = multiple })
+		ctx := context.Background()
+		c := pollStream(f, "bob")
+		if err := f.tx.SetStreamStatus(ctx, c.StreamID, ssf.StreamDisabled, "abuse"); err != nil {
+			t.Fatal(err)
+		}
+		md := f.metadata()
+		expect(t, f.do("DELETE", md.ConfigurationEndpoint+"?stream_id="+c.StreamID, "bob", nil), http.StatusForbidden)
+		expect(t, f.do("POST", md.ConfigurationEndpoint, "bob", map[string]any{"delivery": map[string]any{"method": ssf.DeliveryPoll}}), http.StatusForbidden)
+
+		// Once the Transmitter re-enables the stream, both are allowed.
+		if err := f.tx.SetStreamStatus(ctx, c.StreamID, ssf.StreamEnabled, ""); err != nil {
+			t.Fatal(err)
+		}
+		expect(t, f.do("DELETE", md.ConfigurationEndpoint+"?stream_id="+c.StreamID, "bob", nil), http.StatusNoContent)
+		pollStream(f, "bob")
+	}
+}
+
+// Subject rules are bounded in size, and an include rule cannot be a
+// complex subject made only of members no event carries, which would
+// match every complex subject.
+func TestSubjectRuleChecks(t *testing.T) {
+	f := newFixture(t, func(c *transmitter.Config) { c.DefaultSubjects = ssf.DefaultSubjectsNone })
+	c := pollStream(f, "alice")
+	md := f.metadata()
+	rule := func(endpoint string, subject any, status int) {
+		t.Helper()
+		expect(t, f.do("POST", endpoint, "alice", map[string]any{"stream_id": c.StreamID, "subject": subject}), status)
+	}
+	var ids []any
+	for i := range 200 {
+		ids = append(ids, map[string]any{"format": "email", "email": fmt.Sprintf("user-%03d@example.com", i)})
+	}
+	huge := map[string]any{"format": "aliases", "identifiers": ids}
+	rule(md.AddSubjectEndpoint, huge, http.StatusBadRequest)
+	rule(md.RemoveSubjectEndpoint, huge, http.StatusBadRequest)
+
+	opaque := map[string]any{"format": "opaque", "id": "x"}
+	rule(md.AddSubjectEndpoint, map[string]any{"format": "complex", "zz": opaque}, http.StatusBadRequest)
+	rule(md.AddSubjectEndpoint, map[string]any{"format": "complex", "tenant": opaque, "zz": opaque}, http.StatusOK)
+	// Excluding is always allowed: it can only narrow what is delivered.
+	rule(md.RemoveSubjectEndpoint, map[string]any{"format": "complex", "zz": opaque}, http.StatusNoContent)
+}
+
+// A read-only token does not see the push endpoint's credential.
+func TestReadOnlyTokenCannotReadPushCredential(t *testing.T) {
+	f := newFixture(t)
+	c := f.create("alice", pushBody())
+	url := f.metadata().ConfigurationEndpoint
+	var one ssf.StreamConfiguration
+	f.do("GET", url+"?stream_id="+c.StreamID, "alice-readonly", nil).json(t, &one)
+	var all []ssf.StreamConfiguration
+	f.do("GET", url, "alice-readonly", nil).json(t, &all)
+	if one.Delivery.AuthorizationHeader != "" || len(all) != 1 || all[0].Delivery.AuthorizationHeader != "" {
+		t.Errorf("read-only token read authorization_header %q / %v", one.Delivery.AuthorizationHeader, all)
+	}
+	var managed ssf.StreamConfiguration
+	f.do("GET", url+"?stream_id="+c.StreamID, "alice", nil).json(t, &managed)
+	if managed.Delivery.AuthorizationHeader != "Bearer push-token" {
+		t.Errorf("manage token read authorization_header %q", managed.Delivery.AuthorizationHeader)
+	}
+}
+
+// Only one long poll per stream waits at a time; another is answered at
+// once, so a Receiver cannot tie up any number of waiting requests.
+func TestOneLongPollPerStream(t *testing.T) {
+	f := newFixture(t, func(c *transmitter.Config) { c.LongPollTimeout = 2 * time.Second })
+	c := pollStream(f, "alice")
+	first := make(chan struct{})
+	go func() {
+		defer close(first)
+		f.do("POST", c.Delivery.EndpointURL, "alice", map[string]any{"returnImmediately": false})
+	}()
+	time.Sleep(200 * time.Millisecond) // the first poll is waiting
+	start := time.Now()
+	f.poll(c, "alice", map[string]any{"returnImmediately": false})
+	if took := time.Since(start); took > time.Second {
+		t.Errorf("a second long poll on the stream waited %v", took)
+	}
+	<-first
+	// With the first done, the next long poll waits again.
+	start = time.Now()
+	f.poll(c, "alice", map[string]any{"returnImmediately": false})
+	if took := time.Since(start); took < time.Second {
+		t.Errorf("a long poll with none other waiting returned after %v", took)
 	}
 }

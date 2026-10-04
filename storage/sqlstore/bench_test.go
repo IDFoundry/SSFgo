@@ -114,6 +114,7 @@ func BenchmarkEmit(b *testing.B) {
 				b.Fatal(err)
 			}
 			tx, err := transmitter.New(transmitter.Config{
+				PermitEvent:     transmitter.PermitAll,
 				Issuer:          "https://tx.example",
 				SigningKeys:     []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "k1"}},
 				EventsSupported: []ssf.EventType{caep.SessionRevokedEventType},

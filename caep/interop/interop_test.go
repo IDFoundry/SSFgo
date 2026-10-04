@@ -23,6 +23,7 @@ func config(t *testing.T) transmitter.Config {
 		t.Fatal(err)
 	}
 	return transmitter.Config{
+		PermitEvent:     transmitter.PermitAll,
 		Issuer:          "https://tx.example",
 		SigningKeys:     []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "k"}},
 		EventsSupported: []ssf.EventType{caep.SessionRevokedEventType},

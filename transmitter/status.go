@@ -9,6 +9,8 @@ import (
 
 var errStatusLocked = &apiError{http.StatusForbidden, "status_locked", "the Transmitter has set this stream's status and it cannot be changed by the Receiver"}
 
+var errReceiverLocked = &apiError{http.StatusForbidden, "status_locked", "the Transmitter has paused or disabled a stream of this Receiver, which may not create another until it is re-enabled"}
+
 func stateOf(s storage.Stream) ssf.StreamState {
 	return ssf.StreamState{StreamID: s.ID, Status: s.Status, Reason: s.StatusReason}
 }

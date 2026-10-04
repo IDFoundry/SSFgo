@@ -279,7 +279,8 @@ verification rate limiting) cannot lose updates in a durable backend.
 atomic operation locks the stream's row (`SELECT ... FOR UPDATE`) or, when
 creating a stream under a per-Receiver limit, takes a transaction-scoped
 advisory lock on the Receiver, so Transmitter instances can share one
-database; on SQLite, write transactions begin `IMMEDIATE`. Subject rules
+database (with `Run`, which coordinates push delivery only within its
+process, started on one of them); on SQLite, write transactions begin `IMMEDIATE`. Subject rules
 are matched with `ssf.SubjectsEqual` in Go, not by comparing stored JSON,
 since equal subjects can be encoded differently.
 
@@ -289,11 +290,12 @@ since equal subjects can be encoded differently.
 |---|---|
 | Several streams per Receiver? | `Config.MultipleStreamsPerReceiver`; if false, 409 (§8.1.1.1) |
 | Receiver asks for poll with its own `endpoint_url` | Ignored: the Transmitter supplies poll URLs (§6.1.2) |
-| `authorization_header` in read responses | Returned to the owning Receiver, so read-modify-replace (§8.1.1.4) keeps it |
+| `authorization_header` in read responses | Returned to the owning Receiver with `AccessManage`, so read-modify-replace (§8.1.1.4) keeps it; omitted for `AccessRead`, which needs no push credential |
 | Transmitter-supplied property in PATCH/PUT | Must equal the current value, else 400 (§8.1.1.3) |
-| Receiver-requested status change | Applied without a stream-updated event (§8.1.2 requires one only for Transmitter-initiated changes); refused with 403 while a status the Transmitter set with `SetStreamStatus` is in force |
-| Which Receiver may see which events | `Config.PermitEvent`, checked per stream at `Emit` (§9.2) |
-| How much one Receiver may store | `Config.Limits`: streams, subject rules and queued SETs |
+| Receiver-requested status change | Applied without a stream-updated event (§8.1.2 requires one only for Transmitter-initiated changes); refused with 403 while a status the Transmitter set with `SetStreamStatus` is in force, as are deleting that stream and creating another |
+| Which Receiver may see which events | `Config.PermitEvent`, required and checked per stream at `Emit` (§9.2) |
+| How much one Receiver may store | `Config.Limits`: streams, subject rules and queued SETs; a subject rule is at most 2 KiB, and an included complex subject needs one of the §3.3 members |
+| Concurrent long polls | One waits per stream; another is answered at once (RFC 8936 §2.5) |
 | Transmitter-initiated verification | On demand (`SendVerification`) or on every new stream (`Config.VerifyNewStreams`); never limited by `min_verification_interval`, which binds Receivers |
 | What restarts `inactivity_timeout` | Any management request that references the stream, and polls on a poll stream; listing all streams does not. Recorded at most once per tenth of the timeout |
 | Inactivity pause or disable | Sends stream-updated, but — unlike `SetStreamStatus` — does not lock the status, so the Receiver can re-enable the stream |

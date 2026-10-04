@@ -25,24 +25,13 @@ var ErrNonPublicAddress = errors.New("transmitter: refusing to connect to a non-
 //   - it gives up after timeout.
 //
 // Deployments that push to Receivers on a private network supply their own
-// client through Config.HTTPClient.
+// client through Config.HTTPClient. One that needs a different transport
+// but should keep the address check can set PublicAddressControl as its
+// net.Dialer's Control.
 func NewPushClient(timeout time.Duration) *http.Client {
 	dialer := &net.Dialer{
 		Timeout: 10 * time.Second,
-		Control: func(_, address string, _ syscall.RawConn) error {
-			host, _, err := net.SplitHostPort(address)
-			if err != nil {
-				return err
-			}
-			ip, err := netip.ParseAddr(host)
-			if err != nil {
-				return err
-			}
-			if !isPublic(ip) {
-				return fmt.Errorf("%w: %s", ErrNonPublicAddress, ip)
-			}
-			return nil
-		},
+		Control: PublicAddressControl,
 	}
 	transport := &http.Transport{
 		Proxy:                 nil, // a proxy would hide the address actually reached
@@ -60,6 +49,25 @@ func NewPushClient(timeout time.Duration) *http.Client {
 			return http.ErrUseLastResponse
 		},
 	}
+}
+
+// PublicAddressControl is a net.Dialer Control function that refuses, with
+// ErrNonPublicAddress, to connect to anything but a public unicast address.
+// It sees the address actually dialled, after name resolution, so DNS
+// rebinding cannot get around it. NewPushClient uses it.
+func PublicAddressControl(_, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	ip, err := netip.ParseAddr(host)
+	if err != nil {
+		return err
+	}
+	if !isPublic(ip) {
+		return fmt.Errorf("%w: %s", ErrNonPublicAddress, ip)
+	}
+	return nil
 }
 
 // isPublic reports whether ip is a globally routable unicast address.
@@ -97,10 +105,15 @@ var nonPublicPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("203.0.113.0/24"),  // documentation
 	netip.MustParsePrefix("240.0.0.0/4"),     // reserved
 	netip.MustParsePrefix("64:ff9b:1::/48"),  // local-use NAT64
+	netip.MustParsePrefix("64:ff9b::/32"),    // the rest of NAT64's range, beyond the well-known /96 judged above
 	netip.MustParsePrefix("2001:db8::/32"),   // documentation
 	netip.MustParsePrefix("::/96"),           // deprecated IPv4-compatible (RFC 4291 §2.5.5.1)
 	netip.MustParsePrefix("2002::/16"),       // 6to4: embeds an IPv4 address
 	netip.MustParsePrefix("2001::/32"),       // Teredo: embeds an IPv4 address
+	netip.MustParsePrefix("::ffff:0:0:0/96"), // IPv4-translated (RFC 6145): embeds an IPv4 address
+	netip.MustParsePrefix("fec0::/10"),       // deprecated site-local (RFC 3879)
+	netip.MustParsePrefix("100::/64"),        // discard-only (RFC 6666)
+	netip.MustParsePrefix("2001:2::/48"),     // benchmarking (RFC 5180)
 }
 
 // nat64WellKnown is the NAT64 well-known prefix (RFC 6052 §2.1).
