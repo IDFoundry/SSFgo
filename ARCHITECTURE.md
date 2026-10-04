@@ -201,7 +201,16 @@ RS256 with a 2048-bit key:
 - **Keys.** The Receiver refetches the JWKS after `KeyMaxAge` (24 h by
   default) so retired keys stop being trusted, and when a SET names an
   unknown key; all refetches are rate-limited to one a minute and a failed
-  refetch keeps the keys already held.
+  refetch keeps the keys already held. A refetch runs on its own context
+  and is shared by concurrent callers, so a push client that hangs up can
+  neither cancel it nor waste the allowance on a fetch that never
+  completes.
+- **Credentials.** The Receiver sends its access token only to the
+  issuer's origin and `Config.TrustedOrigins`, so neither the metadata
+  nor a stream configuration can steer it elsewhere. A request with an
+  `Authorization` header or a body follows redirects only within its
+  origin, since a 307/308 replays the body — a client secret or assertion,
+  or a push `authorization_header`.
 - **Legacy Transmitters.** `receiver.Config.AcceptLegacySubjects` opts in
   to pre-SSF-1.0 SETs — the subject inside the event, Google's
   `subject_type` — without loosening anything for other Receivers.

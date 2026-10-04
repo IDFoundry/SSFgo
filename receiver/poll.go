@@ -34,6 +34,20 @@ type pollResponse struct {
 	MoreAvailable bool              `json:"moreAvailable"`
 }
 
+// Bounds on what one poll response can make the Receiver do, whatever the
+// Transmitter sends: SETs beyond maxPolledSETs (or PollOptions.MaxEvents)
+// are left unacknowledged for the Transmitter to deliver again, and
+// rejections beyond maxRejectionLogs are logged as a count.
+const (
+	maxPolledSETs    = 1000
+	maxRejectionLogs = 10
+)
+
+// emptyPollPause is the least time between two of RunPoller's long polls
+// that return nothing, so a Transmitter that answers at once rather than
+// holding the request does not get polled in a busy loop.
+var emptyPollPause = time.Second
+
 // PollOptions shapes one poll request (RFC 8936 §2.2).
 type PollOptions struct {
 	// MaxEvents limits how many SETs are returned; zero means no limit.
@@ -48,7 +62,9 @@ type PollResult struct {
 	// Received is how many SETs the Transmitter returned.
 	Received int
 	// MoreAvailable is the Transmitter's hint that another poll would
-	// return more.
+	// return more. It is also set when the response held more SETs than
+	// the Receiver handles from one poll, which it leaves to be delivered
+	// again.
 	MoreAvailable bool
 }
 
@@ -77,13 +93,24 @@ func (r *Receiver) Poll(ctx context.Context, stream ssf.StreamConfiguration, opt
 		r.restoreAcks(stream.StreamID, pending)
 		return PollResult{}, err
 	}
+	limit := maxPolledSETs
+	if opts.MaxEvents > 0 {
+		limit = min(opts.MaxEvents, limit)
+	}
+	handled, rejected := 0, 0
 	for jti, token := range resp.Sets {
+		if handled == limit {
+			break
+		}
+		handled++
 		got, err := r.process(ctx, token)
 		if got == "" {
 			got = jti
 		}
 		if rej, ok := isRejection(err); ok {
-			r.cfg.Logger.WarnContext(ctx, "ssf receiver: rejected polled SET", "jti", got, "err", rej.code, "description", rej.description)
+			if rejected++; rejected <= maxRejectionLogs {
+				r.cfg.Logger.WarnContext(ctx, "ssf receiver: rejected polled SET", "jti", got, "err", rej.code, "description", rej.description)
+			}
 			r.queueAck(stream.StreamID, "", got, &setErr{Err: rej.code, Description: rej.description})
 			continue
 		}
@@ -93,7 +120,10 @@ func (r *Receiver) Poll(ctx context.Context, stream ssf.StreamConfiguration, opt
 		}
 		r.queueAck(stream.StreamID, got, "", nil)
 	}
-	return PollResult{Received: len(resp.Sets), MoreAvailable: resp.MoreAvailable}, nil
+	if rejected > maxRejectionLogs {
+		r.cfg.Logger.WarnContext(ctx, "ssf receiver: more polled SETs rejected", "stream_id", stream.StreamID, "count", rejected-maxRejectionLogs)
+	}
+	return PollResult{Received: len(resp.Sets), MoreAvailable: resp.MoreAvailable || handled < len(resp.Sets)}, nil
 }
 
 // Acknowledge sends any pending acknowledgements for a stream without
@@ -118,6 +148,7 @@ func (r *Receiver) Acknowledge(ctx context.Context, stream ssf.StreamConfigurati
 // after a pause.
 func (r *Receiver) RunPoller(ctx context.Context, stream ssf.StreamConfiguration) error {
 	for ctx.Err() == nil {
+		start := time.Now()
 		res, err := r.Poll(ctx, stream, PollOptions{Wait: true})
 		if err != nil && ctx.Err() == nil {
 			r.cfg.Logger.WarnContext(ctx, "ssf receiver: poll failed", "stream_id", stream.StreamID, "error", err)
@@ -130,6 +161,10 @@ func (r *Receiver) RunPoller(ctx context.Context, stream ssf.StreamConfiguration
 		if res.Received == 0 && !res.MoreAvailable {
 			// Keep acknowledgements flowing even when nothing new arrives.
 			_ = r.Acknowledge(ctx, stream)
+			select {
+			case <-ctx.Done():
+			case <-time.After(emptyPollPause - time.Since(start)):
+			}
 		}
 	}
 	flush, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)

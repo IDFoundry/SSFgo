@@ -88,6 +88,22 @@ each finding was reproduced by a failing test before it was fixed.
   overridden by the Receiver.
 - A handler panic no longer loses its SET; push settings are validated;
   log output and pending verification state are bounded.
+- A push client that hung up could cancel the JWKS refetch its SET
+  triggered and use up the once-a-minute allowance. Repeated, that kept a
+  Receiver from learning a rotated key — rejecting, and so losing, the
+  Transmitter's SETs — or from ever dropping a retired key. Refetches now
+  run on their own context, shared by concurrent callers.
+- A 307/308 redirect replayed a request body — a client secret or
+  assertion, or a push `authorization_header` — to another host. Requests
+  carrying credentials now follow redirects only within their origin.
+- The Receiver sends its access token only to the issuer's origin and the
+  new `receiver.Config.TrustedOrigins`; metadata or a stream configuration
+  pointing elsewhere is refused.
+- `KeepAlive` bounds the Transmitter's `inactivity_timeout`, which could
+  overflow into a busy loop, and stops on `ErrIssuerMismatch` or
+  `ErrAudienceMismatch`. One poll response is handled up to `MaxEvents`
+  (or 1000) SETs with bounded logging, `RunPoller` pauses between empty
+  polls, and `APIError.Body` keeps at most 1 KiB.
 - Storage contract: `CreateOptions.MaxStreamsPerReceiver` replaces
   `SingleStreamPerReceiver` (`ErrTooManyStreams` replaces
   `ErrReceiverHasStream`); `SetSubjectRule` and `Enqueue` take a limit
