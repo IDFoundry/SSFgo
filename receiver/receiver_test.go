@@ -77,6 +77,8 @@ func newEnvTx(t testing.TB, txMutate func(*transmitter.Config), mutate ...func(*
 	issuer := e.txSrv.URL + "/tx"
 
 	txCfg := transmitter.Config{
+
+		PermitEvent:     transmitter.PermitAll,
 		Issuer:          issuer,
 		SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
 		EventsSupported: []ssf.EventType{caep.SessionRevokedEventType, caep.CredentialChangeEventType, risc.AccountDisabledEventType},
@@ -372,6 +374,7 @@ func TestPushEndToEnd(t *testing.T) {
 func (e *env) setTransmitterClient(c *http.Client) {
 	e.t.Helper()
 	tx, err := transmitter.New(transmitter.Config{
+		PermitEvent:     transmitter.PermitAll,
 		Issuer:          e.cfg.Issuer,
 		SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(e.t), Algorithm: ssf.RS256, KeyID: "k1"}},
 		EventsSupported: []ssf.EventType{caep.SessionRevokedEventType, caep.CredentialChangeEventType, risc.AccountDisabledEventType},
@@ -583,7 +586,8 @@ func TestKeyRotation(t *testing.T) {
 func (e *env) rotate(newKey *rsa.PrivateKey) {
 	e.t.Helper()
 	tx, err := transmitter.New(transmitter.Config{
-		Issuer: e.cfg.Issuer,
+		PermitEvent: transmitter.PermitAll,
+		Issuer:      e.cfg.Issuer,
 		SigningKeys: []transmitter.SigningKey{
 			{Signer: newKey, Algorithm: ssf.RS256, KeyID: "k2"},
 			{Signer: signingKey(e.t), Algorithm: ssf.RS256, KeyID: "k1"},
@@ -614,6 +618,7 @@ func TestKeyMaxAge(t *testing.T) {
 		t.Fatal(err)
 	}
 	tx, err := transmitter.New(transmitter.Config{
+		PermitEvent:     transmitter.PermitAll,
 		Issuer:          e.cfg.Issuer,
 		SigningKeys:     []transmitter.SigningKey{{Signer: newKey, Algorithm: ssf.RS256, KeyID: "k2"}},
 		EventsSupported: []ssf.EventType{caep.SessionRevokedEventType},
@@ -654,6 +659,7 @@ func TestKeyMaxAge(t *testing.T) {
 func TestCriticalSubjectMembers(t *testing.T) {
 	e := newEnv(t)
 	tx, err := transmitter.New(transmitter.Config{
+		PermitEvent:            transmitter.PermitAll,
 		Issuer:                 e.cfg.Issuer,
 		SigningKeys:            []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
 		EventsSupported:        []ssf.EventType{caep.SessionRevokedEventType},

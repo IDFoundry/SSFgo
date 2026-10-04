@@ -74,6 +74,8 @@ func newFixture(t testing.TB, mutate ...func(*transmitter.Config)) *fixture {
 	f.issuer = f.srv.URL + "/tenant-a"
 
 	cfg := transmitter.Config{
+
+		PermitEvent:     transmitter.PermitAll,
 		Issuer:          f.issuer,
 		SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
 		EventsSupported: interopEvents,
@@ -183,6 +185,7 @@ func pushBody() map[string]any {
 func TestConfigValidation(t *testing.T) {
 	good := func() transmitter.Config {
 		return transmitter.Config{
+			PermitEvent:     transmitter.PermitAll,
 			Issuer:          "https://tx.example",
 			SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
 			EventsSupported: interopEvents,
@@ -211,6 +214,7 @@ func TestConfigValidation(t *testing.T) {
 		"no default subjects":   func(c *transmitter.Config) { c.DefaultSubjects = "" },
 		"no store":              func(c *transmitter.Config) { c.Store = nil },
 		"no authorize":          func(c *transmitter.Config) { c.Authorize = nil },
+		"no PermitEvent":        func(c *transmitter.Config) { c.PermitEvent = nil },
 		"fractional interval":   func(c *transmitter.Config) { c.MinVerificationInterval = 1500 * time.Millisecond },
 		"braces in issuer path": func(c *transmitter.Config) { c.Issuer = "https://tx.example/{x}" },
 		"negative retry":        func(c *transmitter.Config) { c.PushRetry.MaxAttempts = -1 },
@@ -290,6 +294,7 @@ func TestConfigAndMetadataAreCopied(t *testing.T) {
 	events := []ssf.EventType{caep.SessionRevokedEventType}
 	methods := []ssf.DeliveryMethod{ssf.DeliveryPoll}
 	tx, err := transmitter.New(transmitter.Config{
+		PermitEvent:     transmitter.PermitAll,
 		Issuer:          "https://tx.example",
 		SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
 		EventsSupported: events,
@@ -321,6 +326,7 @@ func TestMetadataAtIssuerWithoutPath(t *testing.T) {
 	srv := httptest.NewTLSServer(nil)
 	defer srv.Close()
 	tx, err := transmitter.New(transmitter.Config{
+		PermitEvent:     transmitter.PermitAll,
 		Issuer:          srv.URL + "/",
 		SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
 		EventsSupported: interopEvents,

@@ -44,6 +44,7 @@ tx, err := transmitter.New(transmitter.Config{
 	DefaultSubjects: ssf.DefaultSubjectsAll,
 	Store:           memstore.NewStreamStore(),
 	Authorize:       authorizeAccessToken, // your OAuth resource-server check
+	PermitEvent:     permitEvent,          // which Receiver may see which subject's events
 })
 go tx.Run(ctx) // push delivery
 http.ListenAndServeTLS(":443", cert, key, tx.Handler())

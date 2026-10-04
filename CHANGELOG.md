@@ -104,6 +104,25 @@ each finding was reproduced by a failing test before it was fixed.
   `ErrAudienceMismatch`. One poll response is handled up to `MaxEvents`
   (or 1000) SETs with bounded logging, `RunPoller` pauses between empty
   polls, and `APIError.Body` keeps at most 1 KiB.
+- `transmitter.Config.PermitEvent` is now required; the new
+  `transmitter.PermitAll` permits every event, for single-tenant
+  Transmitters. Left nil, it used to permit everything silently.
+- A Receiver could escape a status the Transmitter set with
+  `SetStreamStatus` by deleting the stream and creating another. While
+  such a status holds, both are refused with 403.
+- Subject rules are at most 2 KiB, and an included complex subject needs
+  one of the SSF 1.0 §3.3 members. Large rules made every `Emit` slow for
+  every Receiver; a complex subject of unused members matched every
+  complex subject.
+- A read-only (`AccessRead`) token no longer sees a push stream's
+  `authorization_header`.
+- One long poll per stream waits at a time; another is answered at once.
+  Per-stream state of deleted streams is no longer kept forever, and push
+  delivery logs storage errors.
+- The push client's public-address check also refuses IPv4-translated,
+  site-local, discard-only and benchmarking IPv6 ranges, and NAT64's
+  `64:ff9b::/32` beyond the well-known prefix. New
+  `transmitter.PublicAddressControl` lets a custom push client keep it.
 - Storage contract: `CreateOptions.MaxStreamsPerReceiver` replaces
   `SingleStreamPerReceiver` (`ErrTooManyStreams` replaces
   `ErrReceiverHasStream`); `SetSubjectRule` and `Enqueue` take a limit

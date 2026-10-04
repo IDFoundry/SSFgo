@@ -29,6 +29,7 @@ type Transmitter struct {
 	log      *slog.Logger
 	client   *http.Client
 	notify   *notifier
+	polling  *longPolls
 	pushes   *pushState
 	origin   string // scheme://host of the issuer
 }
@@ -83,6 +84,7 @@ func New(cfg Config) (*Transmitter, error) {
 		t.cfg.LongPollTimeout = 20 * time.Second
 	}
 	t.notify = newNotifier()
+	t.polling = &longPolls{active: map[string]bool{}}
 	t.pushes = newPushState(t.cfg.PushRetry)
 	t.log = cfg.Logger
 	if t.log == nil {

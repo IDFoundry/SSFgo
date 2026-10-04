@@ -45,6 +45,7 @@ func testEndToEnd(t *testing.T, db *sql.DB, d sqlstore.Dialect) {
 			t.Fatal(err)
 		}
 		tx, err := transmitter.New(transmitter.Config{
+			PermitEvent:     transmitter.PermitAll,
 			Issuer:          issuer,
 			SigningKeys:     []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "k1"}},
 			EventsSupported: []ssf.EventType{caep.SessionRevokedEventType},

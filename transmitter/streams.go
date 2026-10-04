@@ -202,6 +202,16 @@ func (t *Transmitter) createStream(w http.ResponseWriter, r *http.Request, rx Re
 		return
 	}
 
+	// A Receiver whose stream the Transmitter has paused or disabled may
+	// not open another to get around it.
+	if locked, err := t.hasLockedStream(r, rx); err != nil {
+		t.serverError(w, r, op, err)
+		return
+	} else if locked {
+		t.writeAPIError(w, r, op, errReceiverLocked)
+		return
+	}
+
 	limit := 1
 	if t.cfg.MultipleStreamsPerReceiver {
 		limit = t.cfg.Limits.StreamsPerReceiver
@@ -227,6 +237,16 @@ func (t *Transmitter) createStream(w http.ResponseWriter, r *http.Request, rx Re
 		}
 	}
 	writeJSON(w, http.StatusCreated, t.configuration(s))
+}
+
+// hasLockedStream reports whether any of rx's streams has a status the
+// Transmitter set with SetStreamStatus.
+func (t *Transmitter) hasLockedStream(r *http.Request, rx Receiver) (bool, error) {
+	streams, err := t.cfg.Store.StreamsForReceiver(r.Context(), rx.ID)
+	if err != nil {
+		return false, err
+	}
+	return slices.ContainsFunc(streams, func(s storage.Stream) bool { return s.StatusSetByTransmitter }), nil
 }
 
 // ownedStream returns stream id if it exists and belongs to rx. A stream
@@ -262,7 +282,7 @@ func (t *Transmitter) readStreams(w http.ResponseWriter, r *http.Request, rx Rec
 			return
 		}
 		t.touch(r.Context(), s)
-		writeJSON(w, http.StatusOK, t.configuration(s))
+		writeJSON(w, http.StatusOK, redactFor(rx, t.configuration(s)))
 		return
 	}
 	streams, err := t.cfg.Store.StreamsForReceiver(r.Context(), rx.ID)
@@ -272,9 +292,19 @@ func (t *Transmitter) readStreams(w http.ResponseWriter, r *http.Request, rx Rec
 	}
 	out := make([]ssf.StreamConfiguration, 0, len(streams))
 	for _, s := range streams {
-		out = append(out, t.configuration(s))
+		out = append(out, redactFor(rx, t.configuration(s)))
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// redactFor removes the push authorization_header from a configuration
+// read with less than AccessManage: it is a credential for the Receiver's
+// push endpoint, which a read-only token has no need to see.
+func redactFor(rx Receiver, c ssf.StreamConfiguration) ssf.StreamConfiguration {
+	if rx.Access != AccessManage {
+		c.Delivery.AuthorizationHeader = ""
+	}
+	return c
 }
 
 func (t *Transmitter) updateStream(w http.ResponseWriter, r *http.Request, rx Receiver) {
@@ -393,11 +423,18 @@ func (t *Transmitter) deleteStream(w http.ResponseWriter, r *http.Request, rx Re
 		t.writeAPIError(w, r, op, badRequest("the stream_id query parameter is required"))
 		return
 	}
-	if _, err := t.ownedStream(r, id, rx); err != nil {
+	s, err := t.ownedStream(r, id, rx)
+	if err != nil {
 		t.writeAPIError(w, r, op, err)
 		return
 	}
-	err := t.cfg.Store.DeleteStream(r.Context(), id)
+	if s.StatusSetByTransmitter {
+		// Deleting the stream and creating another would escape the
+		// status the Transmitter set.
+		t.writeAPIError(w, r, op, errStatusLocked)
+		return
+	}
+	err = t.cfg.Store.DeleteStream(r.Context(), id)
 	if errors.Is(err, storage.ErrNotFound) {
 		t.writeAPIError(w, r, op, errStreamNotFound)
 		return

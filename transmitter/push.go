@@ -59,6 +59,24 @@ func (p *pushState) reset(id string) {
 	}
 }
 
+// prune forgets idle streams that are no longer push streams, or no longer
+// exist, so deleted streams leave no state behind.
+func (p *pushState) prune(streams []storage.Stream) {
+	push := make(map[string]bool, len(streams))
+	for _, s := range streams {
+		if s.Delivery.Method == ssf.DeliveryPush {
+			push[s.ID] = true
+		}
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for id, st := range p.streams {
+		if !push[id] && !st.busy {
+			delete(p.streams, id)
+		}
+	}
+}
+
 // claim marks stream id busy if it is idle and not backing off.
 func (p *pushState) claim(id string, now time.Time) bool {
 	p.mu.Lock()
@@ -98,7 +116,9 @@ func (p *pushState) release(id string, failed bool, now time.Time) {
 // If Config.Inactivity is set, it also applies inactivity timeouts every
 // 30 seconds.
 // SETs on each stream are delivered one at a time, oldest first. Start Run
-// once per process if any stream may use push delivery.
+// if any stream may use push delivery — in one process only when several
+// Transmitter instances share a store: Run coordinates deliveries within
+// its process, so instances each running it would push the same SETs.
 func (t *Transmitter) Run(ctx context.Context) error {
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -110,14 +130,16 @@ func (t *Transmitter) Run(ctx context.Context) error {
 			t.expireInactive(ctx)
 			nextExpiry = time.Now().Add(inactivityCheckInterval)
 		}
-		wake := t.notify.wait(anyStream)
+		wake, done := t.notify.wait(anyStream)
 		t.startPushes(ctx, &wg)
 		select {
 		case <-ctx.Done():
+			done()
 			return ctx.Err()
 		case <-wake:
 		case <-ticker.C:
 		}
+		done()
 	}
 }
 
@@ -135,6 +157,9 @@ func (t *Transmitter) startPushes(ctx context.Context, wg *sync.WaitGroup) {
 	if err != nil && ctx.Err() == nil {
 		t.log.ErrorContext(ctx, "ssf transmitter: list streams for push", "error", err)
 	}
+	if err == nil {
+		t.pushes.prune(streams)
+	}
 	for _, s := range streams {
 		if s.Delivery.Method != ssf.DeliveryPush || !t.pushes.claim(s.ID, time.Now()) {
 			continue
@@ -151,10 +176,16 @@ func (t *Transmitter) startPushes(ctx context.Context, wg *sync.WaitGroup) {
 func (t *Transmitter) drain(ctx context.Context, id string) (failed bool) {
 	for ctx.Err() == nil {
 		s, err := t.cfg.Store.Stream(ctx, id)
+		if err != nil && !errors.Is(err, storage.ErrNotFound) && ctx.Err() == nil {
+			t.log.ErrorContext(ctx, "ssf transmitter: read stream for push", "stream_id", id, "error", err)
+		}
 		if err != nil || s.Delivery.Method != ssf.DeliveryPush {
 			return false
 		}
 		events, err := t.cfg.Store.PendingEvents(ctx, id, 1, s.Status != ssf.StreamEnabled)
+		if err != nil && ctx.Err() == nil {
+			t.log.ErrorContext(ctx, "ssf transmitter: read push queue", "stream_id", id, "error", err)
+		}
 		if err != nil || len(events) == 0 {
 			return false
 		}

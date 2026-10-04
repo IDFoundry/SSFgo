@@ -88,6 +88,7 @@ func Run(o *Options, store storage.StreamStore) error {
 		return err
 	}
 	cfg := transmitter.Config{
+		PermitEvent:                transmitter.PermitAll,
 		Issuer:                     o.Issuer,
 		SigningKeys:                []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "ssfgo-conformance-1"}},
 		EventsSupported:            events,

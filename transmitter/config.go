@@ -89,7 +89,9 @@ type Config struct {
 
 	// HTTPClient sends push deliveries. Defaults to NewPushClient(10s),
 	// which refuses non-public addresses and redirects; supply a client to
-	// push to Receivers on a private network.
+	// push to Receivers on a private network. A client supplied for other
+	// reasons keeps the address check only if its dialer uses
+	// PublicAddressControl.
 	HTTPClient *http.Client
 
 	// PushRetry controls how failed push deliveries are retried.
@@ -108,14 +110,16 @@ type Config struct {
 	// §8.1.4), so the Receiver learns at once whether delivery works.
 	VerifyNewStreams bool
 
-	// PermitEvent, if set, decides whether the Receiver that owns a stream
-	// may receive a given event about a given subject. Emit consults it
-	// for every stream the event would otherwise be queued on. SSF 1.0
-	// §9.2 asks Transmitters to check they are permitted to share an
-	// event before transmitting it: a multi-tenant Transmitter must set
-	// this, or any Receiver can obtain events about any subject — with
-	// default_subjects "ALL" simply by creating a stream, and with "NONE"
-	// by adding the subject. Optional; nil permits every event.
+	// PermitEvent decides whether the Receiver that owns a stream may
+	// receive a given event about a given subject. Emit consults it for
+	// every stream the event would otherwise be queued on. SSF 1.0 §9.2
+	// asks Transmitters to check they are permitted to share an event
+	// before transmitting it. Subject rules cannot stand in for it: with
+	// default_subjects "ALL" any Receiver gets every event simply by
+	// creating a stream, with "NONE" by adding the subject, and one
+	// complex subject can match many (§8.1.3.1). Required; PermitAll
+	// permits every event, for a Transmitter whose every Receiver may see
+	// events about every subject.
 	PermitEvent func(ctx context.Context, receiverID string, subject ssf.Subject, event ssf.Event) bool
 
 	// LongPollTimeout is how long a poll request that asks to wait
@@ -128,6 +132,11 @@ type Config struct {
 	// slog.Default().
 	Logger *slog.Logger
 }
+
+// PermitAll is a PermitEvent that permits every event: for a Transmitter
+// whose every Receiver may see events about every subject, such as a
+// single-tenant deployment.
+func PermitAll(context.Context, string, ssf.Subject, ssf.Event) bool { return true }
 
 // Limits bound the state an authenticated Receiver can create. Zero
 // fields take the defaults shown; there is deliberately no "unlimited".
@@ -252,6 +261,9 @@ func (c *Config) requiredErrors() []error {
 	}
 	if c.Authorize == nil {
 		errs = append(errs, errors.New("an Authorize function is required"))
+	}
+	if c.PermitEvent == nil {
+		errs = append(errs, errors.New("a PermitEvent function is required; PermitAll permits every event"))
 	}
 	return errs
 }
