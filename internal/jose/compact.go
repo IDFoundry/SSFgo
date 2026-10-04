@@ -78,8 +78,9 @@ var b64 = base64.RawURLEncoding.Strict()
 // decoder alone would skip CR and LF.
 func isBase64URL(s string) bool {
 	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if !('A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || '0' <= c && c <= '9' || c == '-' || c == '_') {
+		switch c := s[i]; {
+		case 'A' <= c && c <= 'Z', 'a' <= c && c <= 'z', '0' <= c && c <= '9', c == '-', c == '_':
+		default:
 			return false
 		}
 	}
