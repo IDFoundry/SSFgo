@@ -42,7 +42,7 @@ SSF Transmitter plan also passes. Met: every module of the CAEP Interop
 Transmitter plan passes in all four auth × delivery variants — see
 [conformance/README.md](conformance/README.md).
 
-## v0.4 — Receiver ✅ (one module blocked by a suite defect)
+## v0.4 — Receiver ✅
 
 - Discovery and issuer validation (SSF §7.2.4).
 - `TokenSource`: static bearer token and client credentials.
