@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -671,6 +672,41 @@ func TestAudienceMismatch(t *testing.T) {
 	c, err := e.rx.CreateStream(context.Background(), receiver.StreamRequest{})
 	if !errors.Is(err, receiver.ErrAudienceMismatch) || c.StreamID == "" {
 		t.Fatalf("CreateStream = %+v, %v; want the stream and ErrAudienceMismatch", c, err)
+	}
+}
+
+func TestIssuerMismatch(t *testing.T) {
+	e := newEnv(t)
+	// The Transmitter answers stream creation with a foreign "iss".
+	endpoint, err := url.Parse(e.rx.Metadata().ConfigurationEndpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx := e.txSrv.Config.Handler
+	e.txSrv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != endpoint.Path {
+			tx.ServeHTTP(w, r)
+			return
+		}
+		rec := httptest.NewRecorder()
+		tx.ServeHTTP(rec, r)
+		var body map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Errorf("create response: %v", err)
+		}
+		body["iss"] = "https://elsewhere.example"
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(rec.Code)
+		_ = json.NewEncoder(w).Encode(body)
+	})
+	ctx := context.Background()
+	c, err := e.rx.CreateStream(ctx, receiver.StreamRequest{})
+	if !errors.Is(err, receiver.ErrIssuerMismatch) || c.StreamID == "" {
+		t.Fatalf("CreateStream = %+v, %v; want the stream and ErrIssuerMismatch", c, err)
+	}
+	// The caller can still remove the stream it refused.
+	if err := e.rx.DeleteStream(ctx, c.StreamID); err != nil {
+		t.Errorf("DeleteStream: %v", err)
 	}
 }
 

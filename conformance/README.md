@@ -93,7 +93,7 @@ waits for the Receiver to act. [`cmd/conformance-receiver`](../cmd/conformance-r
 drives that: it creates the plan, and for each module reads the emulated
 Transmitter's issuer and credentials from the suite API ("exposed
 values"), then runs one SSFgo Receiver session — discover, create a
-stream, read it and its status, request verification (again every 15s
+stream, read it and its status, request verification (again every 5s
 until one is accepted), take delivery until events stop, delete the
 stream. Push deliveries arrive on a self-signed
 HTTPS listener the suite reaches at `https://host.docker.internal:9444`.
