@@ -21,7 +21,7 @@ import (
 const (
 	// verificationRetry is how long a session waits for a verification
 	// event before it requests another.
-	verificationRetry = 15 * time.Second
+	verificationRetry = 5 * time.Second
 	// cleanupTimeout bounds the final acknowledgement and stream deletion.
 	cleanupTimeout = 30 * time.Second
 )
@@ -103,6 +103,13 @@ func (s *session) run(ctx context.Context) error {
 	}
 
 	stream, err := rx.CreateStream(ctx, req)
+	if errors.Is(err, receiver.ErrIssuerMismatch) {
+		// Refuse the stream and remove it: the stream-issuer-mismatch
+		// module otherwise waits a minute for it to be abandoned.
+		if derr := rx.DeleteStream(ctx, stream.StreamID); derr != nil {
+			slog.Warn("delete refused stream", "module", s.moduleID, "error", derr)
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("create stream: %w", err)
 	}

@@ -48,6 +48,12 @@ func (r *Receiver) wire(id string, req StreamRequest) streamRequestWire {
 	return streamRequestWire{StreamID: id, EventsRequested: events, Delivery: req.Delivery, Description: req.Description}
 }
 
+// ErrIssuerMismatch is returned, together with the stream, when a stream's
+// "iss" is not Config.Issuer (SSF 1.0 §8.1.1.1): the stream must not be
+// used. The caller decides whether to delete it; nothing else removes it
+// from the Transmitter.
+var ErrIssuerMismatch = errors.New("receiver: stream issuer is not the configured issuer")
+
 // ErrAudienceMismatch is returned, together with the stream, when a
 // stream's "aud" does not include Config.Audience: SETs on it would all be
 // rejected. The caller decides whether to delete the stream.
@@ -57,7 +63,7 @@ var ErrAudienceMismatch = errors.New("receiver: stream audience does not include
 // (SSF 1.0 §8.1.1.1: "iss" must match; §8.1.1.1.1: validate "aud").
 func (r *Receiver) checkStream(c ssf.StreamConfiguration) error {
 	if c.Issuer != r.cfg.Issuer {
-		return fmt.Errorf("receiver: stream %s names issuer %q, not %q", c.StreamID, c.Issuer, r.cfg.Issuer)
+		return fmt.Errorf("%w: stream %s names issuer %q, not %q", ErrIssuerMismatch, c.StreamID, c.Issuer, r.cfg.Issuer)
 	}
 	if c.StreamID == "" {
 		return errors.New("receiver: stream configuration has no stream_id")

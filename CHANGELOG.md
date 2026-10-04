@@ -54,6 +54,10 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
   whose metadata does not meet the profile (§2.3.1–§2.3.7).
   `interop.CheckReceiverConfig` and `interop.CheckTransmitterMetadata` are
   usable on their own.
+- `receiver.ErrIssuerMismatch`: a stream whose `iss` is not the configured
+  issuer (SSF 1.0 §8.1.1.1) is returned together with this error, as
+  `ErrAudienceMismatch` already was, so the caller can delete the stream
+  it refused instead of leaving it on the Transmitter.
 
 ### Testing
 
