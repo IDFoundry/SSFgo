@@ -26,6 +26,7 @@ type Receiver struct {
 	keys        []jose.SetKey
 	keysFetched time.Time // last successful fetch
 	keysTried   time.Time // last attempt, successful or not
+	keyFetch    *keyFetch // the JWKS fetch in progress, if any
 
 	handlersMu sync.RWMutex
 	handlers   map[ssf.EventType]HandlerFunc
@@ -35,6 +36,10 @@ type Receiver struct {
 
 	pollMu sync.Mutex
 	acks   map[string]*pendingAcks // stream ID -> acknowledgements for the next poll
+
+	// origins are those the Receiver may send its access token to: the
+	// issuer's and Config.TrustedOrigins.
+	origins map[string]bool
 
 	inflightMu sync.Mutex
 	inflight   map[setKey]*handling // SETs being handled right now
@@ -67,6 +72,15 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 	if err != nil {
 		return nil, err
 	}
+	issuer, err := url.Parse(cfg.Issuer)
+	if err != nil {
+		return nil, err
+	}
+	r.origins = map[string]bool{origin(issuer): true}
+	for _, o := range cfg.TrustedOrigins {
+		u, _ := url.Parse(o) // validated by cfg.validate
+		r.origins[origin(u)] = true
+	}
 	body, err := r.get(ctx, wellKnown)
 	if err != nil {
 		return nil, fmt.Errorf("receiver: fetch transmitter metadata: %w", err)
@@ -77,7 +91,7 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 	if r.metadata.Issuer != cfg.Issuer {
 		return nil, fmt.Errorf("receiver: transmitter metadata names issuer %q, not %q", r.metadata.Issuer, cfg.Issuer)
 	}
-	if err := checkEndpoints(r.metadata); err != nil {
+	if err := r.checkEndpoints(); err != nil {
 		return nil, err
 	}
 	if cfg.CheckMetadata != nil {
@@ -92,11 +106,14 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 }
 
 // checkEndpoints enforces SSF 1.0 §7.1: every endpoint the metadata
-// advertises uses HTTP over TLS. The Receiver sends its access token to
-// them.
-func checkEndpoints(md ssf.TransmitterMetadata) error {
+// advertises uses HTTP over TLS. Those the Receiver sends its access token
+// to must also be on an origin it trusts (see Config.TrustedOrigins).
+func (r *Receiver) checkEndpoints() error {
+	md := r.metadata
+	if u, err := url.Parse(md.JWKSURI); md.JWKSURI != "" && (err != nil || u.Scheme != "https" || u.Host == "") {
+		return fmt.Errorf("receiver: transmitter metadata jwks_uri %q is not an https URL", md.JWKSURI)
+	}
 	for name, endpoint := range map[string]string{
-		"jwks_uri":                md.JWKSURI,
 		"configuration_endpoint":  md.ConfigurationEndpoint,
 		"status_endpoint":         md.StatusEndpoint,
 		"add_subject_endpoint":    md.AddSubjectEndpoint,
@@ -106,9 +123,22 @@ func checkEndpoints(md ssf.TransmitterMetadata) error {
 		if endpoint == "" {
 			continue
 		}
-		if u, err := url.Parse(endpoint); err != nil || u.Scheme != "https" || u.Host == "" {
-			return fmt.Errorf("receiver: transmitter metadata %s %q is not an https URL", name, endpoint)
+		if err := r.checkAuthenticatedEndpoint(endpoint); err != nil {
+			return fmt.Errorf("receiver: transmitter metadata %s: %w", name, err)
 		}
+	}
+	return nil
+}
+
+// checkAuthenticatedEndpoint reports whether the Receiver may send its
+// access token to endpoint: an https URL on a trusted origin.
+func (r *Receiver) checkAuthenticatedEndpoint(endpoint string) error {
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return fmt.Errorf("%q is not an https URL", endpoint)
+	}
+	if !r.origins[origin(u)] {
+		return fmt.Errorf("%q is not on the issuer's origin; add %s to Config.TrustedOrigins if the Transmitter serves it there", endpoint, origin(u))
 	}
 	return nil
 }
@@ -129,21 +159,57 @@ func (r *Receiver) Metadata() ssf.TransmitterMetadata {
 // Transmitter.
 const keyRefetchInterval = time.Minute
 
-// maybeRefreshKeys refetches the JWKS unless an attempt was made within
-// keyRefetchInterval. It reports whether it fetched new keys.
+// keyFetchTimeout bounds one JWKS refetch.
+const keyFetchTimeout = 30 * time.Second
+
+// keyFetch is one JWKS refetch; done is closed once ok is final.
+type keyFetch struct {
+	done chan struct{}
+	ok   bool
+}
+
+// maybeRefreshKeys refetches the JWKS, or joins a refetch already running,
+// unless an attempt was made within keyRefetchInterval. It reports whether
+// fresh keys were fetched.
+//
+// The fetch runs on its own context, not the caller's: a caller that gives
+// up — a push client that disconnects, say — neither cancels it nor uses up
+// the attempt, so nobody who can reach the push endpoint can keep the
+// Receiver from ever learning a rotated key or forgetting a retired one.
 func (r *Receiver) maybeRefreshKeys(ctx context.Context) bool {
 	r.keysMu.Lock()
-	if r.cfg.Now().Sub(r.keysTried) < keyRefetchInterval {
-		r.keysMu.Unlock()
-		return false
+	f := r.keyFetch
+	if f == nil {
+		if r.cfg.Now().Sub(r.keysTried) < keyRefetchInterval {
+			r.keysMu.Unlock()
+			return false
+		}
+		r.keysTried = r.cfg.Now()
+		f = &keyFetch{done: make(chan struct{})}
+		r.keyFetch = f
+		go r.fetchKeys(context.WithoutCancel(ctx), f)
 	}
-	r.keysTried = r.cfg.Now()
 	r.keysMu.Unlock()
-	if err := r.refreshKeys(ctx); err != nil {
-		r.cfg.Logger.WarnContext(ctx, "ssf receiver: refresh transmitter JWKS", "error", err)
+	select {
+	case <-f.done:
+		return f.ok
+	case <-ctx.Done():
 		return false
 	}
-	return true
+}
+
+func (r *Receiver) fetchKeys(ctx context.Context, f *keyFetch) {
+	ctx, cancel := context.WithTimeout(ctx, keyFetchTimeout)
+	defer cancel()
+	err := r.refreshKeys(ctx)
+	if err != nil {
+		r.cfg.Logger.WarnContext(ctx, "ssf receiver: refresh transmitter JWKS", "error", err)
+	}
+	r.keysMu.Lock()
+	f.ok = err == nil
+	r.keyFetch = nil
+	r.keysMu.Unlock()
+	close(f.done)
 }
 
 func (r *Receiver) refreshKeys(ctx context.Context) error {
@@ -199,7 +265,19 @@ type APIError struct {
 	Method     string
 	URL        string
 	StatusCode int
-	Body       string
+	// Body is the response body, cut to its first 1 KiB.
+	Body string
+}
+
+// maxAPIErrorBody is how much of an error response an APIError keeps: it
+// ends up in logs, and the Transmitter decides how large it is.
+const maxAPIErrorBody = 1024
+
+func truncate(b []byte, n int) string {
+	if len(b) <= n {
+		return string(b)
+	}
+	return string(b[:n]) + "…"
 }
 
 func (e *APIError) Error() string {
@@ -253,7 +331,7 @@ func (r *Receiver) call(ctx context.Context, method, endpoint string, in, out an
 		}
 	}
 	if !slices.Contains(want, status) {
-		return &APIError{Method: method, URL: endpoint, StatusCode: status, Body: string(respBody)}
+		return &APIError{Method: method, URL: endpoint, StatusCode: status, Body: truncate(respBody, maxAPIErrorBody)}
 	}
 	if status == http.StatusAccepted {
 		return ErrNotProcessed
@@ -270,6 +348,9 @@ func (r *Receiver) call(ctx context.Context, method, endpoint string, in, out an
 // send makes one authorized request and returns the response status and
 // (size-limited) body.
 func (r *Receiver) send(ctx context.Context, method, endpoint string, payload []byte) (int, []byte, error) {
+	if err := r.checkAuthenticatedEndpoint(endpoint); err != nil {
+		return 0, nil, fmt.Errorf("receiver: refusing to send the access token: %w", err)
+	}
 	token, err := r.cfg.TokenSource.Token(ctx)
 	if err != nil {
 		return 0, nil, fmt.Errorf("receiver: access token: %w", err)

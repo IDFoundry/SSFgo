@@ -10,6 +10,14 @@ import (
 // the stream's timeout is known; a variable so tests can shorten it.
 var keepAliveUnknownInterval = 10 * time.Second
 
+// The keep-alive interval is held within these bounds whatever timeout the
+// Transmitter advertises: a huge one would overflow time.Duration, and a
+// tiny or overflowed one would turn KeepAlive into a busy loop.
+const (
+	keepAliveMinInterval = time.Second
+	keepAliveMaxInterval = 24 * time.Hour
+)
+
 // KeepAlive keeps a stream from reaching its inactivity_timeout
 // (SSF 1.0 §8.1.1) until ctx is done, then returns ctx.Err().
 //
@@ -18,7 +26,8 @@ var keepAliveUnknownInterval = 10 * time.Second
 // stream management request referencing the stream, which every
 // Transmitter must count as Receiver activity. It returns nil once
 // the stream has no inactivity_timeout (at once if it never had one), and
-// an error matching ErrNotFound if the stream no longer exists. Other
+// an error matching ErrNotFound if the stream no longer exists, or
+// ErrIssuerMismatch or ErrAudienceMismatch if it fails those checks. Other
 // failures are logged and retried sooner.
 //
 // A stream that the Transmitter has already paused or disabled stays so:
@@ -38,8 +47,8 @@ func (r *Receiver) KeepAlive(ctx context.Context, streamID string) error {
 			}
 			// Half the timeout leaves room for a Transmitter that records
 			// activity coarsely and for a failed attempt to be retried.
-			interval = time.Duration(c.InactivityTimeout) * time.Second / 2
-		case errors.Is(err, ErrNotFound):
+			interval = keepAliveInterval(int64(c.InactivityTimeout))
+		case errors.Is(err, ErrNotFound), errors.Is(err, ErrIssuerMismatch), errors.Is(err, ErrAudienceMismatch):
 			return err
 		default:
 			r.cfg.Logger.WarnContext(ctx, "ssf receiver: keep-alive failed", "stream_id", streamID, "error", err)
@@ -58,4 +67,13 @@ func (r *Receiver) KeepAlive(ctx context.Context, streamID string) error {
 		case <-time.After(wait):
 		}
 	}
+}
+
+// keepAliveInterval is half of an inactivity_timeout given in seconds,
+// within [keepAliveMinInterval, keepAliveMaxInterval].
+func keepAliveInterval(timeoutSeconds int64) time.Duration {
+	if timeoutSeconds/2 >= int64(keepAliveMaxInterval/time.Second) {
+		return keepAliveMaxInterval
+	}
+	return max(time.Duration(timeoutSeconds)*time.Second/2, keepAliveMinInterval)
 }

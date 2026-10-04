@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
@@ -72,6 +73,15 @@ type Config struct {
 	// any other member here only if handlers act on it. Optional.
 	SubjectMembers []string
 
+	// TrustedOrigins lists origins ("https://host" or "https://host:port")
+	// besides the issuer's own to which the Receiver may send its access
+	// token. By default every endpoint it authenticates to — those in the
+	// Transmitter's metadata and a stream's poll endpoint — must be on the
+	// issuer's origin, so neither the metadata nor a stream configuration
+	// can steer the token to another host. jwks_uri is fetched without
+	// credentials and may be on any https host. Optional.
+	TrustedOrigins []string
+
 	// AcceptLegacySubjects opts in to SETs from Transmitters that predate
 	// SSF 1.0: a SET without "sub_id" whose event carries a "subject"
 	// member (SSF 1.0 §3.1.1), and subject identifiers naming their format
@@ -116,6 +126,12 @@ func (c *Config) validate() error {
 	}
 	if c.ReplayStore == nil {
 		errs = append(errs, errors.New("a ReplayStore is required"))
+	}
+	for _, o := range c.TrustedOrigins {
+		if u, err := url.Parse(o); err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil ||
+			(u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+			errs = append(errs, fmt.Errorf("TrustedOrigins: %q is not an https origin", o))
+		}
 	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("receiver: invalid config: %w", err)

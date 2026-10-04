@@ -18,7 +18,14 @@ func redirectTo(t *testing.T, target string) *http.Request {
 }
 
 func TestHTTPSOnlyRedirects(t *testing.T) {
-	via := func(n int) []*http.Request { return make([]*http.Request, n) }
+	// via is a redirect chain of n unauthenticated GETs from tx.example.
+	via := func(n int) []*http.Request {
+		chain := make([]*http.Request, n)
+		for i := range chain {
+			chain[i] = &http.Request{Method: http.MethodGet, URL: &url.URL{Scheme: "https", Host: "tx.example", Path: "/start"}, Header: http.Header{}}
+		}
+		return chain
+	}
 	stop := errors.New("application policy")
 
 	t.Run("https redirect followed", func(t *testing.T) {
@@ -40,6 +47,30 @@ func TestHTTPSOnlyRedirects(t *testing.T) {
 		err := c.CheckRedirect(redirectTo(t, "http://user:secret@tx.example/next"), via(1))
 		if err == nil || strings.Contains(err.Error(), "secret") {
 			t.Errorf("CheckRedirect = %v, want an error without the password", err)
+		}
+	})
+	t.Run("credentials stay within their origin", func(t *testing.T) {
+		c := httpsOnlyRedirects(&http.Client{})
+		bearer := via(1)
+		bearer[0].Header.Set("Authorization", "Bearer token")
+		post := via(1)
+		post[0].Method = http.MethodPost
+		for name, chain := range map[string][]*http.Request{"Authorization header": bearer, "request body": post} {
+			for _, target := range []string{"https://evil.example/next", "https://sub.tx.example/next", "https://tx.example:8443/next"} {
+				if err := c.CheckRedirect(redirectTo(t, target), chain); err == nil {
+					t.Errorf("%s: redirect to %s followed", name, target)
+				}
+			}
+			for _, target := range []string{"https://tx.example/next", "https://TX.example:443/next"} {
+				if err := c.CheckRedirect(redirectTo(t, target), chain); err != nil {
+					t.Errorf("%s: same-origin redirect to %s refused: %v", name, target, err)
+				}
+			}
+		}
+		// An unauthenticated GET, such as for metadata or JWKS, may move
+		// to another https host.
+		if err := c.CheckRedirect(redirectTo(t, "https://cdn.example/jwks"), via(1)); err != nil {
+			t.Errorf("unauthenticated GET redirect refused: %v", err)
 		}
 	})
 	t.Run("too many redirects", func(t *testing.T) {
