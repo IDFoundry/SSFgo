@@ -105,6 +105,9 @@ each finding was reproduced by a failing test before it was fixed.
   (`critical_subject_members`) and the Receiver does not process is
   rejected instead of handled. New `receiver.Config.SubjectMembers` lists
   non-standard members the application does process.
+- `interop.ValidateEvent` now also requires a non-empty `reason_admin` on
+  device-compliance-change (CAEP Interop §3.3), and checks events passed
+  by pointer, which used to skip the `reason_admin` check entirely.
 - Every SET the Transmitter sends now carries a `txn` (SSF 1.0 §4.1.9).
   Verification and stream-updated SETs used to omit it, which the
   conformance suite now warns about; each gets a `txn` of its own.

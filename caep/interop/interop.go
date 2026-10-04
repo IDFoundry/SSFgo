@@ -71,8 +71,9 @@ func CheckTransmitterConfig(cfg transmitter.Config) error {
 }
 
 // ValidateEvent enforces the profile's rules on a CAEP event before it is
-// emitted: the subject uses email or iss_sub (§2.5), and session-revoked
-// and credential-change carry a non-empty reason_admin (§3.1, §3.2).
+// emitted: the subject uses email or iss_sub (§2.5), and session-revoked,
+// credential-change and device-compliance-change carry a non-empty
+// reason_admin (§3.1–§3.3), whether passed by value or by pointer.
 // Events outside CAEP are not constrained by the profile and pass.
 func ValidateEvent(subject ssf.Subject, event ssf.Event) error {
 	typ := event.EventType()
@@ -86,7 +87,15 @@ func ValidateEvent(subject ssf.Subject, event ssf.Event) error {
 	switch e := event.(type) {
 	case caep.SessionRevoked:
 		reason = e.ReasonAdmin
+	case *caep.SessionRevoked:
+		reason = e.ReasonAdmin
 	case caep.CredentialChange:
+		reason = e.ReasonAdmin
+	case *caep.CredentialChange:
+		reason = e.ReasonAdmin
+	case caep.DeviceComplianceChange:
+		reason = e.ReasonAdmin
+	case *caep.DeviceComplianceChange:
 		reason = e.ReasonAdmin
 	default:
 		return nil
