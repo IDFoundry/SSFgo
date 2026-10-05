@@ -103,11 +103,6 @@ Ideas recorded for later; none is committed to.
   revocation store (`IsRevoked(sid, sub, iat)`) with `net/http`
   middleware that rejects matching tokens, and a session-terminator hook
   with a helper matching an event's subject to a user's claims.
-- **Metadata location.** Fall back to the issuer with
-  `/.well-known/ssf-configuration` appended, as Transmitters built on
-  OpenID Providers often publish it, and to RISC's
-  `/.well-known/risc-configuration` (SSF §7.2.2); allow an explicit
-  metadata URL.
 - **Test kit.** A public `ssftest` package: an in-process Transmitter for
   testing Receivers, and a Receiver for testing Transmitters.
 - **Stream registration.** `EnsureStream`: find, create or update the
@@ -124,8 +119,7 @@ Ideas recorded for later; none is committed to.
   only from the shell scripts.
 
 Open questions from the spec review: more signing algorithms (ES384,
-PS384 and others) or documenting the four supported; `Streams` returning
-the streams that pass when one fails its checks; keeping SETs a Receiver
+PS384 and others) or documenting the four supported; keeping SETs a Receiver
 rejects with a likely transient `invalid_key` or `authentication_failed`;
 stricter parsing of `nbf`, proprietary format names and repeated complex
 members; and the Interop Receiver check requiring both push and poll.

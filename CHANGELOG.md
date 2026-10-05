@@ -33,6 +33,13 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 
 ### Added since v0.5
 
+- Metadata discovery: when the SSF 1.0 §7.2 location does not exist, the
+  Receiver looks for the issuer with `/.well-known/ssf-configuration`
+  appended, where Transmitters built on OpenID Providers often publish
+  it, then at RISC's `/.well-known/risc-configuration` (SSF §7.2.2). Only
+  a location that is not found moves on; the metadata must still name the
+  configured issuer. New `receiver.Config.MetadataURL` names the location
+  outright.
 - SCIM events (RFC 9967): the new `scim` package has all 12 event
   types — feed add and remove, create, patch and put in full and notice
   mode, delete, activate, deactivate and the asynchronous response — and
@@ -197,3 +204,8 @@ API review before the freeze — all breaking, none behavioural:
 - `transmitter.New` and `receiver.New` copy the slices in their Config,
   and `Metadata()` returns a copy, so neither can be changed from outside
   afterwards.
+
+Since the freeze, one behavioural change: `Receiver.Streams` returns the
+streams that pass its checks, reporting the others in a
+`*receiver.StreamsError` the caller can use to delete them, instead of
+failing the whole list for one stream.

@@ -228,9 +228,11 @@ See [SECURITY.md](SECURITY.md) for the security model as a whole.
 ## Receiver (v0.4)
 
 `receiver.New(ctx, Config)` fetches the Transmitter Configuration Metadata
-from the well-known location derived from `Config.Issuer`, refuses it
-unless it names exactly that issuer (SSF §7.2.4), and fetches the
-Transmitter's JWKS.
+from the well-known location derived from `Config.Issuer` — falling back,
+only if that is not found, to the issuer with the well-known path
+appended and then to RISC's location, or using `Config.MetadataURL` —
+refuses it unless it names exactly that issuer (SSF §7.2.4), and fetches
+the Transmitter's JWKS.
 
 - **Management client.** Methods for every §8 operation. Returned stream
   configurations are checked: `iss` must match, and `aud` must include
