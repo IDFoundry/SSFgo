@@ -70,7 +70,9 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 ### Security
 
 A trust-boundary review of the whole repository
-([docs/security-review-2026-09.md](docs/security-review-2026-09.md));
+([docs/security-review-2026-09.md](docs/security-review-2026-09.md)),
+then an adversarial one
+([docs/security-review-2026-10.md](docs/security-review-2026-10.md));
 each finding was reproduced by a failing test before it was fixed.
 
 - New `transmitter.Config.PermitEvent`: the Transmitter decides which
