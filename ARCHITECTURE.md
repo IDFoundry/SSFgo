@@ -32,7 +32,7 @@ github.com/idfoundry/ssfgo     // package ssf: shared value types only
 │   │   └── cmd/conformance-transmitter/ // the conformance Transmitter on sqlstore
 │   └── storagetest/           // exported contract tests for third-party backends
 ├── internal/
-│   ├── jose/                  // minimal JWS: RS256, PS256, ES256, EdDSA; JWK/JWKS
+│   ├── jose/                  // minimal JWS: RS, PS and ES 256/384/512, EdDSA; JWK/JWKS
 │   ├── critical/              // RFC 7515 "crit" check
 │   ├── setcodec/              // SET encode (sign) / decode (verify) per SSF §4
 │   ├── clientassertion/       // RFC 7523 client assertions (HS256 kept out of jose)

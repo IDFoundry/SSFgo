@@ -10,6 +10,8 @@ import (
 	"errors"
 	"io"
 	"testing"
+
+	ssf "github.com/idfoundry/ssfgo"
 )
 
 // stubSigner is a crypto.Signer whose public key and signature are fixed,
@@ -29,11 +31,11 @@ func (s stubSigner) Sign(io.Reader, []byte, crypto.SignerOpts) ([]byte, error) {
 func TestVerifyECDSARejects(t *testing.T) {
 	testKeys(t)
 	hash := sha256.Sum256([]byte("input"))
-	good, err := signECDSA(p256, hash[:])
+	good, err := signECDSA(p256, ssf.ES256, algSpecs[ssf.ES256], hash[:])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyECDSA(&p256.PublicKey, hash[:], good); err != nil {
+	if err := verifyECDSA(&p256.PublicKey, ssf.ES256, algSpecs[ssf.ES256], hash[:], good); err != nil {
 		t.Fatalf("valid signature rejected: %v", err)
 	}
 	p384, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
@@ -61,7 +63,7 @@ func TestVerifyECDSARejects(t *testing.T) {
 		{"zero signature", &p256.PublicKey, hash[:], make([]byte, 64)},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			if err := verifyECDSA(c.pub, c.hash, c.sig); !errors.Is(err, ErrInvalidSignature) {
+			if err := verifyECDSA(c.pub, ssf.ES256, algSpecs[ssf.ES256], c.hash, c.sig); !errors.Is(err, ErrInvalidSignature) {
 				t.Errorf("verifyECDSA = %v, want ErrInvalidSignature", err)
 			}
 		})
@@ -85,7 +87,7 @@ func TestSignECDSARejects(t *testing.T) {
 		{"signature not DER", stubSigner{pub: &p256.PublicKey, sig: []byte("not DER")}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			if sig, err := signECDSA(c.signer, hash[:]); err == nil {
+			if sig, err := signECDSA(c.signer, ssf.ES256, algSpecs[ssf.ES256], hash[:]); err == nil {
 				t.Errorf("signECDSA = %x, want an error", sig)
 			}
 		})

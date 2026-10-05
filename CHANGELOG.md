@@ -33,6 +33,11 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 
 ### Added since v0.5
 
+- Signing algorithms RS384, RS512, PS384, PS512, ES384 (P-384) and ES512
+  (P-521), alongside RS256, PS256, ES256 and EdDSA — every asymmetric
+  algorithm of RFC 7518 §3.1 — for signing, verification, JWKs and
+  client assertions. `ssf.SignatureAlgorithms()` lists them. HMAC and
+  `none` remain refused.
 - Metadata discovery: when the SSF 1.0 §7.2 location does not exist, the
   Receiver looks for the issuer with `/.well-known/ssf-configuration`
   appended, where Transmitters built on OpenID Providers often publish
