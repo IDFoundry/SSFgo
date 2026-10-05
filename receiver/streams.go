@@ -97,18 +97,58 @@ func (r *Receiver) Stream(ctx context.Context, streamID string) (ssf.StreamConfi
 	return c, r.checkStream(c)
 }
 
-// Streams lists every stream the Transmitter holds for this Receiver.
+// Streams lists every stream the Transmitter holds for this Receiver. It
+// returns the streams that pass the checks CreateStream applies; any that
+// fail are reported in a *StreamsError, so the caller can still use the
+// others and delete the failures.
 func (r *Receiver) Streams(ctx context.Context) ([]ssf.StreamConfiguration, error) {
 	var cs []ssf.StreamConfiguration
 	if err := r.call(ctx, http.MethodGet, r.metadata.ConfigurationEndpoint, nil, &cs, http.StatusOK); err != nil {
 		return nil, err
 	}
+	ok := make([]ssf.StreamConfiguration, 0, len(cs))
+	var rejected []RejectedStream
 	for _, c := range cs {
 		if err := r.checkStream(c); err != nil {
-			return nil, err
+			rejected = append(rejected, RejectedStream{Stream: c, Err: err})
+			continue
 		}
+		ok = append(ok, c)
 	}
-	return cs, nil
+	if len(rejected) > 0 {
+		return ok, &StreamsError{Rejected: rejected}
+	}
+	return ok, nil
+}
+
+// StreamsError reports the streams Streams left out because they failed
+// its checks. errors.Is matches it against ErrIssuerMismatch and
+// ErrAudienceMismatch when any stream failed that way.
+type StreamsError struct {
+	Rejected []RejectedStream
+}
+
+// RejectedStream is one stream Streams left out, and why.
+type RejectedStream struct {
+	Stream ssf.StreamConfiguration
+	Err    error
+}
+
+func (e *StreamsError) Error() string {
+	msgs := make([]string, len(e.Rejected))
+	for i, r := range e.Rejected {
+		msgs[i] = r.Err.Error()
+	}
+	return fmt.Sprintf("receiver: %d stream(s) failed their checks: %s", len(e.Rejected), strings.Join(msgs, "; "))
+}
+
+// Unwrap returns each rejected stream's error.
+func (e *StreamsError) Unwrap() []error {
+	errs := make([]error, len(e.Rejected))
+	for i, r := range e.Rejected {
+		errs[i] = r.Err
+	}
+	return errs
 }
 
 // StreamUpdate changes some of a stream's Receiver-supplied properties;

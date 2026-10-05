@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -68,7 +69,7 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 		acks:     map[string]*pendingAcks{},
 		inflight: map[setKey]*handling{},
 	}
-	wellKnown, err := ssf.WellKnownURL(cfg.Issuer)
+	locations, err := metadataLocations(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -81,9 +82,9 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 		u, _ := url.Parse(o) // validated by cfg.validate
 		r.origins[origin(u)] = true
 	}
-	body, err := r.get(ctx, wellKnown)
+	body, err := r.fetchMetadata(ctx, locations)
 	if err != nil {
-		return nil, fmt.Errorf("receiver: fetch transmitter metadata: %w", err)
+		return nil, err
 	}
 	if err := json.Unmarshal(body, &r.metadata); err != nil {
 		return nil, fmt.Errorf("receiver: parse transmitter metadata: %w", err)
@@ -103,6 +104,55 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 		return nil, err
 	}
 	return r, nil
+}
+
+// metadataLocations returns where to look for the Transmitter's metadata,
+// in order: Config.MetadataURL alone if set; otherwise the SSF 1.0 §7.2
+// location, the issuer with the well-known path appended, and RISC's
+// location (SSF 1.0 §7.2.2).
+func metadataLocations(cfg Config) ([]string, error) {
+	if cfg.MetadataURL != "" {
+		return []string{cfg.MetadataURL}, nil
+	}
+	ssfLocation, err := ssf.WellKnownURL(cfg.Issuer)
+	if err != nil {
+		return nil, err
+	}
+	issuer, _ := url.Parse(cfg.Issuer) // validated by ssf.WellKnownURL
+	path := strings.TrimSuffix(issuer.Path, "/")
+	appended, risc := *issuer, *issuer
+	appended.Path, appended.RawPath = path+ssf.WellKnownPath, ""
+	risc.Path, risc.RawPath = riscWellKnownPath+path, ""
+	locations := []string{ssfLocation}
+	for _, l := range []string{appended.String(), risc.String()} {
+		if !slices.Contains(locations, l) {
+			locations = append(locations, l)
+		}
+	}
+	return locations, nil
+}
+
+// riscWellKnownPath is where RISC Transmitters may still publish their
+// metadata (SSF 1.0 §7.2.2).
+const riscWellKnownPath = "/.well-known/risc-configuration"
+
+// fetchMetadata returns the metadata document from the first location
+// that has one. Only a location that does not exist (404 or 410) moves on
+// to the next: any other failure — an outage, say — is returned rather
+// than settling for a document published somewhere else.
+func (r *Receiver) fetchMetadata(ctx context.Context, locations []string) ([]byte, error) {
+	for _, l := range locations {
+		body, err := r.get(ctx, l)
+		var apiErr *APIError
+		if errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusNotFound || apiErr.StatusCode == http.StatusGone) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("receiver: fetch transmitter metadata: %w", err)
+		}
+		return body, nil
+	}
+	return nil, fmt.Errorf("receiver: fetch transmitter metadata: none found at %s", strings.Join(locations, ", "))
 }
 
 // checkEndpoints enforces SSF 1.0 §7.1: every endpoint the metadata

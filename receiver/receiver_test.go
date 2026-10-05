@@ -977,3 +977,118 @@ func TestClientAssertions(t *testing.T) {
 		}
 	}
 }
+
+// The Receiver finds metadata published at the SSF location, appended to
+// the issuer, at RISC's location, or at an explicit MetadataURL — but
+// moves on only from a location that does not exist.
+func TestMetadataLocations(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	tx := e.txSrv.Config.Handler
+	ssfPath := "/.well-known/ssf-configuration/tx"
+	// publish serves the Transmitter's metadata at path only; status, if
+	// set, answers the SSF location instead of 404.
+	publish := func(path string, status int) {
+		e.txSrv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case r.URL.Path == path:
+				r.URL.Path = ssfPath
+				tx.ServeHTTP(w, r)
+			case r.URL.Path == ssfPath && status != 0:
+				w.WriteHeader(status)
+			case strings.Contains(r.URL.Path, "/.well-known/"), r.URL.Path == "/custom/metadata":
+				http.NotFound(w, r)
+			default:
+				tx.ServeHTTP(w, r)
+			}
+		})
+	}
+	for name, c := range map[string]struct {
+		path, metadataURL string
+		status            int
+		ok                bool
+	}{
+		"SSF location":                         {path: ssfPath, ok: true},
+		"appended to the issuer":               {path: "/tx/.well-known/ssf-configuration", ok: true},
+		"RISC location":                        {path: "/.well-known/risc-configuration/tx", ok: true},
+		"MetadataURL":                          {path: "/custom/metadata", metadataURL: "/custom/metadata", ok: true},
+		"elsewhere without MetadataURL":        {path: "/custom/metadata"},
+		"MetadataURL replaces the search":      {path: ssfPath, metadataURL: "/custom/metadata"},
+		"no fallback past a server error":      {path: "/tx/.well-known/ssf-configuration", status: http.StatusInternalServerError},
+		"fallback past a resource that's gone": {path: "/tx/.well-known/ssf-configuration", status: http.StatusGone, ok: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			publish(c.path, c.status)
+			cfg := e.cfg
+			if c.metadataURL != "" {
+				cfg.MetadataURL = e.txSrv.URL + c.metadataURL
+			}
+			_, err := receiver.New(ctx, cfg)
+			if c.ok && err != nil {
+				t.Errorf("New: %v", err)
+			}
+			if !c.ok && err == nil {
+				t.Error("New succeeded")
+			}
+		})
+	}
+	cfg := e.cfg
+	cfg.MetadataURL = "http://tx.example/metadata"
+	if _, err := receiver.New(ctx, cfg); err == nil || !strings.Contains(err.Error(), "MetadataURL") {
+		t.Errorf("an http MetadataURL: %v", err)
+	}
+}
+
+// One stream failing its checks does not hide the others: Streams returns
+// those that pass and reports the rest, so the caller can delete them.
+func TestStreamsReportsRejectedStreams(t *testing.T) {
+	e := newEnvTx(t, func(c *transmitter.Config) { c.MultipleStreamsPerReceiver = true })
+	ctx := context.Background()
+	good, err := e.rx.CreateStream(ctx, receiver.StreamRequest{Description: "good"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad, err := e.rx.CreateStream(ctx, receiver.StreamRequest{Description: "bad"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The Transmitter's list names another issuer on one stream.
+	endpoint, err := url.Parse(e.rx.Metadata().ConfigurationEndpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx := e.txSrv.Config.Handler
+	e.txSrv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != endpoint.Path || r.URL.RawQuery != "" {
+			tx.ServeHTTP(w, r)
+			return
+		}
+		rec := httptest.NewRecorder()
+		tx.ServeHTTP(rec, r)
+		var list []map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+			t.Errorf("list response: %v", err)
+		}
+		for _, c := range list {
+			if c["stream_id"] == bad.StreamID {
+				c["iss"] = "https://elsewhere.example"
+			}
+		}
+		_ = json.NewEncoder(w).Encode(list)
+	})
+
+	streams, err := e.rx.Streams(ctx)
+	if len(streams) != 1 || streams[0].StreamID != good.StreamID {
+		t.Errorf("Streams returned %v, want only the good stream", streams)
+	}
+	var se *receiver.StreamsError
+	if !errors.As(err, &se) || len(se.Rejected) != 1 || se.Rejected[0].Stream.StreamID != bad.StreamID {
+		t.Fatalf("Streams error = %v, want a StreamsError naming the bad stream", err)
+	}
+	if !errors.Is(err, receiver.ErrIssuerMismatch) {
+		t.Errorf("errors.Is(%v, ErrIssuerMismatch) = false", err)
+	}
+	if err := e.rx.DeleteStream(ctx, se.Rejected[0].Stream.StreamID); err != nil {
+		t.Errorf("deleting the rejected stream: %v", err)
+	}
+}

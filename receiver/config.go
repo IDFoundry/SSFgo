@@ -16,9 +16,18 @@ import (
 // is required.
 type Config struct {
 	// Issuer is the Transmitter's issuer identifier. Its metadata is
-	// fetched from the well-known location SSF 1.0 §7.2 derives from it,
-	// and must name exactly this issuer.
+	// fetched from the well-known location SSF 1.0 §7.2 derives from it —
+	// or, if that is not found, from the issuer with that path appended,
+	// where Transmitters built on OpenID Providers often publish it, then
+	// from RISC's location (SSF 1.0 §7.2.2) — and must name exactly this
+	// issuer.
 	Issuer string
+
+	// MetadataURL, if set, is the only location the Transmitter's
+	// metadata is fetched from, for a Transmitter that publishes it
+	// elsewhere. It must be https; the metadata must still name Issuer.
+	// Optional.
+	MetadataURL string
 
 	// Audience is the Receiver's own audience value: every stream it
 	// creates must list it in "aud", and every SET must be addressed to
@@ -126,6 +135,11 @@ func (c *Config) validate() error {
 	}
 	if c.ReplayStore == nil {
 		errs = append(errs, errors.New("a ReplayStore is required"))
+	}
+	if c.MetadataURL != "" {
+		if u, err := url.Parse(c.MetadataURL); err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" {
+			errs = append(errs, fmt.Errorf("MetadataURL: %q is not an https URL", c.MetadataURL))
+		}
 	}
 	for _, o := range c.TrustedOrigins {
 		if u, err := url.Parse(o); err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil ||
