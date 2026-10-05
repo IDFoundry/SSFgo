@@ -14,16 +14,19 @@ jobs:
   conformance:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # The job runs the OIDF suite's latest code, unpinned, as an early
+    # warning of suite changes. So it keeps no Git credentials for that code
+    # to use, and caches no Go build state another workflow could restore.
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           check-latest: true
-          cache-dependency-path: |
-            go.mod
-            storage/sqlstore/go.sum
+          cache: false
 
       - uses: actions/setup-python@v7
         with:
