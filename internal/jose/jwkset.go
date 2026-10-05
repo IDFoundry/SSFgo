@@ -13,8 +13,9 @@ import (
 type SetKey struct {
 	KeyID string
 	// Algorithm is the key's "alg" member, or zero if the key did not
-	// state one. An RSA key without "alg" is usable with both RS256 and
-	// PS256; the verifier decides.
+	// state one. An RSA key without "alg" is usable with every RS and PS
+	// algorithm, an EC key with the ES algorithm of its curve; the
+	// verifier decides.
 	Algorithm ssf.SignatureAlgorithm
 	PublicKey crypto.PublicKey
 }
@@ -71,7 +72,7 @@ func ParseJWKSet(body []byte) ([]SetKey, error) {
 }
 
 func anyAlgorithmFits(pub crypto.PublicKey) bool {
-	for _, alg := range []ssf.SignatureAlgorithm{ssf.RS256, ssf.PS256, ssf.ES256, ssf.EdDSA} {
+	for _, alg := range ssf.SignatureAlgorithms() {
 		if ValidateKeyForAlgorithm(pub, alg) == nil {
 			return true
 		}

@@ -6,6 +6,10 @@ import "fmt"
 // verifies Security Event Tokens with. A SET's "alg" header is untrusted
 // input: a Receiver states which algorithms it accepts before any
 // signature is checked, rather than trusting whatever the header claims.
+//
+// Every asymmetric algorithm of RFC 7518 §3.1 is supported, and EdDSA with
+// Ed25519. HMAC and "none" never are: a SET is verified with the
+// Transmitter's published public keys, never a shared secret.
 type SignatureAlgorithm uint8
 
 const (
@@ -25,23 +29,46 @@ const (
 
 	// EdDSA is pure EdDSA using Ed25519 (RFC 8037 §3.1).
 	EdDSA
+
+	// RS384 is RSASSA-PKCS1-v1_5 using SHA-384 (RFC 7518 §3.3).
+	RS384
+
+	// RS512 is RSASSA-PKCS1-v1_5 using SHA-512 (RFC 7518 §3.3).
+	RS512
+
+	// PS384 is RSASSA-PSS using SHA-384 and MGF1 with SHA-384
+	// (RFC 7518 §3.5).
+	PS384
+
+	// PS512 is RSASSA-PSS using SHA-512 and MGF1 with SHA-512
+	// (RFC 7518 §3.5).
+	PS512
+
+	// ES384 is ECDSA using the P-384 curve and SHA-384 (RFC 7518 §3.4).
+	ES384
+
+	// ES512 is ECDSA using the P-521 curve and SHA-512 (RFC 7518 §3.4).
+	ES512
 )
+
+// algorithmNames maps each algorithm to its JOSE "alg" header value.
+var algorithmNames = map[SignatureAlgorithm]string{
+	RS256: "RS256", RS384: "RS384", RS512: "RS512",
+	PS256: "PS256", PS384: "PS384", PS512: "PS512",
+	ES256: "ES256", ES384: "ES384", ES512: "ES512",
+	EdDSA: "EdDSA",
+}
+
+// SignatureAlgorithms returns every algorithm SSFgo supports, in the order
+// of their constants.
+func SignatureAlgorithms() []SignatureAlgorithm {
+	return []SignatureAlgorithm{RS256, PS256, ES256, EdDSA, RS384, RS512, PS384, PS512, ES384, ES512}
+}
 
 // String returns the JOSE "alg" header value for a, or "" if a is not a
 // recognized algorithm.
 func (a SignatureAlgorithm) String() string {
-	switch a {
-	case RS256:
-		return "RS256"
-	case PS256:
-		return "PS256"
-	case ES256:
-		return "ES256"
-	case EdDSA:
-		return "EdDSA"
-	default:
-		return ""
-	}
+	return algorithmNames[a]
 }
 
 // IsValid reports whether a is one of the algorithms SSFgo supports.
@@ -51,19 +78,13 @@ func (a SignatureAlgorithm) IsValid() bool {
 
 // ParseSignatureAlgorithm maps a JOSE "alg" header value to a
 // SignatureAlgorithm. It rejects every value outside the closed set,
-// including "none" and every HMAC algorithm: a SET is verified with the
-// Transmitter's published public keys, never a shared secret.
+// including "none" and every HMAC algorithm. Matching is exact: "rs256" is
+// not RS256.
 func ParseSignatureAlgorithm(alg string) (SignatureAlgorithm, error) {
-	switch alg {
-	case "RS256":
-		return RS256, nil
-	case "PS256":
-		return PS256, nil
-	case "ES256":
-		return ES256, nil
-	case "EdDSA":
-		return EdDSA, nil
-	default:
-		return 0, fmt.Errorf("ssf: unsupported signature algorithm %q", alg)
+	for a, name := range algorithmNames {
+		if name == alg {
+			return a, nil
+		}
 	}
+	return 0, fmt.Errorf("ssf: unsupported signature algorithm %q", alg)
 }

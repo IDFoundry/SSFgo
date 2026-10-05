@@ -71,13 +71,16 @@ func TestLocalizedText(t *testing.T) {
 }
 
 func TestSignatureAlgorithm(t *testing.T) {
-	for _, alg := range []SignatureAlgorithm{RS256, PS256, ES256, EdDSA} {
+	if n := len(SignatureAlgorithms()); n != 10 {
+		t.Errorf("%d algorithms, want 10", n)
+	}
+	for _, alg := range SignatureAlgorithms() {
 		parsed, err := ParseSignatureAlgorithm(alg.String())
 		if err != nil || parsed != alg || !alg.IsValid() {
 			t.Errorf("%s did not round trip", alg)
 		}
 	}
-	for _, bad := range []string{"none", "HS256", "RS384", "", "rs256"} {
+	for _, bad := range []string{"none", "HS256", "HS384", "HS512", "ES256K", "Ed25519", "", "rs256", "RS1024"} {
 		if _, err := ParseSignatureAlgorithm(bad); err == nil {
 			t.Errorf("ParseSignatureAlgorithm(%q) succeeded", bad)
 		}

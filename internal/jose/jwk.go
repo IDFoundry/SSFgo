@@ -4,7 +4,6 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
-	"crypto/elliptic"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
@@ -56,13 +55,17 @@ func (k JWK) MarshalJSON() ([]byte, error) {
 	raw := rawJWK{Use: "sig", Alg: k.alg.String(), Kid: k.kid}
 	switch pub := k.pub.(type) {
 	case *ecdsa.PublicKey:
-		b, err := pub.Bytes()
-		if err != nil || len(b) != 1+2*p256CoordinateSize {
-			return nil, fmt.Errorf("jose: cannot encode EC key as a P-256 JWK")
+		c := curveOf(pub.Curve)
+		if c == nil {
+			return nil, fmt.Errorf("jose: cannot encode an EC key on an unsupported curve")
 		}
-		raw.Kty, raw.Crv = "EC", "P-256"
-		raw.X = base64.RawURLEncoding.EncodeToString(b[1 : 1+p256CoordinateSize])
-		raw.Y = base64.RawURLEncoding.EncodeToString(b[1+p256CoordinateSize:])
+		b, err := pub.Bytes()
+		if err != nil || len(b) != 1+2*c.size {
+			return nil, fmt.Errorf("jose: cannot encode EC key as a %s JWK", c.name)
+		}
+		raw.Kty, raw.Crv = "EC", c.name
+		raw.X = base64.RawURLEncoding.EncodeToString(b[1 : 1+c.size])
+		raw.Y = base64.RawURLEncoding.EncodeToString(b[1+c.size:])
 	case *rsa.PublicKey:
 		raw.Kty = "RSA"
 		raw.N = base64.RawURLEncoding.EncodeToString(pub.N.Bytes())
@@ -136,21 +139,22 @@ func publicKeyFromRaw(raw rawJWK) (crypto.PublicKey, error) {
 }
 
 func parseECPublicKey(raw rawJWK) (crypto.PublicKey, error) {
-	if raw.Crv != "P-256" {
+	c := curveNamed(raw.Crv)
+	if c == nil {
 		return nil, fmt.Errorf("jose: unsupported EC curve %q", raw.Crv)
 	}
 	x, err := base64.RawURLEncoding.DecodeString(raw.X)
-	if err != nil || len(x) != p256CoordinateSize {
-		return nil, fmt.Errorf("jose: jwk x must be %d base64url bytes", p256CoordinateSize)
+	if err != nil || len(x) != c.size {
+		return nil, fmt.Errorf("jose: jwk x must be %d base64url bytes for %s", c.size, c.name)
 	}
 	y, err := base64.RawURLEncoding.DecodeString(raw.Y)
-	if err != nil || len(y) != p256CoordinateSize {
-		return nil, fmt.Errorf("jose: jwk y must be %d base64url bytes", p256CoordinateSize)
+	if err != nil || len(y) != c.size {
+		return nil, fmt.Errorf("jose: jwk y must be %d base64url bytes for %s", c.size, c.name)
 	}
 	// ParseUncompressedPublicKey rejects points not on the curve and the
 	// point at infinity.
 	point := append(append([]byte{0x04}, x...), y...)
-	pub, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), point)
+	pub, err := ecdsa.ParseUncompressedPublicKey(c.curve, point)
 	if err != nil {
 		return nil, fmt.Errorf("jose: jwk ec point: %w", err)
 	}
@@ -186,8 +190,12 @@ func parseOKPPublicKey(raw rawJWK) (crypto.PublicKey, error) {
 // ValidateKeyForAlgorithm reports whether pub is usable with alg: the right
 // key type, curve, and size.
 func ValidateKeyForAlgorithm(pub crypto.PublicKey, alg ssf.SignatureAlgorithm) error {
-	switch alg {
-	case ssf.RS256, ssf.PS256:
+	spec, err := specFor(alg)
+	if err != nil {
+		return err
+	}
+	switch spec.family {
+	case familyRSAPKCS1, familyRSAPSS:
 		key, ok := pub.(*rsa.PublicKey)
 		if !ok {
 			return fmt.Errorf("jose: %s requires an RSA public key, got %T", alg, pub)
@@ -195,15 +203,15 @@ func ValidateKeyForAlgorithm(pub crypto.PublicKey, alg ssf.SignatureAlgorithm) e
 		if err := checkRSAKeySize(key); err != nil {
 			return fmt.Errorf("jose: %s: %w", alg, err)
 		}
-	case ssf.ES256:
+	case familyECDSA:
 		key, ok := pub.(*ecdsa.PublicKey)
 		if !ok {
-			return fmt.Errorf("jose: ES256 requires an ECDSA public key, got %T", pub)
+			return fmt.Errorf("jose: %s requires an ECDSA public key, got %T", alg, pub)
 		}
-		if key.Curve != elliptic.P256() {
-			return fmt.Errorf("jose: ES256 requires curve P-256")
+		if key.Curve != spec.curve.curve {
+			return fmt.Errorf("jose: %s requires curve %s", alg, spec.curve.name)
 		}
-	case ssf.EdDSA:
+	case familyEdDSA:
 		key, ok := pub.(ed25519.PublicKey)
 		if !ok {
 			return fmt.Errorf("jose: EdDSA requires an Ed25519 public key, got %T", pub)
@@ -214,8 +222,6 @@ func ValidateKeyForAlgorithm(pub crypto.PublicKey, alg ssf.SignatureAlgorithm) e
 		if hasSmallOrder(key) {
 			return errSmallOrderKey
 		}
-	default:
-		return fmt.Errorf("jose: unsupported algorithm %v", alg)
 	}
 	return nil
 }

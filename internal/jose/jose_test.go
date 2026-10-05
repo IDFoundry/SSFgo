@@ -115,7 +115,7 @@ func TestRSAKeySizeLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyRSAPKCS1v15(&rsa1024.PublicKey, make([]byte, 32), sig); !errors.Is(err, ErrInvalidSignature) {
+	if err := verifyRSAPKCS1v15(&rsa1024.PublicKey, ssf.RS256, crypto.SHA256, make([]byte, 32), sig); !errors.Is(err, ErrInvalidSignature) {
 		t.Errorf("verify with 1024-bit key = %v, want ErrInvalidSignature", err)
 	}
 }

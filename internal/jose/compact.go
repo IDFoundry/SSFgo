@@ -2,7 +2,6 @@ package jose
 
 import (
 	"crypto"
-	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"strings"
@@ -34,22 +33,22 @@ func Sign(signer crypto.Signer, header Header, payload []byte) (string, error) {
 	signingInput := base64.RawURLEncoding.EncodeToString(headerJSON) + "." +
 		base64.RawURLEncoding.EncodeToString(payload)
 
+	alg := header.Algorithm
+	spec, err := specFor(alg)
+	if err != nil {
+		return "", err
+	}
 	var sig []byte
-	switch header.Algorithm {
-	case ssf.RS256:
-		hash := sha256.Sum256([]byte(signingInput))
-		sig, err = signRSAPKCS1v15(signer, hash[:])
-	case ssf.PS256:
-		hash := sha256.Sum256([]byte(signingInput))
-		sig, err = signRSAPSS(signer, hash[:])
-	case ssf.ES256:
-		hash := sha256.Sum256([]byte(signingInput))
-		sig, err = signECDSA(signer, hash[:])
-	case ssf.EdDSA:
+	switch spec.family {
+	case familyRSAPKCS1:
+		sig, err = signRSAPKCS1v15(signer, alg, spec.hash, digest(spec.hash, []byte(signingInput)))
+	case familyRSAPSS:
+		sig, err = signRSAPSS(signer, alg, spec.hash, digest(spec.hash, []byte(signingInput)))
+	case familyECDSA:
+		sig, err = signECDSA(signer, alg, spec, digest(spec.hash, []byte(signingInput)))
+	case familyEdDSA:
 		// RFC 8037 §3.1: pure EdDSA over the signing input, no pre-hash.
 		sig, err = signEdDSA(signer, []byte(signingInput))
-	default:
-		return "", fmt.Errorf("jose: unsupported algorithm %v", header.Algorithm)
 	}
 	if err != nil {
 		return "", err
@@ -145,19 +144,18 @@ func (c Compact) Verify(pub crypto.PublicKey, alg ssf.SignatureAlgorithm) error 
 	if c.Header.Algorithm != alg {
 		return fmt.Errorf("%w: header has %s, expected %s", ErrAlgorithmMismatch, c.Header.Algorithm, alg)
 	}
-	switch alg {
-	case ssf.RS256:
-		hash := sha256.Sum256(c.signingInput)
-		return verifyRSAPKCS1v15(pub, hash[:], c.signature)
-	case ssf.PS256:
-		hash := sha256.Sum256(c.signingInput)
-		return verifyRSAPSS(pub, hash[:], c.signature)
-	case ssf.ES256:
-		hash := sha256.Sum256(c.signingInput)
-		return verifyECDSA(pub, hash[:], c.signature)
-	case ssf.EdDSA:
-		return verifyEdDSA(pub, c.signingInput, c.signature)
+	spec, err := specFor(alg)
+	if err != nil {
+		return err
+	}
+	switch spec.family {
+	case familyRSAPKCS1:
+		return verifyRSAPKCS1v15(pub, alg, spec.hash, digest(spec.hash, c.signingInput), c.signature)
+	case familyRSAPSS:
+		return verifyRSAPSS(pub, alg, spec.hash, digest(spec.hash, c.signingInput), c.signature)
+	case familyECDSA:
+		return verifyECDSA(pub, alg, spec, digest(spec.hash, c.signingInput), c.signature)
 	default:
-		return fmt.Errorf("jose: unsupported algorithm %v", alg)
+		return verifyEdDSA(pub, c.signingInput, c.signature)
 	}
 }

@@ -118,8 +118,7 @@ Ideas recorded for later; none is committed to.
 - **Conformance kit.** Starting the OIDF suite from Go tests, rather than
   only from the shell scripts.
 
-Open questions from the spec review: more signing algorithms (ES384,
-PS384 and others) or documenting the four supported; keeping SETs a Receiver
-rejects with a likely transient `invalid_key` or `authentication_failed`;
+Open questions from the spec review: keeping SETs a Receiver rejects
+with a likely transient `invalid_key` or `authentication_failed`;
 stricter parsing of `nbf`, proprietary format names and repeated complex
 members; and the Interop Receiver check requiring both push and poll.
