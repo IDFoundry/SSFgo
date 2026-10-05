@@ -1,0 +1,20 @@
+{
+  "jti": "ca977d05ba5c43929e3a69023d5392a9",
+  "sub_id": {
+    "format": "scim",
+    "uri": "/Users/b7c14771-226c-4d05-8860-134711653041"
+  },
+  "txn": "2d80e537a3f64622b0347b641ebc8f44:2",
+  "events":{
+    "urn:ietf:params:scim:event:misc:asyncresp": {
+          "method": "PUT",
+          "version": "W\/\"huJj29dMNgu3WXPD\"",
+          "status": "200"
+    }
+  },
+  "iat": 1458505045,
+  "iss":"https://scim.example.com",
+  "aud":[
+   "https://scim.example.com/Feeds/98d52461fa5bbc879593b7754"
+  ]
+}

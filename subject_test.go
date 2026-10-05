@@ -260,6 +260,7 @@ func FuzzParseSubject(f *testing.F) {
 		f.Add([]byte(c.json))
 	}
 	f.Add([]byte(`{"format":"complex","user":{"format":"aliases","identifiers":[]}}`))
+	f.Add([]byte(`{"format":"scim","uri":"/Users/2b2f","externalId":"jdoe","emails":[{"value":"j@example.com"}]}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		s, err := ParseSubject(data)
 		if err != nil {
@@ -288,5 +289,55 @@ func TestProprietaryEqualityIgnoresEscaping(t *testing.T) {
 	c := ProprietarySubject{FormatName: "x", Members: map[string]json.RawMessage{"a": json.RawMessage(`"&amp;"`)}}
 	if SubjectsEqual(a, c) {
 		t.Error("different strings compared equal")
+	}
+}
+
+// The scim subject of RFC 9967 §2.1: uri required, externalId and id
+// optional, and further SCIM attributes kept as they came.
+func TestSCIMSubject(t *testing.T) {
+	const in = `{"format":"scim","uri":"/Users/44f6142df96bd6ab61e7521d9","externalId":"jdoe","userName":"jdoe","emails":[{"value":"jdoe@example.com"}]}`
+	s, err := ParseSubject([]byte(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := SCIMSubject{
+		URI:        "/Users/44f6142df96bd6ab61e7521d9",
+		ExternalID: "jdoe",
+		Attributes: map[string]json.RawMessage{
+			"userName": json.RawMessage(`"jdoe"`),
+			"emails":   json.RawMessage(`[{"value":"jdoe@example.com"}]`),
+		},
+	}
+	if !SubjectsEqual(s, want) {
+		t.Fatalf("parsed %#v, want %#v", s, want)
+	}
+	out, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := `{"format":"scim","uri":"/Users/44f6142df96bd6ab61e7521d9","externalId":"jdoe","emails":[{"value":"jdoe@example.com"}],"userName":"jdoe"}`; string(out) != got {
+		t.Errorf("encoded %s\nwant    %s", out, got)
+	}
+	other := want
+	other.ExternalID = "someone-else"
+	if SubjectsEqual(s, other) {
+		t.Error("subjects with different externalId compared equal")
+	}
+	for name, bad := range map[string]string{
+		"no uri":           `{"format":"scim","externalId":"jdoe"}`,
+		"absolute uri":     `{"format":"scim","uri":"https://scim.example.com/Users/1"}`,
+		"network-path uri": `{"format":"scim","uri":"//scim.example.com/Users/1"}`,
+		"uri not a string": `{"format":"scim","uri":1}`,
+		"id not a string":  `{"format":"scim","uri":"/Users/1","id":1}`,
+	} {
+		if _, err := ParseSubject([]byte(bad)); !errors.Is(err, ErrInvalidSubject) {
+			t.Errorf("%s: %v, want ErrInvalidSubject", name, err)
+		}
+	}
+	if _, err := json.Marshal(SCIMSubject{URI: "/Users/1", Attributes: map[string]json.RawMessage{"uri": json.RawMessage(`"x"`)}}); err == nil {
+		t.Error("an attribute shadowing uri was encoded")
+	}
+	if _, err := json.Marshal(ProprietarySubject{FormatName: FormatSCIM, Members: map[string]json.RawMessage{"uri": json.RawMessage(`"/Users/1"`)}}); err == nil {
+		t.Error("scim carried as a proprietary subject was encoded")
 	}
 }

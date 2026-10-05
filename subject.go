@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/netip"
 	"net/url"
 	"reflect"
@@ -37,6 +38,10 @@ const (
 	FormatIPAddresses     SubjectFormat = "ip-addresses"
 	FormatComplex         SubjectFormat = "complex"
 )
+
+// FormatSCIM identifies a SCIM resource (RFC 9967 §2.1), the subject of
+// SCIM events.
+const FormatSCIM SubjectFormat = "scim"
 
 // ipAddressesMember is the member holding an ip-addresses subject's
 // addresses (SSF 1.0 §3.5.3).
@@ -157,6 +162,23 @@ type ComplexSubject struct {
 	Additional  map[string]Subject
 }
 
+// SCIMSubject identifies a SCIM resource (RFC 9967 §2.1).
+type SCIMSubject struct {
+	// URI is the resource's path relative to the SCIM service provider's
+	// base URI, such as "/Users/2b2f880af6674ac284bae9381673d462".
+	// Required.
+	URI string
+	// ExternalID is the resource's "externalId", if known.
+	ExternalID string
+	// ID is the resource's "id", which RFC 9967 allows alongside URI for
+	// backwards compatibility.
+	ID string
+	// Attributes holds further members — SCIM attributes unique within the
+	// service provider, such as "userName" or "emails" — as raw JSON. Its
+	// keys must not be "format", "uri", "externalId" or "id".
+	Attributes map[string]json.RawMessage
+}
+
 // ProprietarySubject carries a Subject Identifier whose format is agreed
 // between Transmitter and Receiver out of band (SSF 1.0 §3.4). Members
 // holds every member except "format", as raw JSON.
@@ -177,6 +199,7 @@ func (JWTIDSubject) isSubject()           {}
 func (SAMLAssertionIDSubject) isSubject() {}
 func (IPAddressesSubject) isSubject()     {}
 func (ComplexSubject) isSubject()         {}
+func (SCIMSubject) isSubject()            {}
 func (ProprietarySubject) isSubject()     {}
 
 // Format implements Subject.
@@ -214,6 +237,9 @@ func (IPAddressesSubject) Format() SubjectFormat { return FormatIPAddresses }
 
 // Format implements Subject.
 func (ComplexSubject) Format() SubjectFormat { return FormatComplex }
+
+// Format implements Subject.
+func (SCIMSubject) Format() SubjectFormat { return FormatSCIM }
 
 // Format implements Subject.
 func (s ProprietarySubject) Format() SubjectFormat { return s.FormatName }
@@ -377,6 +403,26 @@ func (s ComplexSubject) Validate() error {
 	return nil
 }
 
+// scimMembers are the members SCIMSubject models as fields.
+var scimMembers = []string{"format", "uri", "externalId", "id"}
+
+// Validate implements Subject.
+func (s SCIMSubject) Validate() error {
+	u, err := url.Parse(s.URI)
+	if s.URI == "" || err != nil || u.IsAbs() || u.Host != "" {
+		return invalid(FormatSCIM, `"uri" must be a path relative to the SCIM service provider's base URI`)
+	}
+	for k, v := range s.Attributes {
+		if slices.Contains(scimMembers, k) {
+			return invalid(FormatSCIM, fmt.Sprintf("Attributes must not include %q", k))
+		}
+		if !json.Valid(v) {
+			return invalid(FormatSCIM, fmt.Sprintf("attribute %q is not valid JSON", k))
+		}
+	}
+	return nil
+}
+
 func isComplexMemberName(name string) bool {
 	for _, n := range complexMemberNames {
 		if n == name {
@@ -409,7 +455,7 @@ func isKnownFormat(f SubjectFormat) bool {
 	switch f {
 	case FormatAccount, FormatEmail, FormatIssSub, FormatOpaque, FormatPhoneNumber,
 		FormatDID, FormatURI, FormatAliases, FormatJWTID, FormatSAMLAssertionID,
-		FormatIPAddresses, FormatComplex:
+		FormatIPAddresses, FormatComplex, FormatSCIM:
 		return true
 	default:
 		return false
@@ -534,6 +580,22 @@ func (s ComplexSubject) MarshalJSON() ([]byte, error) {
 	return encodeObject(s, ms...)
 }
 
+// MarshalJSON implements json.Marshaler. Attributes follow the modelled
+// members, sorted by name.
+func (s SCIMSubject) MarshalJSON() ([]byte, error) {
+	ms := []member{{"uri", s.URI}}
+	if s.ExternalID != "" {
+		ms = append(ms, member{"externalId", s.ExternalID})
+	}
+	if s.ID != "" {
+		ms = append(ms, member{"id", s.ID})
+	}
+	for _, k := range slices.Sorted(maps.Keys(s.Attributes)) {
+		ms = append(ms, member{k, s.Attributes[k]})
+	}
+	return encodeObject(s, ms...)
+}
+
 // MarshalJSON implements json.Marshaler. Members are sorted by name.
 func (s ProprietarySubject) MarshalJSON() ([]byte, error) {
 	names := make([]string, 0, len(s.Members))
@@ -639,6 +701,22 @@ func parseSubject(data []byte, depth int) (Subject, error) {
 		s, err = parseAliases(obj["identifiers"], depth)
 	case FormatComplex:
 		s, err = parseComplex(obj, depth)
+	case FormatSCIM:
+		var v SCIMSubject
+		if v.URI, err = str("uri"); err == nil {
+			if v.ExternalID, err = str("externalId"); err == nil {
+				v.ID, err = str("id")
+			}
+		}
+		for k, raw := range obj {
+			if !slices.Contains(scimMembers, k) {
+				if v.Attributes == nil {
+					v.Attributes = map[string]json.RawMessage{}
+				}
+				v.Attributes[k] = raw
+			}
+		}
+		s = v
 	default:
 		delete(obj, "format")
 		s = ProprietarySubject{FormatName: format, Members: obj}
@@ -765,6 +843,10 @@ func SubjectsEqual(a, b Subject) bool {
 		return complexEqual(x, b.(ComplexSubject))
 	case ProprietarySubject:
 		return proprietaryEqual(x, b.(ProprietarySubject))
+	case SCIMSubject:
+		y := b.(SCIMSubject)
+		return x.URI == y.URI && x.ExternalID == y.ExternalID && x.ID == y.ID &&
+			membersEqual(x.Attributes, y.Attributes)
 	default:
 		// Every remaining type is a comparable struct of strings.
 		return a == b
@@ -789,11 +871,17 @@ func complexEqual(a, b ComplexSubject) bool {
 // proprietaryEqual reports whether two proprietary subjects have the same
 // members with equal JSON values.
 func proprietaryEqual(a, b ProprietarySubject) bool {
-	if len(a.Members) != len(b.Members) {
+	return membersEqual(a.Members, b.Members)
+}
+
+// membersEqual reports whether a and b hold the same names with equal JSON
+// values.
+func membersEqual(a, b map[string]json.RawMessage) bool {
+	if len(a) != len(b) {
 		return false
 	}
-	for k, v := range a.Members {
-		w, ok := b.Members[k]
+	for k, v := range a {
+		w, ok := b[k]
 		if !ok || !jsonEqual(v, w) {
 			return false
 		}

@@ -1,0 +1,20 @@
+{
+  "jti": "4bb87d70a4ab463bbdcd1f99111cbbf1",
+  "sub_id": {
+    "format": "scim",
+    "uri": "/Users/5d8d29d3-342c-4b5f-8683-a3cb6763ffcc"
+  },
+  "txn": "2d80e537a3f64622b0347b641ebc8f44:3",
+  "events":{
+    "urn:ietf:params:scim:event:misc:asyncresp": {
+          "method": "PATCH",
+          "version": "W\/\"huJj29dMNgu3WXPD\"",
+          "status": "200"
+    }
+  },
+  "iat": 1458505046,
+  "iss":"https://scim.example.com",
+  "aud":[
+   "https://scim.example.com/Feeds/98d52461fa5bbc879593b7754"
+  ]
+}

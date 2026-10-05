@@ -24,6 +24,18 @@ var ErrUnsupportedEvent = errors.New("transmitter: event type is not in EventsSu
 // Emit returns once the SETs are queued. Delivery happens through each
 // stream's poll endpoint, or through Run for push streams.
 func (t *Transmitter) Emit(ctx context.Context, subject ssf.Subject, event ssf.Event) error {
+	return t.EmitTxn(ctx, randomID(), subject, event)
+}
+
+// EmitTxn is Emit with the "txn" chosen by the caller, so that the SETs of
+// one transaction share it across calls. RFC 9967 needs this: the events
+// of one SCIM transaction share a "txn" (§2.2), and an asynchronous
+// response's must be the value the service provider returned to the
+// client (§2.5.1.3).
+func (t *Transmitter) EmitTxn(ctx context.Context, txn string, subject ssf.Subject, event ssf.Event) error {
+	if txn == "" {
+		return errors.New("transmitter: EmitTxn requires a txn")
+	}
 	if err := t.checkEmit(subject, event); err != nil {
 		return err
 	}
@@ -31,7 +43,6 @@ func (t *Transmitter) Emit(ctx context.Context, subject ssf.Subject, event ssf.E
 	if err != nil {
 		return fmt.Errorf("transmitter: emit: %w", err)
 	}
-	txn := randomID()
 	var errs []error
 	for _, s := range streams {
 		if err := t.emitTo(ctx, s, subject, event, txn); err != nil {

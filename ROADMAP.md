@@ -89,8 +89,43 @@ Added since the freeze: a security review
 whose fixes changed the storage contract before any tag (see
 [CHANGELOG.md](CHANGELOG.md)), the Receiver-side `caep/interop` preset, continuous fuzzing,
 Transmitter-initiated verification, `inactivity_timeout` with the
-Receiver's `KeepAlive`, and `storage/sqlstore` for PostgreSQL and SQLite.
+Receiver's `KeepAlive`, `storage/sqlstore` for PostgreSQL and SQLite, an
+adversarial security review
+([docs/security-review-2026-10.md](docs/security-review-2026-10.md)), and
+SCIM events (RFC 9967).
 
-## Not planned for v1.0
+## Under consideration
 
-- SCIM events (RFC 9967).
+Ideas recorded for later; none is committed to.
+
+- **Receiver reactions.** Ready-made handling of what most Receivers do
+  with session-revoked, credential-change or account-disabled: a
+  revocation store (`IsRevoked(sid, sub, iat)`) with `net/http`
+  middleware that rejects matching tokens, and a session-terminator hook
+  with a helper matching an event's subject to a user's claims.
+- **Metadata location.** Fall back to the issuer with
+  `/.well-known/ssf-configuration` appended, as Transmitters built on
+  OpenID Providers often publish it, and to RISC's
+  `/.well-known/risc-configuration` (SSF §7.2.2); allow an explicit
+  metadata URL.
+- **Test kit.** A public `ssftest` package: an in-process Transmitter for
+  testing Receivers, and a Receiver for testing Transmitters.
+- **Stream registration.** `EnsureStream`: find, create or update the
+  stream a Receiver wants, retrying while the Transmitter is unreachable.
+- **Observability.** A dependency-free observer interface for both roles
+  (SETs received, rejected, handled, emitted and pushed; delivery
+  latency; key refreshes) and readiness checks.
+- **Interoperability.** Testing against deployed Transmitters, such as
+  Keycloak's, and handling their conventions — a `session` of `ALL`
+  meaning every session, audiences of the form `<client>/<stream>`.
+- **Local development.** An opt-in, clearly labelled mode allowing `http`
+  on loopback addresses.
+- **Conformance kit.** Starting the OIDF suite from Go tests, rather than
+  only from the shell scripts.
+
+Open questions from the spec review: more signing algorithms (ES384,
+PS384 and others) or documenting the four supported; `Streams` returning
+the streams that pass when one fails its checks; keeping SETs a Receiver
+rejects with a likely transient `invalid_key` or `authentication_failed`;
+stricter parsing of `nbf`, proprietary format names and repeated complex
+members; and the Interop Receiver check requiring both push and poll.

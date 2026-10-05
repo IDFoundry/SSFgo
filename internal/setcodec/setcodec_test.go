@@ -21,6 +21,7 @@ import (
 	"github.com/idfoundry/ssfgo/caep"
 	"github.com/idfoundry/ssfgo/internal/jose"
 	"github.com/idfoundry/ssfgo/risc"
+	"github.com/idfoundry/ssfgo/scim"
 )
 
 var (
@@ -50,6 +51,9 @@ func registry(t testing.TB) *ssf.Registry {
 		t.Fatal(err)
 	}
 	if err := risc.Register(r); err != nil {
+		t.Fatal(err)
+	}
+	if err := scim.Register(r); err != nil {
 		t.Fatal(err)
 	}
 	return r
