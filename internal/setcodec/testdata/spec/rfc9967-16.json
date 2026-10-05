@@ -1,0 +1,21 @@
+{
+  "jti": "dbae9d7506b34329aa7f2f0d3827848b",
+  "sub_id": {
+    "format": "scim",
+    "uri": "/Users/92b725cd-9465-4e7d-8c16-01f8e146b87a"
+  },
+  "txn": "2d80e537a3f64622b0347b641ebc8f44:1",
+  "events":{
+    "urn:ietf:params:scim:event:misc:asyncresp": {
+         "method": "POST",
+         "bulkId": "qwerty",
+         "version": "W\/\"oY4m4wn58tkVjJxK\"",
+         "status": "201"
+    }
+  },
+  "iat": 1458505044,
+  "iss":"https://scim.example.com",
+  "aud":[
+   "https://scim.example.com/Feeds/98d52461fa5bbc879593b7754"
+  ]
+}

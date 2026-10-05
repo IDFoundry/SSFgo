@@ -1,0 +1,31 @@
+{
+  "jti": "6164f3bbf6ff41a88dc94f18cb0620e8",
+  "sub_id": {
+    "format": "scim",
+    "uri": "/Groups/176f397ec4c44b94b2cfcb759780b8c2",
+    "externalId": "crmUsers"
+  },
+  "events":{
+    "urn:ietf:params:scim:event:prov:patch:full": {
+      "version": "a330bc54f0671c9",
+      "data": {
+        "schemas":
+      ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+        "Operations":[{
+          "op":"add",
+          "path":"members",
+          "value":[{
+             "display": "Babs Jensen",
+             "$ref": "/Users/2819c223...413861904646",
+             "value": "2819c223-7f76-453a-919d-413861904646"
+          }]
+        }]
+      }
+    }
+  },
+  "iat": 1458505044,
+  "iss":"https://scim.example.com",
+  "aud":[
+   "https://scim.example.com/Feeds/98d52461fa5bbc879593b7754"
+  ]
+}

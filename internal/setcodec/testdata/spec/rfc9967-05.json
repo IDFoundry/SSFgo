@@ -1,0 +1,25 @@
+{
+  "jti": "4d3559ec67504aaba65d40b0363faad8",
+  "iat": 1458496404,
+  "iss":"https://scim.example.com",
+  "aud":[
+    "https://scim.example.com/Feeds/98d52461fa5bbc879593b7754",
+    "https://scim.example.com/Feeds/5d7604516b1d08641d7676ee7"
+  ],
+  "sub_id": {
+    "format": "scim",
+    "uri": "/Users/44f6142df96bd6ab61e7521d9",
+    "externalId": "jdoe"
+  },
+  "events": {
+    "urn:ietf:params:scim:event:prov:create:notice": {
+      "attributes": [
+        "id",
+        "name",
+        "userName",
+        "password",
+        "emails"
+      ]
+    }
+  }
+}

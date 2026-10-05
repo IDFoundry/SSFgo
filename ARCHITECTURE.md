@@ -1,10 +1,10 @@
 # Architecture
 
 SSFgo is a Go implementation of the OpenID Shared Signals Framework
-([SSF 1.0][ssf]) with the two event families defined on top of it:
-Continuous Access Evaluation ([CAEP 1.0][caep]) and Risk Incident Sharing
-and Coordination ([RISC 1.0][risc]). It provides an embeddable
-Transmitter and an embeddable Receiver.
+([SSF 1.0][ssf]) with the event families defined on top of it:
+Continuous Access Evaluation ([CAEP 1.0][caep]), Risk Incident Sharing
+and Coordination ([RISC 1.0][risc]) and SCIM events ([RFC 9967][rfc9967]).
+It provides an embeddable Transmitter and an embeddable Receiver.
 
 The guiding rule for every public API, inherited from FAPIgo:
 
@@ -23,6 +23,7 @@ github.com/idfoundry/ssfgo     // package ssf: shared value types only
 ├── caep/                      // CAEP 1.0 event types (8)
 │   └── interop/               // CAEP Interoperability Profile presets for both roles
 ├── risc/                      // RISC 1.0 event types (14, sessions-revoked deprecated)
+├── scim/                      // RFC 9967 SCIM event types (12)
 ├── transmitter/               // Transmitter role
 ├── receiver/                  // Receiver role
 ├── storage/                   // storage contracts
@@ -65,13 +66,16 @@ Holds only value types that both roles and both event families share:
   `TransmitterMetadata`, `StreamConfiguration`, `Delivery`, `StreamState`
   and the subject and verification request bodies, plus `WellKnownURL`.
 
-`ssf` never imports `caep` or `risc`.
+`ssf` never imports `caep`, `risc` or `scim`. The `scim` subject format
+(RFC 9967 §2.1) lives in `ssf` with the other subject formats, so
+`ParseSubject` knows it.
 
 ### Dependency rules
 
 ```text
 caep        ──► ssf
 risc        ──► ssf, caep (value types only: credential_type)
+scim        ──► ssf
 transmitter ──► ssf, storage, internal/*
 receiver    ──► ssf, storage, internal/*
 caep/interop ─► ssf, caep, transmitter, receiver
@@ -79,8 +83,8 @@ caep/interop ─► ssf, caep, transmitter, receiver
 
 - `transmitter` and `receiver` never import each other. They share
   protocol implementation through `internal/`, not role-level types.
-- Nothing in the library imports `caep` or `risc` except `caep/interop`
-  and applications. Event families are plugged in through `ssf.Registry`.
+- Nothing in the library imports `caep`, `risc` or `scim` except
+  `caep/interop` and applications. Event families are plugged in through `ssf.Registry`.
 - `risc` may import `caep` only for value types RISC normatively
   references (RISC §2.7: `credential_type` takes CAEP's values). It never
   aliases or converts events between families: the deprecated RISC
@@ -326,3 +330,4 @@ Every suite failure becomes a local regression test before it is fixed.
 [ssf]: https://openid.net/specs/openid-sharedsignals-framework-1_0-final.html
 [caep]: https://openid.net/specs/openid-caep-1_0-final.html
 [risc]: https://openid.net/specs/openid-risc-1_0-final.html
+[rfc9967]: https://www.rfc-editor.org/rfc/rfc9967

@@ -1,0 +1,19 @@
+{
+  "jti": "6a7843a7f5244d0eb62ca38b641d9139",
+  "sub_id": {
+    "format": "scim",
+    "uri": "/Users/e9025315-6bea-44e1-899c-1e07454e468b"
+  },
+  "txn": "2d80e537a3f64622b0347b641ebc8f44:4",
+  "events":{
+    "urn:ietf:params:scim:event:misc:asyncresp": {
+          "method": "DELETE",
+          "status": "204"
+    }
+  },
+  "iat": 1458505047,
+  "iss":"https://scim.example.com",
+  "aud":[
+   "https://scim.example.com/Feeds/98d52461fa5bbc879593b7754"
+  ]
+}

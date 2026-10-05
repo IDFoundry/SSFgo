@@ -15,6 +15,7 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for what v1 guarantees.
   Transmitter configuration discovery (§7) and the full stream management
   API (§8), with push (RFC 8935) and poll (RFC 8936) delivery.
 - OpenID CAEP 1.0: all 8 event types. OpenID RISC 1.0: all 14.
+  SCIM events (RFC 9967): all 12, and the `scim` subject.
 - CAEP Interoperability Profile 1.0: `caep/interop` configuration check
   and event validator.
 - Receiver OAuth client credentials with `client_secret_basic`,
@@ -32,6 +33,13 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 
 ### Added since v0.5
 
+- SCIM events (RFC 9967): the new `scim` package has all 12 event
+  types — feed add and remove, create, patch and put in full and notice
+  mode, delete, activate, deactivate and the asynchronous response — and
+  `ssf.SCIMSubject` is the `scim` subject. A SET carries one event, so the
+  events of one SCIM transaction are separate SETs sharing a `txn`: the
+  new `Transmitter.EmitTxn` emits under a chosen `txn`, as an
+  asynchronous response requires.
 - Transmitter-initiated verification (SSF §8.1.4): `tx.SendVerification`
   sends a verification event without state on demand, and
   `transmitter.Config.VerifyNewStreams` sends one on every new stream.

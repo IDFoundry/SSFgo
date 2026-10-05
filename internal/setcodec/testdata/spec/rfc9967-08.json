@@ -1,0 +1,33 @@
+{
+  "jti": "6164f3bbf6ff41a88dc94f18cb0620e8",
+  "sub_id": {
+    "format": "scim",
+    "uri": "/Users/2819c223-7f76-453a-919d-413861904646"
+  },
+  "events":{
+    "urn:ietf:params:scim:event:prov:put:full": {
+      "version": "a330bc54f0671c9",
+      "data": {
+        "schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],
+        "userName":"jdoe",
+        "externalId":"jdoe",
+        "name":{
+           "formatted":"Mr. Jon Jack Doe III",
+           "familyName":"Doe",
+           "givenName":"Jon",
+           "middleName":"Jack"
+        },
+        "roles":[],
+        "emails":[
+          {"value":"jdoe@example.com"},
+          {"value":"anon@jdoe.org"}
+        ]
+      }
+    }
+  },
+  "iat": 1458505044,
+  "iss":"https://scim.example.com",
+  "aud":[
+   "https://scim.example.com/Feeds/98d52461fa5bbc879593b7754"
+  ]
+}

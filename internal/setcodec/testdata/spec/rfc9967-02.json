@@ -1,0 +1,17 @@
+{
+  "jti": "6164f3bbf6ff41a88dc94f18cb0620e8",
+  "txn": "b7b953f11cc6489bbfb87834747cc4c1",
+  "sub_id": {
+    "format": "scim",
+    "uri": "/Users/2b2f880af6674ac284bae9381673d462",
+    "externalId": "jdoe"
+  },
+  "events":{
+    "urn:ietf:params:scim:event:feed:add": {}
+  },
+  "iat": 1458505044,
+  "iss":"https://scim.example.com",
+  "aud":[
+   "https://scim.example.com/Feeds/98d52461fa5bbc879593b7754"
+  ]
+}

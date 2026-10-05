@@ -13,6 +13,7 @@ The public API is every exported identifier in these packages:
 | `github.com/idfoundry/ssfgo` | subjects, events, registry, SET, wire types |
 | `.../caep`, `.../caep/interop` | CAEP events, CAEP Interop profile checks |
 | `.../risc` | RISC events |
+| `.../scim` | SCIM events (RFC 9967) |
 | `.../transmitter`, `.../receiver` | the two roles |
 | `.../storage`, `.../storage/memstore`, `.../storage/storagetest` | persistence contracts and implementations |
 

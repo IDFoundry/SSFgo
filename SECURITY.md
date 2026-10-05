@@ -25,7 +25,7 @@ are the ones we can act on.
 - The affected package or file and, if possible, a minimal reproduction.
 - The requirement or security property you believe is violated — a
   section of SSF 1.0, CAEP 1.0, RISC 1.0, the CAEP Interoperability
-  Profile or an RFC helps.
+  Profile or an RFC (such as RFC 9967 for SCIM events) helps.
 - Whether it is exploitable with a default configuration or needs a
   specific setup.
 

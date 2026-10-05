@@ -20,6 +20,7 @@ capabilities with a focus on standards compliance and interoperability.
 | [OpenID Shared Signals Framework 1.0][ssf] | Transmitter and Receiver |
 | [OpenID CAEP 1.0][caep] | all 8 event types |
 | [OpenID RISC 1.0][risc] | all 14 event types |
+| [RFC 9967][rfc9967] SCIM events | all 12 event types and the `scim` subject; one event per SET |
 | [CAEP Interoperability Profile 1.0][caep-interop] | both roles pass the OIDF plans; `caep/interop` enforces the profile for each |
 | [RFC 8417][rfc8417] Security Event Token | done |
 | [RFC 9493][rfc9493] Subject Identifiers | done |
@@ -110,6 +111,7 @@ MIT — see [LICENSE](LICENSE).
 [risc]: https://openid.net/specs/openid-risc-1_0-final.html
 [caep-interop]: https://openid.net/specs/openid-caep-interoperability-profile-1_0.html
 [rfc8417]: https://www.rfc-editor.org/rfc/rfc8417
+[rfc9967]: https://www.rfc-editor.org/rfc/rfc9967
 [rfc9493]: https://www.rfc-editor.org/rfc/rfc9493
 [rfc8935]: https://www.rfc-editor.org/rfc/rfc8935
 [rfc8936]: https://www.rfc-editor.org/rfc/rfc8936
