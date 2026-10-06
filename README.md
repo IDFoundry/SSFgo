@@ -94,6 +94,16 @@ replay, err := sqlstore.NewReplayStore(db, sqlstore.Postgres)  // receiver.Confi
 [`examples/session-revocation`](examples/session-revocation) runs both
 sides in one process: `go run ./examples/session-revocation`.
 
+To revoke tokens as events arrive, [`revocation`](revocation) records
+what session-revoked, account-disabled and similar events mean and checks
+the application's validated tokens against it:
+
+```go
+rev := revocation.New(memstore.NewRevocationStore(), revocation.Options{})
+rev.Register(rx)                     // session-revoked, account-disabled, ...
+api = rev.Middleware(tokenOf, api)   // 401 for a token issued before its revocation
+```
+
 To test an application that plays one role, [`ssftest`](ssftest) runs the
 other in-process: `ssftest.NewTransmitter` for testing a Receiver,
 `ssftest.NewReceiver` for testing a Transmitter.

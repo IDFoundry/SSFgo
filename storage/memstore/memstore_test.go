@@ -15,3 +15,7 @@ func TestContract(t *testing.T) {
 func TestReplayContract(t *testing.T) {
 	storagetest.ReplayStore(t, func(*testing.T) storage.ReplayStore { return memstore.NewReplayStore() })
 }
+
+func TestRevocationContract(t *testing.T) {
+	storagetest.RevocationStore(t, func(*testing.T) storage.RevocationStore { return memstore.NewRevocationStore() })
+}
