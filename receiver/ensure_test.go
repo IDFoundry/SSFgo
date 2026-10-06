@@ -67,7 +67,7 @@ func TestEnsureStreamPush(t *testing.T) {
 	e := newEnvTx(t, func(c *transmitter.Config) { c.MultipleStreamsPerReceiver = true })
 	ctx := context.Background()
 	push := func(endpoint, auth string) receiver.StreamRequest {
-		return receiver.StreamRequest{Delivery: &ssf.Delivery{Method: ssf.DeliveryPush, EndpointURL: endpoint, AuthorizationHeader: auth}}
+		return receiver.StreamRequest{Delivery: &ssf.Delivery{Method: ssf.DeliveryPush, EndpointURL: endpoint, AuthorizationHeader: ssf.NewSecret(auth)}}
 	}
 	a, err := e.rx.EnsureStream(ctx, push("https://rx.example/a", "Bearer one"))
 	if err != nil {
@@ -84,7 +84,7 @@ func TestEnsureStreamPush(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rotated.StreamID != a.StreamID || rotated.Delivery.AuthorizationHeader != "Bearer two" {
+	if rotated.StreamID != a.StreamID || rotated.Delivery.AuthorizationHeader.Reveal() != "Bearer two" {
 		t.Errorf("rotated stream = %+v, want %s with the new header", rotated, a.StreamID)
 	}
 	if n := streamCount(t, e.rx); n != 2 {

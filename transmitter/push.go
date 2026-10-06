@@ -312,8 +312,8 @@ func (t *Transmitter) push(ctx context.Context, d ssf.Delivery, e storage.Queued
 	}
 	req.Header.Set("Content-Type", "application/secevent+jwt")
 	req.Header.Set("Accept", "application/json")
-	if d.AuthorizationHeader != "" {
-		req.Header.Set("Authorization", d.AuthorizationHeader)
+	if !d.AuthorizationHeader.IsZero() {
+		req.Header.Set("Authorization", d.AuthorizationHeader.Reveal())
 	}
 	res, err := t.client.Do(req)
 	if err != nil {

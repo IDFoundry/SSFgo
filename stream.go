@@ -51,7 +51,22 @@ type Delivery struct {
 	EndpointURL string `json:"endpoint_url,omitempty"`
 	// AuthorizationHeader is the push-only Authorization header value
 	// the Transmitter sends with every push request (SSF 1.0 §6.1.1).
-	AuthorizationHeader string `json:"authorization_header,omitempty"`
+	AuthorizationHeader Secret `json:"authorization_header,omitzero"`
+}
+
+// deliveryWire is Delivery as it is sent, its Authorization header
+// revealed.
+type deliveryWire struct {
+	Method              DeliveryMethod `json:"method"`
+	EndpointURL         string         `json:"endpoint_url,omitempty"`
+	AuthorizationHeader string         `json:"authorization_header,omitempty"`
+}
+
+// MarshalJSON implements json.Marshaler. A Delivery's JSON is its wire
+// form (SSF 1.0 §6.1), and so includes the Authorization header: it is
+// for the protocol and for storage, never for a log.
+func (d Delivery) MarshalJSON() ([]byte, error) {
+	return json.Marshal(deliveryWire{Method: d.Method, EndpointURL: d.EndpointURL, AuthorizationHeader: d.AuthorizationHeader.Reveal()})
 }
 
 // Audience is a JWT "aud" value: one string or an array of strings

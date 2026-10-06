@@ -197,14 +197,14 @@ func run(ctx context.Context, w io.Writer) error {
 	})
 
 	const pushAuth = "Bearer rp-push-secret"
-	rp := httptest.NewTLSServer(rx.PushHandler(receiver.PushOptions{AuthorizationHeader: pushAuth}))
+	rp := httptest.NewTLSServer(rx.PushHandler(receiver.PushOptions{AuthorizationHeader: ssf.NewSecret(pushAuth)}))
 	defer rp.Close()
 	rpServer.Store(rp)
 
 	// EnsureStream creates the stream on the first start and reuses it on
 	// later ones.
 	stream, err := rx.EnsureStream(ctx, receiver.StreamRequest{
-		Delivery:        &ssf.Delivery{Method: ssf.DeliveryPush, EndpointURL: rp.URL + "/ssf/events", AuthorizationHeader: pushAuth},
+		Delivery:        &ssf.Delivery{Method: ssf.DeliveryPush, EndpointURL: rp.URL + "/ssf/events", AuthorizationHeader: ssf.NewSecret(pushAuth)},
 		EventsRequested: []ssf.EventType{caep.SessionRevokedEventType},
 	})
 	if err != nil {

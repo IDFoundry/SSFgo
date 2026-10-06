@@ -113,7 +113,7 @@ func (r *Receiver) reconcile(ctx context.Context, c ssf.StreamConfiguration, wan
 		update.Description = &want.Description
 		changed = true
 	}
-	if want.Delivery.AuthorizationHeader != "" && want.Delivery.AuthorizationHeader != c.Delivery.AuthorizationHeader {
+	if !want.Delivery.AuthorizationHeader.IsZero() && want.Delivery.AuthorizationHeader != c.Delivery.AuthorizationHeader {
 		update.Delivery = want.Delivery
 		changed = true
 	}

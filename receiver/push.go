@@ -19,7 +19,7 @@ type PushOptions struct {
 	// value every push must carry — the value the Receiver gave the
 	// Transmitter as delivery.authorization_header (SSF 1.0 §6.1.1).
 	// Requests without it are refused with 401.
-	AuthorizationHeader string
+	AuthorizationHeader ssf.Secret
 }
 
 // PushHandler returns the http.Handler for a push delivery endpoint
@@ -34,8 +34,8 @@ func (r *Receiver) PushHandler(opts PushOptions) http.Handler {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if opts.AuthorizationHeader != "" &&
-			subtle.ConstantTimeCompare([]byte(req.Header.Get("Authorization")), []byte(opts.AuthorizationHeader)) != 1 {
+		if !opts.AuthorizationHeader.IsZero() &&
+			subtle.ConstantTimeCompare([]byte(req.Header.Get("Authorization")), []byte(opts.AuthorizationHeader.Reveal())) != 1 {
 			pushError(w, http.StatusUnauthorized, errCodeAuthenticationFailed, "the Authorization header is missing or wrong")
 			return
 		}

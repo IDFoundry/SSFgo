@@ -66,7 +66,7 @@ rx, err := receiver.New(ctx, receiver.Config{
 	Audience:    "https://rp.example.com",
 	Registry:    registry, // ssf.NewRegistry() + caep.Register
 	Algorithms:  []ssf.SignatureAlgorithm{ssf.RS256},
-	TokenSource: &receiver.ClientCredentials{TokenURL: tokenURL, ClientID: id, ClientSecret: secret, AuthMethod: receiver.ClientSecretBasic},
+	TokenSource: &receiver.ClientCredentials{TokenURL: tokenURL, ClientID: id, ClientSecret: ssf.NewSecret(secret), AuthMethod: receiver.ClientSecretBasic},
 	ReplayStore: memstore.NewReplayStore(),
 	Limits:      receiver.RecommendedLimits(), // replay window, key age, clock skew
 })
@@ -75,6 +75,7 @@ rx, err := receiver.New(ctx, receiver.Config{
 receiver.On(rx, func(ctx context.Context, set ssf.SET, e caep.SessionRevoked) error {
 	return sessions.RevokeAll(ctx, set.Subject)
 })
+pushSecret := ssf.NewSecret("Bearer " + randomToken) // withheld from logs and %v; Reveal() reads it
 http.Handle("/ssf/events", rx.PushHandler(receiver.PushOptions{AuthorizationHeader: pushSecret}))
 // Creates the stream on the first start; later starts reuse it, updating
 // whatever changed, and wait out a Transmitter that is briefly unavailable.
