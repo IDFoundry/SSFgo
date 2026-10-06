@@ -98,9 +98,6 @@ SCIM events (RFC 9967).
 
 Ideas recorded for later; none is committed to.
 
-- **Durable revocations.** A `storage/sqlstore` implementation of
-  `storage.RevocationStore`, so revocations survive restarts and are
-  shared by several Receiver instances.
 - **Observability.** A dependency-free observer interface for both roles
   (SETs received, rejected, handled, emitted and pushed; delivery
   latency; key refreshes) and readiness checks.

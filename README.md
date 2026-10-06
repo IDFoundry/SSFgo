@@ -89,6 +89,7 @@ db, err := sql.Open("pgx", dsn) // any database/sql driver for PostgreSQL or SQL
 err = sqlstore.CreateSchema(ctx, db, sqlstore.Postgres)
 store, err := sqlstore.NewStreamStore(db, sqlstore.Postgres)   // transmitter.Config.Store
 replay, err := sqlstore.NewReplayStore(db, sqlstore.Postgres)  // receiver.Config.ReplayStore
+revocations, err := sqlstore.NewRevocationStore(db, sqlstore.Postgres) // revocation.New
 ```
 
 [`examples/session-revocation`](examples/session-revocation) runs both

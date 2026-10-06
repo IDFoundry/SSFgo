@@ -9,11 +9,13 @@
 //	if err := sqlstore.CreateSchema(ctx, db, sqlstore.Postgres); err != nil { ... }
 //	streams, err := sqlstore.NewStreamStore(db, sqlstore.Postgres)
 //	replay, err := sqlstore.NewReplayStore(db, sqlstore.Postgres)
+//	revocations, err := sqlstore.NewRevocationStore(db, sqlstore.Postgres)
 //
 // # Schema
 //
-// CreateSchema creates four tables, all prefixed ssf_, if they do not
-// exist: ssf_streams, ssf_subject_rules, ssf_events and ssf_replay. Times
+// CreateSchema creates five tables, all prefixed ssf_, if they do not
+// exist: ssf_streams, ssf_subject_rules, ssf_events, ssf_replay and
+// ssf_revocations. Times
 // are stored as Unix nanoseconds, NULL for a zero time; lists and
 // delivery settings as JSON text. The schema is part of this module's
 // compatibility promise: a release that changes it says how to migrate.

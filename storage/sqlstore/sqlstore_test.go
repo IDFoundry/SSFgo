@@ -128,6 +128,20 @@ func TestReplayContract(t *testing.T) {
 	}
 }
 
+func TestRevocationContract(t *testing.T) {
+	for _, d := range dialects {
+		t.Run(d.name, func(t *testing.T) {
+			storagetest.RevocationStore(t, func(t *testing.T) storage.RevocationStore {
+				st, err := sqlstore.NewRevocationStore(d.open(t), d.dialect)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return st
+			})
+		})
+	}
+}
+
 // TestDurable reopens a database and finds everything that was stored.
 func TestDurable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ssf.db")
