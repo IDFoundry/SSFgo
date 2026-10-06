@@ -58,6 +58,13 @@ func (t *Transmitter) poll(w http.ResponseWriter, r *http.Request, rx Receiver) 
 		return
 	}
 	t.touch(r.Context(), s)
+	start, returned := t.now(), 0
+	if t.cfg.Hooks.Poll != nil {
+		defer func() {
+			t.cfg.Hooks.Poll(r.Context(), PollInfo{StreamID: id, Returned: returned,
+				Acknowledged: len(req.Ack), Reported: len(req.SetErrs), Duration: t.now().Sub(start)})
+		}()
+	}
 
 	if err := t.acknowledge(r, id, req); err != nil {
 		t.writeAPIError(w, r, "poll", t.notFoundOr(err))
@@ -84,6 +91,7 @@ func (t *Transmitter) poll(w http.ResponseWriter, r *http.Request, rx Receiver) 
 		return
 	}
 	if resp != nil {
+		returned = len(resp.Sets)
 		writeJSON(w, http.StatusOK, resp)
 	}
 }

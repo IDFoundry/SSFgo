@@ -109,6 +109,9 @@ type Config struct {
 	// Logger receives delivery problems that are reported to the
 	// Transmitter rather than to the caller. Defaults to slog.Default().
 	Logger *slog.Logger
+
+	// Hooks observe the Receiver, to feed metrics or traces. Optional.
+	Hooks Hooks
 }
 
 func (c *Config) validate() error {

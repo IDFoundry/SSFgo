@@ -2,8 +2,11 @@ package transmitter_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -214,4 +217,23 @@ func TestOneLongPollPerStream(t *testing.T) {
 	if took := time.Since(start); took < time.Second {
 		t.Errorf("a long poll with none other waiting returned after %v", took)
 	}
+}
+
+// Push endpoints are checked for length and against AllowPushEndpoint.
+func TestPushEndpointChecks(t *testing.T) {
+	f := newFixture(t, func(c *transmitter.Config) {
+		c.AllowPushEndpoint = func(_ transmitter.Receiver, u *url.URL) error {
+			if u.Host != "rx.example" {
+				return errors.New("unknown host")
+			}
+			return nil
+		}
+	})
+	endpoint := f.metadata().ConfigurationEndpoint
+	push := func(url string) map[string]any {
+		return map[string]any{"delivery": map[string]any{"method": ssf.DeliveryPush, "endpoint_url": url}}
+	}
+	expect(t, f.do("POST", endpoint, "alice", push("https://rx.example/"+strings.Repeat("a", 3000))), http.StatusBadRequest)
+	expect(t, f.do("POST", endpoint, "alice", push("https://elsewhere.example/push")), http.StatusBadRequest)
+	expect(t, f.do("POST", endpoint, "alice", push("https://rx.example/push")), http.StatusCreated)
 }

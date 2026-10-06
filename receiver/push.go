@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 
+	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/internal/setcodec"
 )
 
@@ -43,7 +44,7 @@ func (r *Receiver) PushHandler(opts PushOptions) http.Handler {
 			pushError(w, http.StatusBadRequest, setcodec.CodeInvalidRequest, "the request body could not be read")
 			return
 		}
-		jti, err := r.process(req.Context(), string(body))
+		jti, err := r.processObserved(req.Context(), ssf.DeliveryPush, string(body))
 		if rej, ok := isRejection(err); ok {
 			r.cfg.Logger.WarnContext(req.Context(), "ssf receiver: rejected pushed SET", "jti", jti, "err", rej.code, "description", rej.description)
 			pushError(w, http.StatusBadRequest, rej.code, rej.description)

@@ -131,6 +131,9 @@ type Config struct {
 	// errors) that are reported to the Receiver only as 500. Defaults to
 	// slog.Default().
 	Logger *slog.Logger
+
+	// Hooks observe the Transmitter, to feed metrics or traces. Optional.
+	Hooks Hooks
 }
 
 // PermitAll is a PermitEvent that permits every event: for a Transmitter

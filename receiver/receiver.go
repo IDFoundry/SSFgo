@@ -255,6 +255,9 @@ func (r *Receiver) fetchKeys(ctx context.Context, f *keyFetch) {
 	if err != nil {
 		r.cfg.Logger.WarnContext(ctx, "ssf receiver: refresh transmitter JWKS", "error", err)
 	}
+	if r.cfg.Hooks.KeysRefreshed != nil {
+		r.cfg.Hooks.KeysRefreshed(ctx, err)
+	}
 	r.keysMu.Lock()
 	f.ok = err == nil
 	r.keyFetch = nil

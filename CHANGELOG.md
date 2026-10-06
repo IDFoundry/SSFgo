@@ -33,6 +33,13 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 
 ### Added since v0.5
 
+- Observability: `receiver.Config.Hooks` reports every SET's outcome
+  (handled, duplicate, rejected with its code, failed), every poll and
+  every JWKS refetch; `transmitter.Config.Hooks` every emit (streams
+  considered and queued on), push attempt (delivered, rejected, retry,
+  dropped, with attempt and latency), poll served and stream change.
+  `Receiver.Ready` and `Transmitter.Ready` back readiness probes. No
+  metrics library is imported.
 - `revocation`: a `Revoker` records what session-revoked, account-disabled,
   account-purged, sessions-revoked and SCIM deactivate and delete events
   mean — a user's or one session's tokens, issued before the event, are

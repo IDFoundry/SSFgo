@@ -200,25 +200,41 @@ func (t *Transmitter) drain(ctx context.Context, id string) (failed bool) {
 // been delivered, rejected by the Receiver, or given up on. It reports
 // whether the stream should back off and retry.
 func (t *Transmitter) deliverOne(ctx context.Context, s storage.Stream, e storage.QueuedEvent) (retry bool) {
-	if limit := t.cfg.PushRetry.MaxAttempts; limit > 0 && t.pushes.failures(s.ID) >= limit {
+	attempt := t.pushes.failures(s.ID) + 1
+	report := func(outcome PushOutcome, took time.Duration, detail string) {
+		if t.cfg.Hooks.Push != nil {
+			t.cfg.Hooks.Push(ctx, PushInfo{StreamID: s.ID, JTI: e.JTI, Outcome: outcome, Attempt: attempt, Duration: took, Detail: detail})
+		}
+	}
+	if limit := t.cfg.PushRetry.MaxAttempts; limit > 0 && attempt > limit {
 		t.log.ErrorContext(ctx, "ssf transmitter: dropping SET after the maximum push attempts", "stream_id", s.ID, "jti", e.JTI, "attempts", limit)
+		attempt = limit
+		report(PushDropped, 0, "the maximum push attempts were made")
 		t.pushes.reset(s.ID)
 		return t.dequeue(ctx, s.ID, e.JTI)
 	}
-	switch outcome, detail := t.push(ctx, s.Delivery, e); outcome {
+	start := time.Now()
+	outcome, detail := t.push(ctx, s.Delivery, e)
+	took := time.Since(start)
+	switch outcome {
 	case pushDelivered:
+		report(PushDelivered, took, "")
 	case pushRejected:
 		// The Receiver says the SET itself is invalid; retrying will not
 		// change that (RFC 8935 §2.3).
 		t.log.WarnContext(ctx, "ssf transmitter: receiver rejected a pushed SET", "stream_id", s.ID, "jti", e.JTI, "error", detail)
+		report(PushRejected, took, detail)
 	case pushRejectedTransient:
-		if t.pushes.failures(s.ID)+1 < transientRejectAttempts {
+		if attempt < transientRejectAttempts {
 			t.log.WarnContext(ctx, "ssf transmitter: receiver rejected a pushed SET, will retry", "stream_id", s.ID, "jti", e.JTI, "error", detail)
+			report(PushRetry, took, detail)
 			return true
 		}
 		t.log.ErrorContext(ctx, "ssf transmitter: dropping SET the receiver kept rejecting", "stream_id", s.ID, "jti", e.JTI, "attempts", transientRejectAttempts, "error", detail)
+		report(PushDropped, took, detail)
 	default:
 		t.log.WarnContext(ctx, "ssf transmitter: push delivery failed, will retry", "stream_id", s.ID, "jti", e.JTI, "error", detail)
+		report(PushRetry, took, detail)
 		return true
 	}
 	// The SET is done with: the next one starts with no failures.

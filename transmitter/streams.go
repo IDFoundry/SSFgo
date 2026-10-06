@@ -104,23 +104,28 @@ func (t *Transmitter) validateDelivery(d ssf.Delivery, rx Receiver) error {
 		return badRequest("delivery method %q is not supported by this Transmitter", d.Method)
 	}
 	if d.Method == ssf.DeliveryPush {
-		u, err := url.Parse(d.EndpointURL)
-		if err != nil || u.Scheme != "https" || u.Host == "" || u.Fragment != "" {
-			return badRequest("push delivery requires an https endpoint_url")
-		}
-		if u.User != nil {
-			return badRequest("push endpoint_url must not contain credentials; use authorization_header")
-		}
-		if len(d.EndpointURL) > maxURLBytes {
-			return badRequest("push endpoint_url is too long")
-		}
-		if !validHeaderValue(d.AuthorizationHeader) {
-			return badRequest("authorization_header must be a valid HTTP header value of at most %d bytes", maxHeaderBytes)
-		}
-		if t.cfg.AllowPushEndpoint != nil {
-			if err := t.cfg.AllowPushEndpoint(rx, u); err != nil {
-				return badRequest("push endpoint_url is not allowed: %v", err)
-			}
+		return t.validatePushEndpoint(d, rx)
+	}
+	return nil
+}
+
+// validatePushEndpoint checks the Receiver-supplied settings of a push
+// delivery: its endpoint URL and authorization_header.
+func (t *Transmitter) validatePushEndpoint(d ssf.Delivery, rx Receiver) error {
+	u, err := url.Parse(d.EndpointURL)
+	switch {
+	case err != nil || u.Scheme != "https" || u.Host == "" || u.Fragment != "":
+		return badRequest("push delivery requires an https endpoint_url")
+	case u.User != nil:
+		return badRequest("push endpoint_url must not contain credentials; use authorization_header")
+	case len(d.EndpointURL) > maxURLBytes:
+		return badRequest("push endpoint_url is too long")
+	case !validHeaderValue(d.AuthorizationHeader):
+		return badRequest("authorization_header must be a valid HTTP header value of at most %d bytes", maxHeaderBytes)
+	}
+	if t.cfg.AllowPushEndpoint != nil {
+		if err := t.cfg.AllowPushEndpoint(rx, u); err != nil {
+			return badRequest("push endpoint_url is not allowed: %v", err)
 		}
 	}
 	return nil
@@ -229,6 +234,7 @@ func (t *Transmitter) createStream(w http.ResponseWriter, r *http.Request, rx Re
 		t.serverError(w, r, op, err)
 		return
 	}
+	t.streamChanged(r.Context(), s, StreamCreated, false)
 	if t.cfg.VerifyNewStreams {
 		if err := t.SendVerification(r.Context(), s.ID); err != nil {
 			// The stream exists; a failed verification must not fail
@@ -368,6 +374,7 @@ func (t *Transmitter) modifyStream(w http.ResponseWriter, r *http.Request, rx Re
 		return
 	}
 	t.touch(r.Context(), s)
+	t.streamChanged(r.Context(), s, StreamUpdated, false)
 	writeJSON(w, http.StatusOK, t.configuration(s))
 }
 
@@ -435,6 +442,9 @@ func (t *Transmitter) deleteStream(w http.ResponseWriter, r *http.Request, rx Re
 		return
 	}
 	err = t.cfg.Store.DeleteStream(r.Context(), id)
+	if err == nil {
+		t.streamChanged(r.Context(), s, StreamDeleted, false)
+	}
 	if errors.Is(err, storage.ErrNotFound) {
 		t.writeAPIError(w, r, op, errStreamNotFound)
 		return

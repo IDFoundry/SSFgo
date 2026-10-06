@@ -75,6 +75,16 @@ type PollResult struct {
 // handler fails is neither acknowledged nor reported, so the Transmitter
 // returns it again.
 func (r *Receiver) Poll(ctx context.Context, stream ssf.StreamConfiguration, opts PollOptions) (PollResult, error) {
+	start := r.cfg.Now()
+	res, err := r.poll(ctx, stream, opts)
+	if r.cfg.Hooks.Poll != nil {
+		r.cfg.Hooks.Poll(ctx, PollInfo{StreamID: stream.StreamID, Received: res.Received, Duration: r.cfg.Now().Sub(start), Err: err})
+	}
+	return res, err
+}
+
+// poll is Poll without reporting it.
+func (r *Receiver) poll(ctx context.Context, stream ssf.StreamConfiguration, opts PollOptions) (PollResult, error) {
 	if stream.Delivery.Method != ssf.DeliveryPoll || stream.Delivery.EndpointURL == "" {
 		return PollResult{}, errors.New("receiver: the stream does not use poll delivery")
 	}
@@ -97,33 +107,41 @@ func (r *Receiver) Poll(ctx context.Context, stream ssf.StreamConfiguration, opt
 	if opts.MaxEvents > 0 {
 		limit = min(opts.MaxEvents, limit)
 	}
+	handled := r.handlePolled(ctx, stream.StreamID, resp.Sets, limit)
+	return PollResult{Received: len(resp.Sets), MoreAvailable: resp.MoreAvailable || handled < len(resp.Sets)}, nil
+}
+
+// handlePolled processes up to limit of a poll response's SETs, queuing
+// their acknowledgements and errors for the next poll. It returns how
+// many it processed.
+func (r *Receiver) handlePolled(ctx context.Context, streamID string, sets map[string]string, limit int) int {
 	handled, rejected := 0, 0
-	for jti, token := range resp.Sets {
+	for jti, token := range sets {
 		if handled == limit {
 			break
 		}
 		handled++
-		got, err := r.process(ctx, token)
+		got, err := r.processObserved(ctx, ssf.DeliveryPoll, token)
 		if got == "" {
 			got = jti
 		}
-		if rej, ok := isRejection(err); ok {
+		rej, isRejected := isRejection(err)
+		switch {
+		case isRejected:
 			if rejected++; rejected <= maxRejectionLogs {
 				r.cfg.Logger.WarnContext(ctx, "ssf receiver: rejected polled SET", "jti", got, "err", rej.code, "description", rej.description)
 			}
-			r.queueAck(stream.StreamID, "", got, &setErr{Err: rej.code, Description: rej.description})
-			continue
-		}
-		if err != nil {
+			r.queueAck(streamID, "", got, &setErr{Err: rej.code, Description: rej.description})
+		case err != nil:
 			r.cfg.Logger.ErrorContext(ctx, "ssf receiver: handling polled SET failed", "jti", got, "error", err)
-			continue
+		default:
+			r.queueAck(streamID, got, "", nil)
 		}
-		r.queueAck(stream.StreamID, got, "", nil)
 	}
 	if rejected > maxRejectionLogs {
-		r.cfg.Logger.WarnContext(ctx, "ssf receiver: more polled SETs rejected", "stream_id", stream.StreamID, "count", rejected-maxRejectionLogs)
+		r.cfg.Logger.WarnContext(ctx, "ssf receiver: more polled SETs rejected", "stream_id", streamID, "count", rejected-maxRejectionLogs)
 	}
-	return PollResult{Received: len(resp.Sets), MoreAvailable: resp.MoreAvailable || handled < len(resp.Sets)}, nil
+	return handled
 }
 
 // Acknowledge sends any pending acknowledgements for a stream without
