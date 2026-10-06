@@ -91,7 +91,8 @@ whose fixes changed the storage contract before any tag (see
 Transmitter-initiated verification, `inactivity_timeout` with the
 Receiver's `KeepAlive`, `storage/sqlstore` for PostgreSQL and SQLite, an
 adversarial security review
-([docs/security-review-2026-10.md](docs/security-review-2026-10.md)), and
+([docs/security-review-2026-10.md](docs/security-review-2026-10.md), then
+[of the additions](docs/security-review-2026-10-additions.md)), and
 SCIM events (RFC 9967).
 
 ## Under consideration

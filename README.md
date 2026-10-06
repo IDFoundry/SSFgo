@@ -100,8 +100,12 @@ what session-revoked, account-disabled and similar events mean and checks
 the application's validated tokens against it:
 
 ```go
-rev := revocation.New(memstore.NewRevocationStore(), revocation.Options{})
-rev.Register(rx)                     // session-revoked, account-disabled, ...
+rev, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{
+	Issuers:   revocation.SameIssuer,           // or StaticTokenIssuers{transmitter: tokenIssuer}
+	Events:    revocation.RecommendedEvents(),  // session-revoked, account-disabled, ...
+	Retention: 24 * time.Hour,                  // at least the longest token lifetime
+})
+rev.Register(rx)
 api = rev.Middleware(tokenOf, api)   // 401 for a token issued before its revocation
 ```
 

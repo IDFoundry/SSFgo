@@ -166,7 +166,10 @@ func run(ctx context.Context, w io.Writer) error {
 	// sessions too.
 	revoked := make(chan struct{})
 	var once sync.Once
-	rev := revocation.New(memstore.NewRevocationStore(), revocation.Options{
+	rev, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{
+		Issuers:   revocation.SameIssuer, // the IdP is its own Transmitter
+		Events:    revocation.RecommendedEvents(),
+		Retention: time.Hour, // the longest access token lifetime
 		OnRevoke: func(_ context.Context, _ []storage.RevocationKey, set ssf.SET) error {
 			user, ok := set.Subject.(ssf.IssSubSubject)
 			if !ok {
@@ -181,6 +184,9 @@ func run(ctx context.Context, w io.Writer) error {
 			return nil
 		},
 	})
+	if err != nil {
+		return err
+	}
 	rev.Register(rx)
 	receiver.On(rx, func(_ context.Context, _ ssf.SET, v ssf.Verification) error {
 		say("RP:  stream verified")
