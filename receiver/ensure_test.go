@@ -116,11 +116,13 @@ func TestEnsureStreamRetries(t *testing.T) {
 	receiver.SetEnsureRetry(t, 10*time.Millisecond)
 	e := newEnv(t)
 	tx := e.txSrv.Config.Handler
-	var failures atomic.Int32
-	status := http.StatusServiceUnavailable
+	// The handler can still be answering a request EnsureStream gave up
+	// on, so the test changes what it answers only atomically.
+	var failures, status atomic.Int32
+	status.Store(http.StatusServiceUnavailable)
 	e.txSrv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if failures.Add(-1) >= 0 {
-			w.WriteHeader(status)
+			w.WriteHeader(int(status.Load()))
 			return
 		}
 		tx.ServeHTTP(w, r)
@@ -139,7 +141,7 @@ func TestEnsureStreamRetries(t *testing.T) {
 		t.Errorf("while unavailable until the deadline: %v", err)
 	}
 
-	status = http.StatusForbidden
+	status.Store(http.StatusForbidden)
 	failures.Store(1000)
 	start := time.Now()
 	var apiErr *receiver.APIError
