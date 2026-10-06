@@ -20,6 +20,12 @@ or suite behaviour that is not obvious from the code.
   `SSFGO_TEST_POSTGRES` holds a URL, for example
   `postgres://postgres@localhost:5432/postgres?sslmode=disable`
   (`docker run -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432:5432 postgres:17-alpine`).
+- `storage/sqlstore` builds against the core in the same checkout (its
+  `go.mod` has a `replace`), but its users get the core version its
+  `go.mod` requires. CI checks that version is enough. If a change makes
+  `storage/sqlstore` use something new in the core, land the core change
+  first, then raise the requirement to that commit:
+  `go get github.com/idfoundry/ssfgo@<commit>` in `storage/sqlstore`.
 - Behaviour changes come with tests, including the rejection paths.
   Changes to a hot path (emitting, delivery, verification, storage) say
   what the benchmarks in [ARCHITECTURE.md](ARCHITECTURE.md#performance)

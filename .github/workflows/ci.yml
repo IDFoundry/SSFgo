@@ -160,6 +160,23 @@ jobs:
             storage/sqlstore/report.json
           retention-days: 1
 
+      # Every step above builds against the core in this checkout (go.mod's
+      # replace). A user of the module gets the core version go.mod
+      # requires, so check that is enough: drop the replace, build, and
+      # fail if Go had to raise the requirement. Last, since it edits
+      # go.mod.
+      - name: builds against the declared core version
+        if: matrix.go == 'stable'
+        run: |
+          want=$(go list -m -f '{{.Version}}' github.com/idfoundry/ssfgo)
+          go mod edit -dropreplace=github.com/idfoundry/ssfgo
+          GOFLAGS=-mod=mod go vet ./...
+          got=$(go list -m -f '{{.Version}}' github.com/idfoundry/ssfgo)
+          if [ "$want" != "$got" ]; then
+            echo "::error::storage/sqlstore needs core $got, but go.mod requires $want; raise the requirement (see CONTRIBUTING.md)"
+            exit 1
+          fi
+
   # CI-based SonarQube Cloud analysis, fed the coverage and test results of
   # both modules (Automatic Analysis cannot run the tests). Configuration
   # is in sonar-project.properties.

@@ -113,6 +113,10 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 
 ### Testing
 
+- CI builds `storage/sqlstore` against the core version its `go.mod`
+  requires, not only the core in the same checkout, so its users never
+  get a core too old for it; the requirement is raised to the current
+  core.
 - Continuous fuzzing: `.github/workflows/fuzz.yml` runs all ten fuzz
   targets daily for ten minutes each, carrying each target's corpus
   between runs. New targets cover the Receiver's push endpoint and poll

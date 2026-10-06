@@ -1,11 +1,14 @@
 // Command session-revocation shows the scenario SSF exists for: an identity
 // provider revokes a user's session, and a relying party that trusted that
-// session ends its own session for the user within moments.
+// session ends its own sessions for the user and stops accepting the
+// user's access tokens, within moments.
 //
 // Everything runs in one process on loopback so the example is
 // self-contained: the identity provider embeds an SSFgo Transmitter, the
 // relying party embeds an SSFgo Receiver, and SETs travel between them by
-// push delivery over TLS.
+// push delivery over TLS. The relying party uses the revocation package to
+// act on the event, EnsureStream to set up its stream, and Hooks to observe
+// both roles.
 //
 //	go run ./examples/session-revocation
 package main
@@ -28,6 +31,8 @@ import (
 	"github.com/idfoundry/ssfgo/caep"
 	"github.com/idfoundry/ssfgo/caep/interop"
 	"github.com/idfoundry/ssfgo/receiver"
+	"github.com/idfoundry/ssfgo/revocation"
+	"github.com/idfoundry/ssfgo/storage"
 	"github.com/idfoundry/ssfgo/storage/memstore"
 	"github.com/idfoundry/ssfgo/transmitter"
 )
@@ -92,8 +97,6 @@ func run(ctx context.Context, w io.Writer) error {
 	var rpServer atomic.Pointer[httptest.Server] // the relying party, created below
 
 	txCfg := transmitter.Config{
-
-		PermitEvent:     transmitter.PermitAll,
 		Issuer:          issuer,
 		SigningKeys:     []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "idp-2026"}},
 		EventsSupported: interop.EventTypes(),
@@ -106,6 +109,12 @@ func run(ctx context.Context, w io.Writer) error {
 			}
 			return transmitter.Receiver{ID: "relying-party", Audience: []string{"https://rp.example"}, Access: transmitter.AccessManage}, nil
 		},
+		// One relying party, entitled to every event: a multi-tenant
+		// identity provider decides here who may see what.
+		PermitEvent: transmitter.PermitAll,
+		Hooks: transmitter.Hooks{Push: func(_ context.Context, i transmitter.PushInfo) {
+			say("IdP: push attempt %d: %s in %v", i.Attempt, i.Outcome, i.Duration.Round(time.Millisecond))
+		}},
 		Logger: quiet,
 	}
 	if err := interop.ApplyTransmitter(&txCfg); err != nil {
@@ -121,8 +130,10 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	idpServer.Config.Handler = tx.Handler()
 	runCtx, stop := context.WithCancel(ctx)
-	defer stop()
-	go func() { _ = tx.Run(runCtx) }()
+	ran := make(chan struct{})
+	go func() { defer close(ran); _ = tx.Run(runCtx) }()
+	// Stop push delivery, and wait for it, before returning.
+	defer func() { stop(); <-ran }()
 
 	// --- Relying party: an SSF Receiver. ---
 	store := &sessions{byUser: map[string][]string{}}
@@ -138,22 +149,39 @@ func run(ctx context.Context, w io.Writer) error {
 		TokenSource: receiver.StaticToken(rpToken),
 		ReplayStore: memstore.NewReplayStore(),
 		HTTPClient:  idpServer.Client(),
-		Logger:      quiet,
+		Hooks: receiver.Hooks{SET: func(_ context.Context, i receiver.SETInfo) {
+			say("RP:  %s SET %s", i.Outcome, i.EventType)
+		}},
+		Logger: quiet,
 	})
 	if err != nil {
 		return err
 	}
+	if err := rx.Ready(ctx); err != nil {
+		return err
+	}
+
+	// The revocation package records what session-revoked means — alice's
+	// tokens issued before it are revoked — and OnRevoke ends her local
+	// sessions too.
 	revoked := make(chan struct{})
-	receiver.On(rx, func(_ context.Context, set ssf.SET, e caep.SessionRevoked) error {
-		user, ok := set.Subject.(ssf.IssSubSubject)
-		if !ok {
+	var once sync.Once
+	rev := revocation.New(memstore.NewRevocationStore(), revocation.Options{
+		OnRevoke: func(_ context.Context, _ []storage.RevocationKey, set ssf.SET) error {
+			user, ok := set.Subject.(ssf.IssSubSubject)
+			if !ok {
+				return nil
+			}
+			reason := ""
+			if e, ok := set.Event.(caep.SessionRevoked); ok {
+				reason = e.ReasonAdmin["en"]
+			}
+			say("RP:  session-revoked for %s (%s) → ended local sessions %v", user.Subject, reason, store.revokeAll(user))
+			once.Do(func() { close(revoked) })
 			return nil
-		}
-		ids := store.revokeAll(user)
-		say("RP:  session-revoked for %s (%s) → ended local sessions %v", user.Subject, e.ReasonAdmin["en"], ids)
-		close(revoked)
-		return nil
+		},
 	})
+	rev.Register(rx)
 	receiver.On(rx, func(_ context.Context, _ ssf.SET, v ssf.Verification) error {
 		say("RP:  stream verified")
 		return nil
@@ -164,22 +192,26 @@ func run(ctx context.Context, w io.Writer) error {
 	defer rp.Close()
 	rpServer.Store(rp)
 
-	stream, err := rx.CreateStream(ctx, receiver.StreamRequest{
+	// EnsureStream creates the stream on the first start and reuses it on
+	// later ones.
+	stream, err := rx.EnsureStream(ctx, receiver.StreamRequest{
 		Delivery:        &ssf.Delivery{Method: ssf.DeliveryPush, EndpointURL: rp.URL + "/ssf/events", AuthorizationHeader: pushAuth},
 		EventsRequested: []ssf.EventType{caep.SessionRevokedEventType},
 	})
 	if err != nil {
 		return err
 	}
-	say("RP:  created stream %s with %s", stream.StreamID, issuer)
+	say("RP:  stream %s with %s", stream.StreamID, issuer)
 	if _, err := rx.RequestVerification(ctx, stream.StreamID); err != nil {
 		return err
 	}
 
-	// A user signs in to the relying party through the identity provider.
+	// A user signs in to the relying party through the identity provider,
+	// which issues her an access token.
 	alice := ssf.IssSubSubject{Issuer: issuer, Subject: "alice"}
 	store.login(alice, "rp-session-1")
 	store.login(alice, "rp-session-2")
+	aliceToken := revocation.Token{Issuer: issuer, Subject: "alice", IssuedAt: time.Now().Add(-time.Minute)}
 	say("RP:  alice signed in (2 sessions)")
 
 	// An administrator revokes alice's session at the identity provider.
@@ -196,8 +228,15 @@ func run(ctx context.Context, w io.Writer) error {
 
 	select {
 	case <-revoked:
-		return nil
 	case <-time.After(10 * time.Second):
 		return fmt.Errorf("the relying party did not receive the revocation")
 	}
+	// The access token alice was issued before the revocation is refused
+	// from now on; rev.Middleware does this for an HTTP API.
+	refused, err := rev.IsRevoked(ctx, aliceToken)
+	if err != nil {
+		return err
+	}
+	say("RP:  alice's earlier access token revoked: %v", refused)
+	return nil
 }
