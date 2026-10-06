@@ -31,6 +31,10 @@ expose; hooks that cannot take down the process.
   `storage/sqlstore` use something new in the core, land the core change
   first, then raise the requirement to that commit:
   `go get github.com/idfoundry/ssfgo@<commit>` in `storage/sqlstore`.
+  A breaking core change that `storage/sqlstore` must follow cannot land
+  first; raise the requirement in the same pull request instead, to the
+  branch's own core commit — merging with a merge commit keeps it
+  reachable.
 - Behaviour changes come with tests, including the rejection paths.
   Changes to a hot path (emitting, delivery, verification, storage) say
   what the benchmarks in [ARCHITECTURE.md](ARCHITECTURE.md#performance)

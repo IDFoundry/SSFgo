@@ -20,7 +20,7 @@ import (
 
 // roomy lifts the limits a benchmark would otherwise hit.
 func roomy(c *transmitter.Config) {
-	c.Limits = transmitter.Limits{StreamsPerReceiver: 10_000, QueuedSETsPerStream: 1 << 30}
+	c.Limits.StreamsPerReceiver, c.Limits.QueuedSETsPerStream = 10_000, 1<<30
 }
 
 var benchSubject = ssf.EmailSubject{Email: "alice@example.com"}
