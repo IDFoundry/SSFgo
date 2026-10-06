@@ -191,6 +191,12 @@ each finding was reproduced by a failing test before it was fixed.
   last occurrence silently winning. A proprietary subject format name
   must follow the registry's syntax, as SSF's own `catalog_item` does, or
   be an absolute URI (RFC 9493 §3).
+- Push delivery retries a SET the Receiver rejects with `invalid_key`,
+  `authentication_failed` or `access_denied` — often temporary, while it
+  fetches a rotated key or a credential is updated — up to eight times,
+  instead of dropping it at once (RFC 8935 §2.3, §4). Each SET now gets
+  the full `PushRetry.MaxAttempts`: the failures of the SET before it in
+  the queue used to count against it.
 - Every SET the Transmitter sends now carries a `txn` (SSF 1.0 §4.1.9).
   Verification and stream-updated SETs used to omit it, which the
   conformance suite now warns about; each gets a `txn` of its own.

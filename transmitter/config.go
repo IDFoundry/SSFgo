@@ -185,8 +185,10 @@ type InactivityPolicy struct {
 }
 
 // PushRetryPolicy controls retries of push deliveries that fail
-// recoverably — a network error or any response but 2xx or an RFC 8935
-// error. RFC 8935 §2 asks Transmitters to delay retransmission so as not
+// recoverably — a network error, any response but 2xx or an RFC 8935
+// error, or an RFC 8935 error that may clear on its own (invalid_key,
+// authentication_failed, access_denied), which is retried at most eight
+// times. RFC 8935 §2 asks Transmitters to delay retransmission so as not
 // to overwhelm the Receiver, and lets them cap attempts.
 type PushRetryPolicy struct {
 	// MinBackoff is the delay after the first failure; it doubles with
