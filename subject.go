@@ -12,6 +12,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/idfoundry/ssfgo/internal/jsonobj"
 )
 
 // SubjectFormat is the value of a Subject Identifier's "format" member
@@ -440,6 +442,9 @@ func (s ProprietarySubject) Validate() error {
 	if isKnownFormat(s.FormatName) {
 		return invalid(s.FormatName, "a registered format cannot be carried as a proprietary subject")
 	}
+	if !validFormatName(s.FormatName) {
+		return invalid(s.FormatName, "a format name must use only lowercase letters, digits, \"_\" and \"-\", or be an absolute URI")
+	}
 	if _, ok := s.Members["format"]; ok {
 		return invalid(s.FormatName, `members must not include "format"`)
 	}
@@ -449,6 +454,24 @@ func (s ProprietarySubject) Validate() error {
 		}
 	}
 	return nil
+}
+
+// validFormatName reports whether f can name a proprietary format: it
+// follows the syntax RFC 9493 §8.1.1 requires of registered names —
+// lowercase letters, digits, "_" and "-" — as SSF 1.0's own example
+// "catalog_item" does, or it is an absolute URI, the usual
+// collision-resistant name (RFC 9493 §3, RFC 7519 §2).
+func validFormatName(f SubjectFormat) bool {
+	name := string(f)
+	isRegistryChar := func(c rune) bool {
+		return 'a' <= c && c <= 'z' || '0' <= c && c <= '9' || c == '_' || c == '-'
+	}
+	if name != "" && !strings.ContainsFunc(name, func(c rune) bool { return !isRegistryChar(c) }) {
+		return true
+	}
+	u, err := url.Parse(name)
+	return err == nil && u.Scheme != "" && (u.Opaque != "" || u.Host != "") &&
+		!strings.ContainsFunc(name, func(r rune) bool { return r <= ' ' || r == 0x7f })
 }
 
 func isKnownFormat(f SubjectFormat) bool {
@@ -626,9 +649,9 @@ func ParseSubject(data []byte) (Subject, error) {
 const maxSubjectDepth = 2
 
 func parseSubject(data []byte, depth int) (Subject, error) {
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(data, &obj); err != nil || obj == nil {
-		return nil, fmt.Errorf("%w: subject must be a JSON object", ErrInvalidSubject)
+	obj, err := jsonobj.Members(data)
+	if err != nil {
+		return nil, fmt.Errorf("%w: subject must be a JSON object, each member named once: %v", ErrInvalidSubject, err)
 	}
 	rawFormat, ok := obj["format"]
 	if !ok {
@@ -651,7 +674,6 @@ func parseSubject(data []byte, depth int) (Subject, error) {
 		return v, nil
 	}
 	var s Subject
-	var err error
 	switch format {
 	case FormatAccount:
 		var v AccountSubject

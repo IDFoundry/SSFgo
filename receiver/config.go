@@ -62,7 +62,7 @@ type Config struct {
 	// Defaults to 24 hours.
 	KeyMaxAge time.Duration
 
-	// MaxClockSkew is how far in the future a SET's "iat" may be.
+	// MaxClockSkew is how far in the future a SET's "iat" and "nbf" may be.
 	// Defaults to one minute.
 	MaxClockSkew time.Duration
 

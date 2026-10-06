@@ -110,7 +110,7 @@ type VerifyOptions struct {
 	Registry *ssf.Registry
 	// Now returns the current time. It defaults to time.Now.
 	Now func() time.Time
-	// MaxClockSkew is how far in the future "iat" may be. It defaults to
+	// MaxClockSkew is how far in the future "iat" and "nbf" may be. It defaults to
 	// one minute.
 	MaxClockSkew time.Duration
 
@@ -197,6 +197,9 @@ func decodeClaims(payload []byte, opts VerifyOptions) (ssf.SET, error) {
 		return ssf.SET{}, err
 	}
 	set.IssuedAt = iat
+	if err := checkNotBefore(raw, opts); err != nil {
+		return ssf.SET{}, err
+	}
 	if err := decodeEvent(raw, opts, &set); err != nil {
 		return ssf.SET{}, err
 	}
@@ -240,6 +243,33 @@ func decodeIssuedAt(raw map[string]json.RawMessage, opts VerifyOptions) (time.Ti
 	if err := json.Unmarshal(rawIat, &iat); err != nil {
 		return time.Time{}, reject(CodeInvalidRequest, "iat: %w", err)
 	}
+	if iat.After(latestAcceptable(opts)) {
+		return time.Time{}, reject(CodeInvalidRequest, "iat is in the future")
+	}
+	return iat.Time, nil
+}
+
+// checkNotBefore enforces an optional "nbf": RFC 7519 §4.1.5 forbids
+// accepting a JWT before that time. SETs need not carry it, but some
+// Transmitters' JWT libraries add it.
+func checkNotBefore(raw map[string]json.RawMessage, opts VerifyOptions) error {
+	rawNbf, ok := raw["nbf"]
+	if !ok {
+		return nil
+	}
+	var nbf ssf.NumericDate
+	if err := json.Unmarshal(rawNbf, &nbf); err != nil {
+		return reject(CodeInvalidRequest, "claim \"nbf\": %v", err)
+	}
+	if nbf.After(latestAcceptable(opts)) {
+		return reject(CodeInvalidRequest, "the SET is not valid before its nbf")
+	}
+	return nil
+}
+
+// latestAcceptable is the latest time "iat" or "nbf" may name: now, plus
+// the clock skew allowed.
+func latestAcceptable(opts VerifyOptions) time.Time {
 	now, skew := time.Now, time.Minute
 	if opts.Now != nil {
 		now = opts.Now
@@ -247,10 +277,7 @@ func decodeIssuedAt(raw map[string]json.RawMessage, opts VerifyOptions) (time.Ti
 	if opts.MaxClockSkew > 0 {
 		skew = opts.MaxClockSkew
 	}
-	if iat.After(now().Add(skew)) {
-		return time.Time{}, reject(CodeInvalidRequest, "iat is in the future")
-	}
-	return iat.Time, nil
+	return now().Add(skew)
 }
 
 // decodeEvent decodes the single event in "events" and the subject, from

@@ -119,6 +119,5 @@ Ideas recorded for later; none is committed to.
   only from the shell scripts.
 
 Open questions from the spec review: keeping SETs a Receiver rejects
-with a likely transient `invalid_key` or `authentication_failed`;
-stricter parsing of `nbf`, proprietary format names and repeated complex
-members; and the Interop Receiver check requiring both push and poll.
+with a likely transient `invalid_key` or `authentication_failed`, and the
+Interop Receiver check requiring both push and poll.

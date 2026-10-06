@@ -104,6 +104,9 @@ These are deliberate and cite the requirement they implement.
 | JOSE header `typ` is `secevent+jwt` (decode also accepts `application/secevent+jwt`) | SSF §4.1.1, RFC 8417 §2.3, RFC 7515 §4.1.9 |
 | Exactly one event per SET, both when encoding and decoding | CAEP Interop §2.8.1 (SSF §4.2.1 SHOULD) |
 | Unknown members in events and subjects are ignored on decode, never emitted on encode | SSF §4.2.3, RFC 9493 §3 |
+| A subject naming a member twice is refused, as is a JWS header doing so | RFC 7519 §4, RFC 7515 §4 |
+| A proprietary format name uses the registry's syntax (lowercase letters, digits, `_`, `-`) or is an absolute URI | RFC 9493 §3, §8.1.1; SSF §3.4 |
+| An `nbf` claim, if present, is enforced like `iat`, within the clock skew | RFC 7519 §4.1.5 |
 | `event_timestamp` is a JSON number of seconds | CAEP §2 |
 | `reason_admin` / `reason_user` are non-empty objects keyed by BCP 47 tag | CAEP §2 |
 | The verification and stream-updated events require an `opaque` `sub_id` | SSF §8.1.4.1, §8.1.5 |

@@ -185,6 +185,12 @@ each finding was reproduced by a failing test before it was fixed.
   `receiver.ErrNotProcessed` when the Transmitter answers 202 "accepted,
   not processed" (SSF 1.0 §8.1.1.3, §8.1.1.4, §8.1.2.2), instead of a
   generic `*APIError`.
+- Stricter parsing of what a Transmitter sends: a SET is refused before
+  its `nbf` (RFC 7519 §4.1.5), and a subject that names a member twice —
+  a complex subject listing `user` twice, say — is refused instead of the
+  last occurrence silently winning. A proprietary subject format name
+  must follow the registry's syntax, as SSF's own `catalog_item` does, or
+  be an absolute URI (RFC 9493 §3).
 - Every SET the Transmitter sends now carries a `txn` (SSF 1.0 §4.1.9).
   Verification and stream-updated SETs used to omit it, which the
   conformance suite now warns about; each gets a `txn` of its own.
