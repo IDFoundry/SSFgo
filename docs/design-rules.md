@@ -194,7 +194,7 @@ An unsafe choice needs more code and a name that says what it does.
 | Rule | Gap | Closes in |
 |---|---|---|
 | 1 | `revocation` trusted the issuer written in each subject | #45 |
-| 2 | The Receiver and Transmitter silently defaulted `ReplayWindow`, `KeyMaxAge`, `MaxClockSkew` (zero became 1 minute), the Transmitter's limits, `LongPollTimeout` and `PushRetry`; there were no `Recommended*()` presets | #48 |
+| 2 | The Receiver and Transmitter silently defaulted `ReplayWindow`, `KeyMaxAge`, `MaxClockSkew` (zero became 1 minute), the Transmitter's limits, `LongPollTimeout` and `PushRetry`; there were no `Recommended*()` presets | #50 |
 | 3 | `revocation.Retention` was unbounded, and `sqlstore` wrapped far-future times | #45 |
 | 4 | `ClientCredentials.ClientSecret` and `Delivery.AuthorizationHeader` are plain strings | `Secret` PR |
 | 5 | `APIError.Error()` quotes response bodies; SET rejection descriptions carry up to 40 KB of attacker text into logs, responses and hooks | #47 |
