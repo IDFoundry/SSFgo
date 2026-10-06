@@ -42,7 +42,10 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
   addresses only with `MatchEmail`, and to anything else through
   `KeysFor`; `OnRevoke` lets the application end its own sessions. New
   `storage.RevocationStore` contract, with `memstore.NewRevocationStore`
-  and `storagetest.RevocationStore`.
+  and `storagetest.RevocationStore`, and `sqlstore.NewRevocationStore`
+  for revocations that survive restarts and are shared by Receiver
+  instances (a new `ssf_revocations` table, which `CreateSchema` adds to
+  an existing schema).
 - `ssftest`: an in-process Transmitter (`NewTransmitter`) for testing a
   Receiver — with a ready `ReceiverConfig`, `Emit`, and `SetAvailable` to
   simulate an outage — and an in-process Receiver (`NewReceiver`, then

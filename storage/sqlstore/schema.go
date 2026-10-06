@@ -50,6 +50,15 @@ var schema = []string{
 		PRIMARY KEY (issuer, jti)
 	)`,
 	`CREATE INDEX IF NOT EXISTS ssf_replay_expires ON ssf_replay (expires_at)`,
+	`CREATE TABLE IF NOT EXISTS ssf_revocations (
+		kind TEXT NOT NULL,
+		issuer TEXT NOT NULL,
+		value TEXT NOT NULL,
+		revoked_at BIGINT NOT NULL,
+		expires_at BIGINT NOT NULL,
+		PRIMARY KEY (kind, issuer, value)
+	)`,
+	`CREATE INDEX IF NOT EXISTS ssf_revocations_expires ON ssf_revocations (expires_at)`,
 }
 
 // CreateSchema creates the tables and indexes the stores use, skipping any
