@@ -105,7 +105,7 @@ func (r *Receiver) process(ctx context.Context, token string) (processed, error)
 	// replay record lasts until that window (plus clock skew) ends, so
 	// there is no moment at which a captured SET is both acceptable and
 	// forgotten.
-	expires := set.IssuedAt.Add(r.cfg.ReplayWindow)
+	expires := set.IssuedAt.Add(r.cfg.Limits.ReplayWindow)
 	if r.cfg.Now().After(expires) {
 		return p, &rejectedSET{code: setcodec.CodeInvalidRequest,
 			description: "the SET is older than the Receiver's replay window"}
@@ -125,7 +125,7 @@ func (r *Receiver) process(ctx context.Context, token string) (processed, error)
 		}
 	}
 	defer r.finishHandling(set, h)
-	fresh, err := r.cfg.ReplayStore.MarkSET(ctx, set.Issuer, set.JWTID, expires.Add(r.cfg.MaxClockSkew))
+	fresh, err := r.cfg.ReplayStore.MarkSET(ctx, set.Issuer, set.JWTID, expires.Add(r.cfg.Limits.MaxClockSkew))
 	if err != nil {
 		h.err = fmt.Errorf("receiver: replay store: %w", err)
 		return p, h.err
@@ -197,7 +197,7 @@ func (r *Receiver) dispatchOrForget(ctx context.Context, set ssf.SET) (err error
 }
 
 func (r *Receiver) decode(ctx context.Context, token string) (ssf.SET, error) {
-	if _, fetched := r.currentKeys(); r.cfg.Now().Sub(fetched) > r.cfg.KeyMaxAge {
+	if _, fetched := r.currentKeys(); r.cfg.Now().Sub(fetched) > r.cfg.Limits.KeyMaxAge {
 		// On failure the keys already held stay in use, rather than
 		// every SET being refused while the JWKS endpoint is down.
 		r.maybeRefreshKeys(ctx)
@@ -210,7 +210,7 @@ func (r *Receiver) decode(ctx context.Context, token string) (ssf.SET, error) {
 		Keys:         keys,
 		Registry:     r.cfg.Registry,
 		Now:          r.cfg.Now,
-		MaxClockSkew: r.cfg.MaxClockSkew,
+		MaxClockSkew: r.cfg.Limits.MaxClockSkew,
 
 		LegacyEventSubject: r.cfg.AcceptLegacySubjects,
 		LegacySubjectType:  r.cfg.AcceptLegacySubjects,

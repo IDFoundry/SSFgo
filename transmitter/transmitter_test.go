@@ -74,7 +74,8 @@ func newFixture(t testing.TB, mutate ...func(*transmitter.Config)) *fixture {
 	f.issuer = f.srv.URL + "/tenant-a"
 
 	cfg := transmitter.Config{
-
+		Limits:          transmitter.RecommendedLimits(),
+		PushRetry:       transmitter.RecommendedPushRetry(),
 		PermitEvent:     transmitter.PermitAll,
 		Issuer:          f.issuer,
 		SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
@@ -185,6 +186,8 @@ func pushBody() map[string]any {
 func TestConfigValidation(t *testing.T) {
 	good := func() transmitter.Config {
 		return transmitter.Config{
+			Limits:          transmitter.RecommendedLimits(),
+			PushRetry:       transmitter.RecommendedPushRetry(),
 			PermitEvent:     transmitter.PermitAll,
 			Issuer:          "https://tx.example",
 			SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
@@ -197,6 +200,11 @@ func TestConfigValidation(t *testing.T) {
 	}
 	if _, err := transmitter.New(good()); err != nil {
 		t.Fatalf("valid config rejected: %v", err)
+	}
+	pollOnly := good()
+	pollOnly.PushRetry = transmitter.PushRetryPolicy{}
+	if _, err := transmitter.New(pollOnly); err != nil {
+		t.Errorf("a poll-only Transmitter needs no PushRetry: %v", err)
 	}
 	for name, mutate := range map[string]func(*transmitter.Config){
 		"http issuer":          func(c *transmitter.Config) { c.Issuer = "http://tx.example" },
@@ -218,6 +226,18 @@ func TestConfigValidation(t *testing.T) {
 		"fractional interval":   func(c *transmitter.Config) { c.MinVerificationInterval = 1500 * time.Millisecond },
 		"braces in issuer path": func(c *transmitter.Config) { c.Issuer = "https://tx.example/{x}" },
 		"negative retry":        func(c *transmitter.Config) { c.PushRetry.MaxAttempts = -1 },
+		// No implicit defaults for what bounds a Receiver's state.
+		"no limits":      func(c *transmitter.Config) { c.Limits = transmitter.Limits{} },
+		"no queue limit": func(c *transmitter.Config) { c.Limits.QueuedSETsPerStream = 0 },
+		"no long poll":   func(c *transmitter.Config) { c.Limits.LongPollTimeout = 0 },
+		"push without retry": func(c *transmitter.Config) {
+			c.DeliveryMethods = []ssf.DeliveryMethod{ssf.DeliveryPush}
+			c.PushRetry = transmitter.PushRetryPolicy{}
+		},
+		"inverted backoff": func(c *transmitter.Config) {
+			c.DeliveryMethods = []ssf.DeliveryMethod{ssf.DeliveryPush}
+			c.PushRetry.MaxBackoff = c.PushRetry.MinBackoff / 2
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			c := good()
@@ -294,6 +314,8 @@ func TestConfigAndMetadataAreCopied(t *testing.T) {
 	events := []ssf.EventType{caep.SessionRevokedEventType}
 	methods := []ssf.DeliveryMethod{ssf.DeliveryPoll}
 	tx, err := transmitter.New(transmitter.Config{
+		Limits:          transmitter.RecommendedLimits(),
+		PushRetry:       transmitter.RecommendedPushRetry(),
 		PermitEvent:     transmitter.PermitAll,
 		Issuer:          "https://tx.example",
 		SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
@@ -326,6 +348,8 @@ func TestMetadataAtIssuerWithoutPath(t *testing.T) {
 	srv := httptest.NewTLSServer(nil)
 	defer srv.Close()
 	tx, err := transmitter.New(transmitter.Config{
+		Limits:          transmitter.RecommendedLimits(),
+		PushRetry:       transmitter.RecommendedPushRetry(),
 		PermitEvent:     transmitter.PermitAll,
 		Issuer:          srv.URL + "/",
 		SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},

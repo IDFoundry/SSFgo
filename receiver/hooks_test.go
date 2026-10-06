@@ -64,7 +64,7 @@ func TestHooksReportPollsAndKeys(t *testing.T) {
 	e := newEnv(t, func(c *receiver.Config) {
 		c.Hooks = log.hooks()
 		c.Now = func() time.Time { return now }
-		c.KeyMaxAge = time.Hour
+		c.Limits.KeyMaxAge = time.Hour
 	})
 	ctx := context.Background()
 	stream, err := e.rx.CreateStream(ctx, receiver.StreamRequest{})

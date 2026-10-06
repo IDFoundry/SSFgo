@@ -61,7 +61,7 @@ What SSFgo enforces on its own, so reviewers know where to look:
   may see everything" an explicit choice, right only for a single-tenant
   Transmitter. Subject rules cannot stand in for it — one complex subject
   can match many.
-- **Replay window.** A SET is accepted only within `ReplayWindow` of its
+- **Replay window.** A SET is accepted only within `Limits.ReplayWindow` of its
   `iat`, and remembered for exactly that long.
 - **Redirects.** The Receiver follows only `https` redirects, so its
   access token and client credentials cannot be downgraded to cleartext.

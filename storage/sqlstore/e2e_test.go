@@ -45,6 +45,8 @@ func testEndToEnd(t *testing.T, db *sql.DB, d sqlstore.Dialect) {
 			t.Fatal(err)
 		}
 		tx, err := transmitter.New(transmitter.Config{
+			Limits:          transmitter.RecommendedLimits(),
+			PushRetry:       transmitter.RecommendedPushRetry(),
 			PermitEvent:     transmitter.PermitAll,
 			Issuer:          issuer,
 			SigningKeys:     []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "k1"}},
@@ -74,6 +76,7 @@ func testEndToEnd(t *testing.T, db *sql.DB, d sqlstore.Dialect) {
 		t.Fatal(err)
 	}
 	rx, err := receiver.New(ctx, receiver.Config{
+		Limits: receiver.RecommendedLimits(),
 		Issuer: issuer, Audience: audience, Registry: registry,
 		Algorithms:  []ssf.SignatureAlgorithm{ssf.RS256},
 		TokenSource: receiver.StaticToken("token"),

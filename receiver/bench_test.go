@@ -18,7 +18,7 @@ import (
 //	go test -run '^$' -bench . ./receiver
 func BenchmarkPushHandler(b *testing.B) {
 	e := newEnvTx(b, func(c *transmitter.Config) {
-		c.Limits = transmitter.Limits{QueuedSETsPerStream: 1 << 30}
+		c.Limits.QueuedSETsPerStream = 1 << 30
 	})
 	var rec recorder
 	rec.install(e.rx)

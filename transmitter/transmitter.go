@@ -80,9 +80,6 @@ func New(cfg Config) (*Transmitter, error) {
 	if t.client == nil {
 		t.client = NewPushClient(10 * time.Second)
 	}
-	if t.cfg.LongPollTimeout <= 0 {
-		t.cfg.LongPollTimeout = 20 * time.Second
-	}
 	t.notify = newNotifier()
 	t.polling = &longPolls{active: map[string]bool{}}
 	t.pushes = newPushState(t.cfg.PushRetry)

@@ -27,7 +27,7 @@ import (
 // A SET older than ReplayWindow is rejected, so a captured SET cannot be
 // replayed once its replay record has expired.
 func TestStaleSETRejected(t *testing.T) {
-	e := newEnv(t, func(c *receiver.Config) { c.ReplayWindow = 2 * time.Second })
+	e := newEnv(t, func(c *receiver.Config) { c.Limits.ReplayWindow = 2 * time.Second })
 	var handled atomic.Int32
 	receiver.On(e.rx, func(context.Context, ssf.SET, caep.SessionRevoked) error { handled.Add(1); return nil })
 	h := e.rx.PushHandler(receiver.PushOptions{})
@@ -141,7 +141,7 @@ func TestKeyMaxAgeSurvivesHungUpPusher(t *testing.T) {
 	now := time.Now()
 	e := newEnv(t, func(c *receiver.Config) {
 		c.Now = func() time.Time { return now }
-		c.KeyMaxAge = time.Hour
+		c.Limits.KeyMaxAge = time.Hour
 	})
 	h := e.rx.PushHandler(receiver.PushOptions{})
 	// The Transmitter retires k1, publishing no keys at all.

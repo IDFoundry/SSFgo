@@ -49,22 +49,9 @@ type Config struct {
 	// acknowledged without being handled twice.
 	ReplayStore storage.ReplayStore
 
-	// ReplayWindow is how long after its "iat" a SET is accepted, and how
-	// long a processed SET is remembered to reject replays. A SET older
-	// than this is rejected, so a captured SET cannot be replayed once its
-	// record expires; SETs held on a paused stream for longer are lost.
-	// Defaults to 7 days.
-	ReplayWindow time.Duration
-
-	// KeyMaxAge is how long the Transmitter's JWKS is used before it is
-	// fetched again, so a retired key stops being trusted. A SET signed
-	// with an unknown key also triggers a fetch, at most once a minute.
-	// Defaults to 24 hours.
-	KeyMaxAge time.Duration
-
-	// MaxClockSkew is how far in the future a SET's "iat" and "nbf" may be.
-	// Defaults to one minute.
-	MaxClockSkew time.Duration
+	// Limits bound how old a SET, and how old the Transmitter's keys, the
+	// Receiver accepts. Required: RecommendedLimits is the usual choice.
+	Limits Limits
 
 	// CheckMetadata, if set, vets the Transmitter Configuration Metadata
 	// New fetches; New fails with its error. It lets a profile refuse a
@@ -114,8 +101,65 @@ type Config struct {
 	Hooks Hooks
 }
 
-func (c *Config) validate() error {
+// Limits bound how long the Receiver trusts what it has seen. Each must
+// be set: there are no implicit defaults, and RecommendedLimits gives
+// starting values.
+type Limits struct {
+	// ReplayWindow is how long after its "iat" a SET is accepted, and how
+	// long a processed SET is remembered to reject replays. A SET older
+	// than this is rejected, so a captured SET cannot be replayed once its
+	// record expires; SETs held on a paused stream for longer are lost.
+	// Positive, at most MaxReplayWindow.
+	ReplayWindow time.Duration
+
+	// KeyMaxAge is how long the Transmitter's JWKS is used before it is
+	// fetched again, so a retired key stops being trusted. A SET signed
+	// with an unknown key also triggers a fetch, at most once a minute.
+	// Positive.
+	KeyMaxAge time.Duration
+
+	// MaxClockSkew is how far in the future a SET's "iat" and "nbf" may
+	// be. Zero allows none; it may not be negative.
+	MaxClockSkew time.Duration
+}
+
+// MaxReplayWindow bounds Limits.ReplayWindow, so the times computed from
+// it stay representable.
+const MaxReplayWindow = 365 * 24 * time.Hour
+
+// RecommendedLimits returns starting values for Limits. None is a
+// specification requirement; each is this package's operational choice:
+//
+//   - ReplayWindow 7 days: longer than a stream is usually paused or a
+//     Receiver down, so held SETs are still accepted when it resumes,
+//     while the replay store stays bounded. RFC 8417 §4.1 leaves replay
+//     detection to the recipient.
+//   - KeyMaxAge 24 hours: a retired key stops being trusted within a day
+//     even if no SET names an unknown key, which triggers a refetch
+//     anyway.
+//   - MaxClockSkew 1 minute: tolerates ordinary clock drift between the
+//     Transmitter and the Receiver without accepting SETs dated well
+//     into the future.
+func RecommendedLimits() Limits {
+	return Limits{ReplayWindow: 7 * 24 * time.Hour, KeyMaxAge: 24 * time.Hour, MaxClockSkew: time.Minute}
+}
+
+func (l Limits) errors() []error {
 	var errs []error
+	if l.ReplayWindow <= 0 || l.ReplayWindow > MaxReplayWindow {
+		errs = append(errs, fmt.Errorf("Limits.ReplayWindow must be positive and at most %v (RecommendedLimits gives starting values)", MaxReplayWindow))
+	}
+	if l.KeyMaxAge <= 0 {
+		errs = append(errs, errors.New("Limits.KeyMaxAge must be positive"))
+	}
+	if l.MaxClockSkew < 0 {
+		errs = append(errs, errors.New("Limits.MaxClockSkew must not be negative"))
+	}
+	return errs
+}
+
+func (c *Config) validate() error {
+	errs := c.Limits.errors()
 	if err := ssf.ValidateIssuer(c.Issuer); err != nil {
 		errs = append(errs, err)
 	}
@@ -152,15 +196,6 @@ func (c *Config) validate() error {
 	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("receiver: invalid config: %w", err)
-	}
-	if c.ReplayWindow <= 0 {
-		c.ReplayWindow = 7 * 24 * time.Hour
-	}
-	if c.KeyMaxAge <= 0 {
-		c.KeyMaxAge = 24 * time.Hour
-	}
-	if c.MaxClockSkew <= 0 {
-		c.MaxClockSkew = time.Minute
 	}
 	if c.HTTPClient == nil {
 		c.HTTPClient = &http.Client{Timeout: 30 * time.Second}

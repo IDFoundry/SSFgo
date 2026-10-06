@@ -186,6 +186,8 @@ func TestInactivityDisableAndDelete(t *testing.T) {
 func TestInactivityConfigValidation(t *testing.T) {
 	cfg := func(p transmitter.InactivityPolicy) transmitter.Config {
 		return transmitter.Config{
+			Limits:          transmitter.RecommendedLimits(),
+			PushRetry:       transmitter.RecommendedPushRetry(),
 			PermitEvent:     transmitter.PermitAll,
 			Issuer:          "https://tx.example",
 			SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k"}},

@@ -276,3 +276,20 @@ Since the freeze, one behavioural change: `Receiver.Streams` returns the
 streams that pass its checks, reporting the others in a
 `*receiver.StreamsError` the caller can use to delete them, instead of
 failing the whole list for one stream.
+
+Configuration that decides security has no implicit defaults
+([docs/design-rules.md](docs/design-rules.md), rule 2):
+
+- `receiver.Config.ReplayWindow`, `KeyMaxAge` and `MaxClockSkew` move into
+  a required `receiver.Config.Limits`; `receiver.RecommendedLimits()`
+  gives the former defaults (7 days, 24 hours, 1 minute). A zero
+  `MaxClockSkew` now means none rather than one minute, and
+  `ReplayWindow` is at most `receiver.MaxReplayWindow`.
+- `transmitter.Config.Limits` is required, each field positive, and
+  gains `LongPollTimeout` (formerly `Config.LongPollTimeout`);
+  `transmitter.RecommendedLimits()` gives the former defaults.
+- `transmitter.Config.PushRetry` is required for a Transmitter that
+  delivers by push; `transmitter.RecommendedPushRetry()` gives the former
+  defaults.
+- `ssftest` fills in the recommended values where a test leaves them
+  unset.

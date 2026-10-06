@@ -154,6 +154,8 @@ func TestEmitAndReceive(t *testing.T) {
 	t.Cleanup(srv.Close)
 	issuer := srv.URL + "/scim"
 	tx, err := transmitter.New(transmitter.Config{
+		Limits:          transmitter.RecommendedLimits(),
+		PushRetry:       transmitter.RecommendedPushRetry(),
 		Issuer:          issuer,
 		SigningKeys:     []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "k1"}},
 		EventsSupported: allTypes,
@@ -172,6 +174,7 @@ func TestEmitAndReceive(t *testing.T) {
 	srv.Config.Handler = tx.Handler()
 
 	rx, err := receiver.New(ctx, receiver.Config{
+		Limits:      receiver.RecommendedLimits(),
 		Issuer:      issuer,
 		Audience:    "https://rx.example",
 		Registry:    registry(t),

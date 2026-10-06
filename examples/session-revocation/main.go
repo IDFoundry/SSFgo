@@ -97,6 +97,8 @@ func run(ctx context.Context, w io.Writer) error {
 	var rpServer atomic.Pointer[httptest.Server] // the relying party, created below
 
 	txCfg := transmitter.Config{
+		Limits:          transmitter.RecommendedLimits(),
+		PushRetry:       transmitter.RecommendedPushRetry(),
 		Issuer:          issuer,
 		SigningKeys:     []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "idp-2026"}},
 		EventsSupported: interop.EventTypes(),
@@ -142,6 +144,7 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	rx, err := receiver.New(ctx, receiver.Config{
+		Limits:      receiver.RecommendedLimits(),
 		Issuer:      issuer,
 		Audience:    "https://rp.example",
 		Registry:    registry,

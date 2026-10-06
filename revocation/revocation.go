@@ -119,19 +119,19 @@ func New(store storage.RevocationStore, opts Options) (*Revoker, error) {
 		errs = append(errs, errors.New("a store is required"))
 	}
 	if opts.Issuers == nil {
-		errs = append(errs, errors.New("options: issuers is required (StaticTokenIssuers, or SameIssuer)"))
+		errs = append(errs, errors.New("Options.Issuers is required (StaticTokenIssuers, or SameIssuer)"))
 	}
 	if len(opts.Events) == 0 {
-		errs = append(errs, errors.New("options: events is required (RecommendedEvents is the usual choice)"))
+		errs = append(errs, errors.New("Options.Events is required (RecommendedEvents is the usual choice)"))
 	}
 	if opts.Retention <= 0 || opts.Retention > MaxRetention {
-		errs = append(errs, fmt.Errorf("options: retention must be positive and at most %v", MaxRetention))
+		errs = append(errs, fmt.Errorf("Options.Retention must be positive and at most %v", MaxRetention))
 	}
 	if opts.MaxClockSkew < 0 {
-		errs = append(errs, errors.New("options: max_clock_skew must not be negative"))
+		errs = append(errs, errors.New("Options.MaxClockSkew must not be negative"))
 	}
 	if err := errors.Join(errs...); err != nil {
-		return nil, fmt.Errorf("revocation: %w", err)
+		return nil, fmt.Errorf("revocation: invalid options: %w", err)
 	}
 	opts.Events = slices.Clone(opts.Events)
 	if opts.Now == nil {

@@ -156,7 +156,7 @@ func TestPollRejects(t *testing.T) {
 }
 
 func TestLongPoll(t *testing.T) {
-	f := newFixture(t, func(c *transmitter.Config) { c.LongPollTimeout = 5 * time.Second })
+	f := newFixture(t, func(c *transmitter.Config) { c.Limits.LongPollTimeout = 5 * time.Second })
 	c := pollStream(f, "alice")
 
 	go func() {
@@ -176,7 +176,7 @@ func TestLongPoll(t *testing.T) {
 }
 
 func TestLongPollTimesOut(t *testing.T) {
-	f := newFixture(t, func(c *transmitter.Config) { c.LongPollTimeout = 300 * time.Millisecond })
+	f := newFixture(t, func(c *transmitter.Config) { c.Limits.LongPollTimeout = 300 * time.Millisecond })
 	c := pollStream(f, "alice")
 	start := time.Now()
 	if got := f.poll(c, "alice", map[string]any{}); len(got.Sets) != 0 {

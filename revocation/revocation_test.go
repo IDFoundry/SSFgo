@@ -216,7 +216,7 @@ func TestNewValidates(t *testing.T) {
 	if err == nil {
 		t.Fatal("New accepted invalid options")
 	}
-	for _, want := range []string{"store is required", "issuers is required", "events is required", "retention must be", "max_clock_skew must not be negative"} {
+	for _, want := range []string{"store is required", "Options.Issuers is required", "Options.Events is required", "Options.Retention must be", "Options.MaxClockSkew must not be negative"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q lacks %q", err, want)
 		}
