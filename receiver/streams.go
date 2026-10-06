@@ -28,6 +28,13 @@ type StreamRequest struct {
 	// sent regardless.
 	EventsRequested []ssf.EventType
 	Description     string
+	// ReplaceOnConflict lets EnsureStream replace the Receiver's only
+	// stream when the Transmitter allows one stream per Receiver and that
+	// stream's delivery differs from Delivery. That stream may belong to
+	// another application using the same credentials, so replacing it is
+	// the caller's decision; without it EnsureStream returns the conflict.
+	// Other methods ignore it.
+	ReplaceOnConflict bool
 }
 
 type streamRequestWire struct {

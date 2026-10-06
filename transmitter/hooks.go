@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
@@ -12,7 +13,12 @@ import (
 
 // Hooks are callbacks that observe a Transmitter, to feed metrics or
 // traces. Each is optional. They run synchronously on the Transmitter's
-// goroutines — a request's, Run's — so they should return quickly.
+// goroutines — a request's, Run's — after the change they report is
+// complete, so they must not block. A hook must not panic either; if one
+// does, the panic is recovered and logged, so a bug in a hook cannot take
+// down the process or leave a stream undelivered. Fields marked untrusted
+// carry text from a Receiver: log them, never use them as a metric label
+// or return them to anyone.
 type Hooks struct {
 	// Emit is called after every Emit or EmitTxn that got past its checks.
 	Emit func(ctx context.Context, info EmitInfo)
@@ -78,6 +84,8 @@ type PushInfo struct {
 	// without one.
 	Duration time.Duration
 	// Detail is the Receiver's error, or why the attempt failed.
+	// Untrusted: mostly the Receiver's own words, cleaned and cut to 512
+	// bytes. Outcome is the field for a metric label.
 	Detail string
 }
 
@@ -131,8 +139,22 @@ type StreamInfo struct {
 
 func (t *Transmitter) streamChanged(ctx context.Context, s storage.Stream, change StreamChange, byTransmitter bool) {
 	if t.cfg.Hooks.Stream != nil {
-		t.cfg.Hooks.Stream(ctx, StreamInfo{StreamID: s.ID, ReceiverID: s.ReceiverID, Change: change, Status: s.Status, ByTransmitter: byTransmitter})
+		t.observe(ctx, "Stream", func() {
+			t.cfg.Hooks.Stream(ctx, StreamInfo{StreamID: s.ID, ReceiverID: s.ReceiverID, Change: change, Status: s.Status, ByTransmitter: byTransmitter})
+		})
 	}
+}
+
+// observe calls a hook, recovering and logging a panic: a hook observes
+// the Transmitter, and a bug in one must not take down Run's delivery
+// goroutines — and with them the process.
+func (t *Transmitter) observe(ctx context.Context, hook string, call func()) {
+	defer func() {
+		if v := recover(); v != nil {
+			t.log.ErrorContext(ctx, "ssf transmitter: hook panicked", "hook", hook, "panic", v, "stack", string(debug.Stack()))
+		}
+	}()
+	call()
 }
 
 // Ready reports whether the Transmitter's store is reachable. For a

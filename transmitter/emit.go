@@ -27,14 +27,18 @@ func (t *Transmitter) Emit(ctx context.Context, subject ssf.Subject, event ssf.E
 	return t.EmitTxn(ctx, randomID(), subject, event)
 }
 
+// MaxTxnLength bounds the "txn" EmitTxn accepts: ample for any
+// transaction identifier, and small against a Receiver's SET size limit.
+const MaxTxnLength = 256
+
 // EmitTxn is Emit with the "txn" chosen by the caller, so that the SETs of
 // one transaction share it across calls. RFC 9967 needs this: the events
 // of one SCIM transaction share a "txn" (§2.2), and an asynchronous
 // response's must be the value the service provider returned to the
 // client (§2.5.1.3).
 func (t *Transmitter) EmitTxn(ctx context.Context, txn string, subject ssf.Subject, event ssf.Event) error {
-	if txn == "" {
-		return errors.New("transmitter: EmitTxn requires a txn")
+	if txn == "" || len(txn) > MaxTxnLength {
+		return fmt.Errorf("transmitter: EmitTxn requires a txn of 1 to %d bytes", MaxTxnLength)
 	}
 	if err := t.checkEmit(subject, event); err != nil {
 		return err
@@ -59,7 +63,9 @@ func (t *Transmitter) EmitTxn(ctx context.Context, txn string, subject ssf.Subje
 		err = fmt.Errorf("transmitter: emit: %w", err)
 	}
 	if t.cfg.Hooks.Emit != nil {
-		t.cfg.Hooks.Emit(ctx, EmitInfo{EventType: event.EventType(), Streams: len(streams), Queued: queued, Err: err})
+		t.observe(ctx, "Emit", func() {
+			t.cfg.Hooks.Emit(ctx, EmitInfo{EventType: event.EventType(), Streams: len(streams), Queued: queued, Err: err})
+		})
 	}
 	return err
 }
@@ -167,7 +173,9 @@ func (t *Transmitter) setStatus(ctx context.Context, streamID string, status ssf
 	if previous == status {
 		return nil
 	}
-	t.streamChanged(ctx, s, StreamStatusChanged, true)
+	// The status has changed whatever follows; the hook hears of it once
+	// the queue reflects it too.
+	defer t.streamChanged(ctx, s, StreamStatusChanged, true)
 	if status == ssf.StreamDisabled {
 		if err := t.cfg.Store.PurgeEvents(ctx, streamID); err != nil {
 			return fmt.Errorf("transmitter: set stream status: %w", err)

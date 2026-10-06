@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -298,5 +299,87 @@ func TestRunPollerPausesOnEmptyPolls(t *testing.T) {
 	_ = e.rx.RunPoller(runCtx, stream)
 	if n := polls.Load(); n > 3 {
 		t.Errorf("%d polls in 1.5s against a Transmitter that ignores long polling", n)
+	}
+}
+
+// A panicking hook is recovered and logged: KeysRefreshed — whose refetch
+// anyone able to push can trigger — and SET alike leave the Receiver
+// answering, rather than taking down the process.
+func TestHookPanicRecovered(t *testing.T) {
+	now := time.Now()
+	var logs countingHandler
+	e := newEnv(t, func(c *receiver.Config) {
+		c.Now = func() time.Time { return now }
+		c.Logger = slog.New(&logs)
+		// A typical bug: err is nil after a successful refetch.
+		c.Hooks.KeysRefreshed = func(_ context.Context, err error) { _ = err.Error() }
+		c.Hooks.SET = func(context.Context, receiver.SETInfo) { panic("hook bug") }
+	})
+	h := e.rx.PushHandler(receiver.PushOptions{})
+	now = now.Add(2 * time.Minute)
+	if got := push(t, h, "", forgedUnknownKid()); got.status != http.StatusBadRequest {
+		t.Errorf("junk push = %d, want 400", got.status)
+	}
+	if got := push(t, h, "", sign(t, e, nil)); got.status != http.StatusAccepted {
+		t.Errorf("valid push after hook panics = %d %q, want 202", got.status, got.err)
+	}
+	if logs.n.Load() == 0 {
+		t.Error("hook panics were not logged")
+	}
+}
+
+// A TLS alert — the Transmitter requiring a client certificate the
+// Receiver does not have — will not clear by waiting, so EnsureStream
+// returns it at once instead of retrying until its context ends.
+func TestEnsureStreamTLSAlertNotRetried(t *testing.T) {
+	receiver.SetEnsureRetry(t, 10*time.Millisecond)
+	e := newEnv(t)
+	e.txSrv.TLS.ClientAuth = tls.RequireAnyClientCert
+	e.txSrv.CloseClientConnections()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	start := time.Now()
+	_, err := e.rx.EnsureStream(ctx, receiver.StreamRequest{})
+	if err == nil || errors.Is(err, context.DeadlineExceeded) || time.Since(start) > time.Second {
+		t.Errorf("EnsureStream = %v after %v, want the TLS failure at once", err, time.Since(start))
+	}
+}
+
+// An APIError's message shows a JSON error's code and description,
+// cleaned, and never the raw body: a Transmitter cannot forge log lines
+// or flood a log through it.
+func TestAPIErrorMessageCleaned(t *testing.T) {
+	for body, want := range map[string]string{
+		`{"error":"invalid_request","error_description":"bad\nforged: line"}`: ": HTTP 400: invalid_request: bad?forged: line",
+		"<html>\nforged: line</html>":                                         ": HTTP 400 (26-byte body)",
+		"":                                                                    ": HTTP 400",
+	} {
+		e := newEnv(t)
+		e.txSrv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(body))
+		})
+		_, err := e.rx.CreateStream(context.Background(), receiver.StreamRequest{})
+		if err == nil || !strings.HasSuffix(err.Error(), want) || strings.Contains(err.Error(), "\n") {
+			t.Errorf("body %q: error %q, want it to end %q", body, err, want)
+		}
+	}
+}
+
+// A SET's header is written by whoever pushes it, so a rejection quotes
+// it only cleaned and bounded — in the log, the response and the hook.
+func TestRejectionDescriptionBounded(t *testing.T) {
+	var info receiver.SETInfo
+	e := newEnv(t, func(c *receiver.Config) {
+		c.Hooks.SET = func(_ context.Context, i receiver.SETInfo) { info = i }
+	})
+	b := base64.RawURLEncoding.EncodeToString
+	header := `{"alg":"RS256","typ":"secevent+jwt","kid":"` + strings.Repeat("X", 40_000) + `\n"}`
+	got := push(t, e.rx.PushHandler(receiver.PushOptions{}), "", b([]byte(header))+"."+b([]byte(`{}`))+"."+b([]byte("sig")))
+	if got.status != http.StatusBadRequest || len(got.err) > 64 {
+		t.Fatalf("push = %d %q", got.status, got.err)
+	}
+	if info.Err == nil || len(info.Err.Error()) > 512 || strings.ContainsAny(info.Err.Error(), "\n") {
+		t.Errorf("hook error kept %d bytes: %.80q", len(fmt.Sprint(info.Err)), info.Err)
 	}
 }

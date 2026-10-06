@@ -245,7 +245,10 @@ Receiver; emits, push attempts, polls served and stream changes on the
 Transmitter — that applications feed into the metrics or tracing system
 they use. A struct of functions, as `net/http/httptrace` uses, rather than
 an interface: a callback can be added in a minor release without breaking
-anyone. They run synchronously and must be quick. `Ready` on each role
+anyone. They run synchronously, on the goroutine of the work they report
+and after it is done, and must not block; a panicking hook is recovered
+and logged, so a bug in one cannot stop push delivery or the process.
+Text from the other party reaches them cleaned and bounded. `Ready` on each role
 backs a readiness probe: the Receiver holds signing keys fetched within
 `KeyMaxAge` (refetching overdue ones), the Transmitter's store answers.
 
@@ -266,8 +269,8 @@ the Transmitter's JWKS.
   `ClientCredentials`, which caches and is invalidated once on a 401.
   `EnsureStream` reuses a stream with the wanted delivery, updating what
   differs, or creates one — replacing the only stream on a Transmitter
-  that allows one per Receiver — retrying while the Transmitter is
-  unavailable. `KeepAlive` keeps a stream inside its `inactivity_timeout`.
+  that allows one per Receiver when `ReplaceOnConflict` says to —
+  retrying while the Transmitter is unavailable. `KeepAlive` keeps a stream inside its `inactivity_timeout`.
 - **Delivery.** `PushHandler` answers 202 once a SET is verified and
   handled, 400 with an RFC 8935 error body for a SET it rejects, and 500
   when a handler fails, so the Transmitter retries. `Poll` acknowledges

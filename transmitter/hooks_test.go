@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/storage"
@@ -159,5 +160,61 @@ func TestHookValueNames(t *testing.T) {
 		if got := c.String(); got != want {
 			t.Errorf("StreamChange %d = %q, want %q", c, got, want)
 		}
+	}
+}
+
+// A panicking Push hook — called on Run's delivery goroutines — is
+// recovered: delivery goes on and the stream is not left busy.
+func TestPushHookPanicRecovered(t *testing.T) {
+	rx := newPushReceiver(t)
+	f := newFixture(t, func(c *transmitter.Config) {
+		c.HTTPClient = rx.srv.Client()
+		c.Hooks.Push = func(context.Context, transmitter.PushInfo) { panic("hook bug") }
+	})
+	pushStream(f, rx, "")
+	runTransmitter(t, f)
+	for range 2 {
+		if err := f.tx.Emit(context.Background(), bob, revoked()); err != nil {
+			t.Fatal(err)
+		}
+		rx.wait(t, 1)
+	}
+}
+
+// Push failures count against the SET they happened to. A stream-updated
+// notice queued when the operator disables a failing stream starts from
+// its first attempt, rather than inheriting the purged SET's and being
+// dropped unsent.
+func TestControlSETStartsItsOwnAttempts(t *testing.T) {
+	rx := newPushReceiver(t)
+	rx.respond = func(n int) (int, string) {
+		if n <= 2 {
+			return http.StatusBadGateway, ""
+		}
+		return http.StatusAccepted, ""
+	}
+	var hooks txHooks
+	f := newFixture(t, func(c *transmitter.Config) {
+		c.HTTPClient = rx.srv.Client()
+		c.PushRetry = transmitter.PushRetryPolicy{MinBackoff: 400 * time.Millisecond, MaxBackoff: time.Second, MaxAttempts: 2}
+		c.Hooks = hooks.hooks()
+	})
+	c := pushStream(f, rx, "")
+	runTransmitter(t, f)
+	ctx := context.Background()
+	if err := f.tx.Emit(ctx, bob, revoked()); err != nil {
+		t.Fatal(err)
+	}
+	rx.wait(t, 2) // both attempts at the event fail
+	if err := f.tx.SetStreamStatus(ctx, c.StreamID, ssf.StreamDisabled, "operator"); err != nil {
+		t.Fatal(err)
+	}
+	rx.wait(t, 1) // the notice is pushed
+	rx.mu.Lock()
+	body := rx.bodies[len(rx.bodies)-1]
+	rx.mu.Unlock()
+	set := f.decodeSET(body, c.Audience[0])
+	if _, ok := set.Event.(ssf.StreamUpdated); !ok {
+		t.Errorf("third push = %T, want the stream-updated notice", set.Event)
 	}
 }

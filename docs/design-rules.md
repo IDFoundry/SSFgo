@@ -99,8 +99,9 @@ Hooks and callbacks (`Hooks`, `OnRevoke`, `PermitEvent`, `AuthorizeFunc`)
 run synchronously, on the goroutine of the work they concern, after the
 library's own state is consistent.
 
-- None runs on a goroutine of its own, so a panic fails one request
-  rather than the process.
+- Every call recovers and logs a panic, so a bug in a hook cannot stop
+  the library's own goroutines, such as push delivery, or crash the
+  process.
 - Their docs say:
   - they must not block or panic;
   - which fields may carry untrusted text, to be logged and never
@@ -195,11 +196,11 @@ An unsafe choice needs more code and a name that says what it does.
 | 2 | The Receiver and Transmitter silently default `ReplayWindow`, `KeyMaxAge`, `MaxClockSkew` (zero becomes 1 minute) and other limits; there are no `Recommended*()` presets; error messages don't name field paths | Fail-closed config PR |
 | 3 | `revocation.Retention` was unbounded, and `sqlstore` wrapped far-future times | #45 |
 | 4 | `ClientCredentials.ClientSecret` and `Delivery.AuthorizationHeader` are plain strings | `Secret` PR |
-| 5 | `APIError.Error()` quotes response bodies; SET rejection descriptions carry up to 40 KB of attacker text into logs, responses and hooks | #46 |
-| 6 | SCIM full/notice exclusivity is case-sensitive; SCIM `uri` accepts `\`; proprietary format names accept invisible Unicode; `revocation` folded email with `strings.ToLower` | #45, #46 |
-| 7 | `Hooks.KeysRefreshed` runs on the detached key-refresh goroutine | #46 |
-| 8 | `EnsureStream` retries TLS alerts; push failures are counted per stream | #46 |
-| 9 | `EnsureStream` replaces the only stream on 409 | #46 |
+| 5 | `APIError.Error()` quotes response bodies; SET rejection descriptions carry up to 40 KB of attacker text into logs, responses and hooks | #47 |
+| 6 | SCIM full/notice exclusivity is case-sensitive; SCIM `uri` accepts `\`; proprietary format names accept invisible Unicode; `revocation` folded email with `strings.ToLower` | #45, #47 |
+| 7 | `Hooks.KeysRefreshed` runs on the detached key-refresh goroutine | #47 |
+| 8 | `EnsureStream` retries TLS alerts; push failures are counted per stream | #47 |
+| 9 | `EnsureStream` replaces the only stream on 409 | #47 |
 | 10 | No assurance levels or store capabilities | Assurance PR |
 | 14 | Examples share the root module; no `GETTING_STARTED.md` or guides | Examples and guides PRs |
 | 15 | No release-please, `UPGRADING.md` or `AGENTS.md` | Release tooling PR |

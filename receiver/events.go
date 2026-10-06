@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/internal/peertext"
 	"github.com/idfoundry/ssfgo/internal/setcodec"
 )
 
@@ -47,6 +48,9 @@ const (
 
 // rejectedSET is a SET the Receiver refuses: it is reported to the
 // Transmitter with code and never handled.
+// maxRejectionDescription bounds the description of a rejected SET.
+const maxRejectionDescription = 256
+
 type rejectedSET struct {
 	code        string
 	description string
@@ -80,7 +84,7 @@ func (r *Receiver) processObserved(ctx context.Context, method ssf.DeliveryMetho
 		default:
 			info.Outcome = SETHandled
 		}
-		r.cfg.Hooks.SET(ctx, info)
+		r.observe(ctx, "SET", func() { r.cfg.Hooks.SET(ctx, info) })
 	}
 	return p.jti, err
 }
@@ -218,7 +222,9 @@ func (r *Receiver) decode(ctx context.Context, token string) (ssf.SET, error) {
 		set, err = setcodec.Decode(token, opts)
 	}
 	if de, ok := setcodec.IsDecodeError(err); ok {
-		return ssf.SET{}, &rejectedSET{code: de.Code, description: de.Err.Error()}
+		// The description quotes the SET's header, which anyone able to
+		// push writes: it is logged, returned and reported to hooks.
+		return ssf.SET{}, &rejectedSET{code: de.Code, description: peertext.Clean(de.Err.Error(), maxRejectionDescription)}
 	}
 	return set, err
 }
@@ -241,7 +247,7 @@ func (r *Receiver) checkCriticalMembers(s ssf.Subject) error {
 		}
 		if _, present := complexSubject.Additional[name]; present {
 			return &rejectedSET{code: setcodec.CodeInvalidRequest,
-				description: "the subject has critical member " + name + ", which this Receiver does not process"}
+				description: "the subject has critical member " + peertext.Clean(name, maxRejectionDescription) + ", which this Receiver does not process"}
 		}
 	}
 	return nil
