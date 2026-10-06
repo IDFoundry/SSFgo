@@ -98,11 +98,9 @@ SCIM events (RFC 9967).
 
 Ideas recorded for later; none is committed to.
 
-- **Receiver reactions.** Ready-made handling of what most Receivers do
-  with session-revoked, credential-change or account-disabled: a
-  revocation store (`IsRevoked(sid, sub, iat)`) with `net/http`
-  middleware that rejects matching tokens, and a session-terminator hook
-  with a helper matching an event's subject to a user's claims.
+- **Durable revocations.** A `storage/sqlstore` implementation of
+  `storage.RevocationStore`, so revocations survive restarts and are
+  shared by several Receiver instances.
 - **Observability.** A dependency-free observer interface for both roles
   (SETs received, rejected, handled, emitted and pushed; delivery
   latency; key refreshes) and readiness checks.

@@ -33,6 +33,16 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 
 ### Added since v0.5
 
+- `revocation`: a `Revoker` records what session-revoked, account-disabled,
+  account-purged, sessions-revoked and SCIM deactivate and delete events
+  mean — a user's or one session's tokens, issued before the event, are
+  revoked — and checks tokens the application validated against it, with
+  `IsRevoked` or as `net/http` middleware answering 401. Events map to
+  users and sessions through iss_sub and complex subjects, to email
+  addresses only with `MatchEmail`, and to anything else through
+  `KeysFor`; `OnRevoke` lets the application end its own sessions. New
+  `storage.RevocationStore` contract, with `memstore.NewRevocationStore`
+  and `storagetest.RevocationStore`.
 - `ssftest`: an in-process Transmitter (`NewTransmitter`) for testing a
   Receiver — with a ready `ReceiverConfig`, `Emit`, and `SetAvailable` to
   simulate an outage — and an in-process Receiver (`NewReceiver`, then

@@ -17,6 +17,7 @@ The public API is every exported identifier in these packages:
 | `.../transmitter`, `.../receiver` | the two roles |
 | `.../storage`, `.../storage/memstore`, `.../storage/storagetest` | persistence contracts and implementations |
 | `.../ssftest` | in-process Transmitter and Receiver for tests |
+| `.../revocation` | revoking tokens as security events arrive |
 
 Not covered: `internal/...` (not importable), `cmd/...` and
 `storage/sqlstore/cmd/...` (conformance harnesses), `examples/...` and

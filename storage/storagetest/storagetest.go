@@ -459,3 +459,52 @@ func ReplayStore(t *testing.T, newStore func(t *testing.T) storage.ReplayStore) 
 		}
 	})
 }
+
+// RevocationStore runs the storage.RevocationStore contract against stores
+// from newStore.
+func RevocationStore(t *testing.T, newStore func(t *testing.T) storage.RevocationStore) {
+	now := time.Now()
+	user := storage.RevocationKey{Kind: storage.RevokeUser, Issuer: "https://idp.example", Value: "alice"}
+	t.Run("RevokeAndRead", func(t *testing.T) {
+		st := newStore(t)
+		if _, ok, err := st.RevokedAt(ctx, user, now); err != nil || ok {
+			t.Fatalf("before any revocation: %v, %v", ok, err)
+		}
+		if err := st.Revoke(ctx, user, now, now.Add(time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+		at, ok, err := st.RevokedAt(ctx, user, now)
+		if err != nil || !ok || !at.Equal(now) {
+			t.Errorf("RevokedAt = %v, %v, %v; want %v", at, ok, err, now)
+		}
+		for _, other := range []storage.RevocationKey{
+			{Kind: storage.RevokeSession, Issuer: user.Issuer, Value: user.Value},
+			{Kind: storage.RevokeUser, Issuer: "https://other.example", Value: user.Value},
+			{Kind: storage.RevokeUser, Issuer: user.Issuer, Value: "bob"},
+		} {
+			if _, ok, _ := st.RevokedAt(ctx, other, now); ok {
+				t.Errorf("%+v is revoked too", other)
+			}
+		}
+	})
+	t.Run("KeepsTheLaterTimes", func(t *testing.T) {
+		st := newStore(t)
+		_ = st.Revoke(ctx, user, now, now.Add(2*time.Hour))
+		_ = st.Revoke(ctx, user, now.Add(-time.Minute), now.Add(time.Hour))
+		at, ok, _ := st.RevokedAt(ctx, user, now.Add(90*time.Minute))
+		if !ok || !at.Equal(now) {
+			t.Errorf("an earlier revocation replaced a later one, or shortened its expiry: %v, %v", at, ok)
+		}
+		_ = st.Revoke(ctx, user, now.Add(time.Minute), now.Add(time.Hour))
+		if at, _, _ := st.RevokedAt(ctx, user, now); !at.Equal(now.Add(time.Minute)) {
+			t.Errorf("a later revocation was not recorded: %v", at)
+		}
+	})
+	t.Run("Expires", func(t *testing.T) {
+		st := newStore(t)
+		_ = st.Revoke(ctx, user, now, now.Add(time.Hour))
+		if _, ok, _ := st.RevokedAt(ctx, user, now.Add(time.Hour)); ok {
+			t.Error("a revocation outlived its expiry")
+		}
+	})
+}
