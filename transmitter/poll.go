@@ -167,7 +167,7 @@ func (t *Transmitter) awaitSETs(r *http.Request, id string, req pollRequest) (*p
 	if req.MaxEvents != nil {
 		limit = *req.MaxEvents + 1 // one extra, to report moreAvailable
 	}
-	deadline := time.Now().Add(t.cfg.LongPollTimeout)
+	deadline := time.Now().Add(t.cfg.Limits.LongPollTimeout)
 	for {
 		wake, done := t.notify.wait(id)
 		events, err := t.deliverable(r, id, limit)

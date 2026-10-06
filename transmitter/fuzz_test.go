@@ -22,8 +22,10 @@ import (
 // be valid JSON.
 func FuzzManagementAPI(f *testing.F) {
 	fx := newFixture(f, func(c *transmitter.Config) {
-		c.LongPollTimeout = time.Millisecond // a poll that asks to wait must not stall the fuzzer
-		c.Limits = transmitter.Limits{StreamsPerReceiver: 5, SubjectRulesPerStream: 50, QueuedSETsPerStream: 50}
+		c.Limits = transmitter.Limits{
+			StreamsPerReceiver: 5, SubjectRulesPerStream: 50, QueuedSETsPerStream: 50,
+			LongPollTimeout: time.Millisecond, // a poll that asks to wait must not stall the fuzzer
+		}
 	})
 	md := fx.metadata()
 	const fixedStream = "fuzz-stream"

@@ -95,9 +95,12 @@ type Config struct {
 	HTTPClient *http.Client
 
 	// PushRetry controls how failed push deliveries are retried.
+	// Required when DeliveryMethods includes push: RecommendedPushRetry
+	// is the usual choice.
 	PushRetry PushRetryPolicy
 
-	// Limits bound what one Receiver can make the Transmitter store.
+	// Limits bound what one Receiver can make the Transmitter store or
+	// wait for. Required: RecommendedLimits is the usual choice.
 	Limits Limits
 
 	// Inactivity, if its Timeout is set, advertises inactivity_timeout on
@@ -122,11 +125,6 @@ type Config struct {
 	// events about every subject.
 	PermitEvent func(ctx context.Context, receiverID string, subject ssf.Subject, event ssf.Event) bool
 
-	// LongPollTimeout is how long a poll request that asks to wait
-	// (returnImmediately false, RFC 8936 §2.5) waits for a SET before
-	// returning none. Defaults to 20 seconds.
-	LongPollTimeout time.Duration
-
 	// Logger receives server-side failures (storage and authorizer
 	// errors) that are reported to the Receiver only as 500. Defaults to
 	// slog.Default().
@@ -141,19 +139,47 @@ type Config struct {
 // single-tenant deployment.
 func PermitAll(context.Context, string, ssf.Subject, ssf.Event) bool { return true }
 
-// Limits bound the state an authenticated Receiver can create. Zero
-// fields take the defaults shown; there is deliberately no "unlimited".
+// Limits bound the state an authenticated Receiver can create and how
+// long it can hold a request open. Each must be positive: there is
+// deliberately no "unlimited" and no implicit default, and
+// RecommendedLimits gives starting values.
 type Limits struct {
 	// StreamsPerReceiver caps how many streams one Receiver may own when
-	// MultipleStreamsPerReceiver is set. Defaults to 10.
+	// MultipleStreamsPerReceiver is set.
 	StreamsPerReceiver int
 	// SubjectRulesPerStream caps Add and Remove Subject rules per stream.
-	// Defaults to 10,000.
 	SubjectRulesPerStream int
 	// QueuedSETsPerStream caps the SETs waiting on one stream. Once a
 	// Receiver stops collecting, further SETs for that stream are dropped
-	// and logged rather than held without bound. Defaults to 10,000.
+	// and logged rather than held without bound.
 	QueuedSETsPerStream int
+	// LongPollTimeout is how long a poll request that asks to wait
+	// (returnImmediately false, RFC 8936 §2.5) waits for a SET before
+	// returning none.
+	LongPollTimeout time.Duration
+}
+
+// RecommendedLimits returns starting values for Limits. None is a
+// specification requirement; each is this package's operational choice:
+//
+//   - StreamsPerReceiver 10: room for a Receiver's environments or
+//     tenants without one Receiver filling the store.
+//   - SubjectRulesPerStream 10,000 and QueuedSETsPerStream 10,000: ample
+//     for a Receiver that collects its SETs, bounded for one that stops.
+//   - LongPollTimeout 20 seconds: under the idle timeouts of common
+//     proxies and load balancers, so a waiting poll is answered before
+//     something in between closes it.
+func RecommendedLimits() Limits {
+	return Limits{StreamsPerReceiver: 10, SubjectRulesPerStream: 10_000, QueuedSETsPerStream: 10_000, LongPollTimeout: 20 * time.Second}
+}
+
+// RecommendedPushRetry returns a starting PushRetryPolicy: retries one
+// second after the first failure, doubling to at most five minutes, with
+// no limit on attempts — a SET is dropped only when the Receiver rejects
+// it, or keeps rejecting it with an error that may clear (RFC 8935 §2:
+// Transmitters delay retransmission and may cap attempts).
+func RecommendedPushRetry() PushRetryPolicy {
+	return PushRetryPolicy{MinBackoff: time.Second, MaxBackoff: 5 * time.Minute}
 }
 
 // InactivityAction is what the Transmitter does to a stream whose
@@ -195,9 +221,9 @@ type InactivityPolicy struct {
 // to overwhelm the Receiver, and lets them cap attempts.
 type PushRetryPolicy struct {
 	// MinBackoff is the delay after the first failure; it doubles with
-	// each further failure. Defaults to one second.
+	// each further failure. Positive.
 	MinBackoff time.Duration
-	// MaxBackoff caps the delay. Defaults to five minutes.
+	// MaxBackoff caps the delay. At least MinBackoff.
 	MaxBackoff time.Duration
 	// MaxAttempts, if positive, is how many times a SET is tried before
 	// it is dropped and logged. Zero retries indefinitely.
@@ -211,7 +237,6 @@ func (c *Config) validate() error {
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("transmitter: invalid config: %w", err)
 	}
-	c.applyDefaults()
 	return nil
 }
 
@@ -279,11 +304,15 @@ func (c *Config) tuningErrors() []error {
 	if c.MinVerificationInterval < 0 || c.MinVerificationInterval%time.Second != 0 {
 		errs = append(errs, errors.New("MinVerificationInterval must be a non-negative whole number of seconds"))
 	}
-	if c.PushRetry.MinBackoff < 0 || c.PushRetry.MaxBackoff < 0 || c.PushRetry.MaxAttempts < 0 {
-		errs = append(errs, errors.New("PushRetry values must not be negative"))
+	if c.supportsDelivery(ssf.DeliveryPush) && (c.PushRetry.MinBackoff <= 0 || c.PushRetry.MaxBackoff < c.PushRetry.MinBackoff) {
+		errs = append(errs, errors.New("PushRetry.MinBackoff must be positive and PushRetry.MaxBackoff at least as long (RecommendedPushRetry gives starting values)"))
 	}
-	if c.Limits.StreamsPerReceiver < 0 || c.Limits.SubjectRulesPerStream < 0 || c.Limits.QueuedSETsPerStream < 0 {
-		errs = append(errs, errors.New("Limits values must not be negative"))
+	if c.PushRetry.MaxAttempts < 0 {
+		errs = append(errs, errors.New("PushRetry.MaxAttempts must not be negative"))
+	}
+	l := c.Limits
+	if l.StreamsPerReceiver <= 0 || l.SubjectRulesPerStream <= 0 || l.QueuedSETsPerStream <= 0 || l.LongPollTimeout <= 0 {
+		errs = append(errs, errors.New("Limits.StreamsPerReceiver, SubjectRulesPerStream, QueuedSETsPerStream and LongPollTimeout must be positive (RecommendedLimits gives starting values)"))
 	}
 	if c.Inactivity.Timeout < 0 || c.Inactivity.Timeout%time.Second != 0 {
 		errs = append(errs, errors.New("Inactivity.Timeout must be a non-negative whole number of seconds"))
@@ -296,27 +325,6 @@ func (c *Config) tuningErrors() []error {
 		}
 	}
 	return errs
-}
-
-// applyDefaults fills in the optional settings left at zero.
-func (c *Config) applyDefaults() {
-	if c.PushRetry.MinBackoff == 0 {
-		c.PushRetry.MinBackoff = time.Second
-	}
-	if c.PushRetry.MaxBackoff == 0 {
-		c.PushRetry.MaxBackoff = 5 * time.Minute
-	}
-	c.PushRetry.MaxBackoff = max(c.PushRetry.MaxBackoff, c.PushRetry.MinBackoff)
-	c.Limits.StreamsPerReceiver = defaultInt(c.Limits.StreamsPerReceiver, 10)
-	c.Limits.SubjectRulesPerStream = defaultInt(c.Limits.SubjectRulesPerStream, 10_000)
-	c.Limits.QueuedSETsPerStream = defaultInt(c.Limits.QueuedSETsPerStream, 10_000)
-}
-
-func defaultInt(v, def int) int {
-	if v == 0 {
-		return def
-	}
-	return v
 }
 
 func (c *Config) supportsDelivery(m ssf.DeliveryMethod) bool {

@@ -98,14 +98,14 @@ type PollInfo struct {
 // refetched first, as receiving a SET would refetch them. For a readiness
 // probe.
 func (r *Receiver) Ready(ctx context.Context) error {
-	if _, fetched := r.currentKeys(); r.cfg.Now().Sub(fetched) > r.cfg.KeyMaxAge {
+	if _, fetched := r.currentKeys(); r.cfg.Now().Sub(fetched) > r.cfg.Limits.KeyMaxAge {
 		r.maybeRefreshKeys(ctx)
 	}
 	keys, fetched := r.currentKeys()
 	if len(keys) == 0 {
 		return errors.New("receiver: no usable signing keys from the Transmitter")
 	}
-	if age := r.cfg.Now().Sub(fetched); age > r.cfg.KeyMaxAge {
+	if age := r.cfg.Now().Sub(fetched); age > r.cfg.Limits.KeyMaxAge {
 		return fmt.Errorf("receiver: the Transmitter's signing keys are %v old, and refetching them fails", age.Round(time.Second))
 	}
 	return nil

@@ -76,8 +76,11 @@ func newEnvTx(t testing.TB, txMutate func(*transmitter.Config), mutate ...func(*
 	t.Cleanup(e.txSrv.Close)
 	issuer := e.txSrv.URL + "/tx"
 
+	txLimits := transmitter.RecommendedLimits()
+	txLimits.LongPollTimeout = 2 * time.Second
 	txCfg := transmitter.Config{
-
+		Limits:          txLimits,
+		PushRetry:       transmitter.RecommendedPushRetry(),
 		PermitEvent:     transmitter.PermitAll,
 		Issuer:          issuer,
 		SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
@@ -91,9 +94,8 @@ func newEnvTx(t testing.TB, txMutate func(*transmitter.Config), mutate ...func(*
 			}
 			return transmitter.Receiver{ID: "rx", Audience: []string{audience}, Access: transmitter.AccessManage}, nil
 		},
-		HTTPClient:      e.txSrv.Client(),
-		LongPollTimeout: 2 * time.Second,
-		Logger:          quiet,
+		HTTPClient: e.txSrv.Client(),
+		Logger:     quiet,
 	}
 	if txMutate != nil {
 		txMutate(&txCfg)
@@ -113,6 +115,7 @@ func newEnvTx(t testing.TB, txMutate func(*transmitter.Config), mutate ...func(*
 		t.Fatal(err)
 	}
 	e.cfg = receiver.Config{
+		Limits:      receiver.RecommendedLimits(),
 		Issuer:      issuer,
 		Audience:    audience,
 		Registry:    registry,
@@ -211,6 +214,12 @@ func TestDiscovery(t *testing.T) {
 		"no algorithm": func(c *receiver.Config) { c.Algorithms = nil },
 		"no token":     func(c *receiver.Config) { c.TokenSource = nil },
 		"no replay":    func(c *receiver.Config) { c.ReplayStore = nil },
+		// No implicit defaults for what decides how much is trusted.
+		"no limits":           func(c *receiver.Config) { c.Limits = receiver.Limits{} },
+		"no replay window":    func(c *receiver.Config) { c.Limits.ReplayWindow = 0 },
+		"huge replay window":  func(c *receiver.Config) { c.Limits.ReplayWindow = receiver.MaxReplayWindow + 1 },
+		"no key max age":      func(c *receiver.Config) { c.Limits.KeyMaxAge = 0 },
+		"negative clock skew": func(c *receiver.Config) { c.Limits.MaxClockSkew = -1 },
 	} {
 		c := e.cfg
 		mutate(&c)
@@ -374,6 +383,8 @@ func TestPushEndToEnd(t *testing.T) {
 func (e *env) setTransmitterClient(c *http.Client) {
 	e.t.Helper()
 	tx, err := transmitter.New(transmitter.Config{
+		Limits:          transmitter.RecommendedLimits(),
+		PushRetry:       transmitter.RecommendedPushRetry(),
 		PermitEvent:     transmitter.PermitAll,
 		Issuer:          e.cfg.Issuer,
 		SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(e.t), Algorithm: ssf.RS256, KeyID: "k1"}},
@@ -586,6 +597,8 @@ func TestKeyRotation(t *testing.T) {
 func (e *env) rotate(newKey *rsa.PrivateKey) {
 	e.t.Helper()
 	tx, err := transmitter.New(transmitter.Config{
+		Limits:      transmitter.RecommendedLimits(),
+		PushRetry:   transmitter.RecommendedPushRetry(),
 		PermitEvent: transmitter.PermitAll,
 		Issuer:      e.cfg.Issuer,
 		SigningKeys: []transmitter.SigningKey{
@@ -609,7 +622,7 @@ func TestKeyMaxAge(t *testing.T) {
 	now := time.Now()
 	e := newEnv(t, func(c *receiver.Config) {
 		c.Now = func() time.Time { return now }
-		c.KeyMaxAge = time.Hour
+		c.Limits.KeyMaxAge = time.Hour
 	})
 	h := e.rx.PushHandler(receiver.PushOptions{})
 	// The Transmitter retires k1 entirely: only k2 is published.
@@ -618,6 +631,8 @@ func TestKeyMaxAge(t *testing.T) {
 		t.Fatal(err)
 	}
 	tx, err := transmitter.New(transmitter.Config{
+		Limits:          transmitter.RecommendedLimits(),
+		PushRetry:       transmitter.RecommendedPushRetry(),
 		PermitEvent:     transmitter.PermitAll,
 		Issuer:          e.cfg.Issuer,
 		SigningKeys:     []transmitter.SigningKey{{Signer: newKey, Algorithm: ssf.RS256, KeyID: "k2"}},
@@ -659,6 +674,8 @@ func TestKeyMaxAge(t *testing.T) {
 func TestCriticalSubjectMembers(t *testing.T) {
 	e := newEnv(t)
 	tx, err := transmitter.New(transmitter.Config{
+		Limits:                 transmitter.RecommendedLimits(),
+		PushRetry:              transmitter.RecommendedPushRetry(),
 		PermitEvent:            transmitter.PermitAll,
 		Issuer:                 e.cfg.Issuer,
 		SigningKeys:            []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},

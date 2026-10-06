@@ -27,11 +27,12 @@ refused, not assumed.
   with a static implementation, such as `revocation.TokenIssuers` and
   `StaticTokenIssuers`.
 
-### 2. No implicit defaults for security-relevant configuration *(adopting)*
+### 2. No implicit defaults for security-relevant configuration
 
 Constructors validate their configuration and report every problem at
-once, with `errors.Join`. Each message names the field path, for example
-`revocation: options: max_clock_skew must not be negative`.
+once, with `errors.Join`. Each message names the field as the caller
+writes it in Go, for example
+`receiver: invalid config: Limits.MaxClockSkew must not be negative`.
 
 - Security-relevant settings must be given explicitly: lifetimes,
   retention, clock skew, limits and algorithms.
@@ -193,7 +194,7 @@ An unsafe choice needs more code and a name that says what it does.
 | Rule | Gap | Closes in |
 |---|---|---|
 | 1 | `revocation` trusted the issuer written in each subject | #45 |
-| 2 | The Receiver and Transmitter silently default `ReplayWindow`, `KeyMaxAge`, `MaxClockSkew` (zero becomes 1 minute) and other limits; there are no `Recommended*()` presets; error messages don't name field paths | Fail-closed config PR |
+| 2 | The Receiver and Transmitter silently defaulted `ReplayWindow`, `KeyMaxAge`, `MaxClockSkew` (zero became 1 minute), the Transmitter's limits, `LongPollTimeout` and `PushRetry`; there were no `Recommended*()` presets | #48 |
 | 3 | `revocation.Retention` was unbounded, and `sqlstore` wrapped far-future times | #45 |
 | 4 | `ClientCredentials.ClientSecret` and `Delivery.AuthorizationHeader` are plain strings | `Secret` PR |
 | 5 | `APIError.Error()` quotes response bodies; SET rejection descriptions carry up to 40 KB of attacker text into logs, responses and hooks | #47 |

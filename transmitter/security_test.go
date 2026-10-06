@@ -17,7 +17,7 @@ import (
 // An authenticated Receiver cannot grow Transmitter state without bound.
 func TestLimits(t *testing.T) {
 	f := newFixture(t, func(c *transmitter.Config) {
-		c.Limits = transmitter.Limits{StreamsPerReceiver: 3, SubjectRulesPerStream: 5, QueuedSETsPerStream: 4}
+		c.Limits = transmitter.Limits{StreamsPerReceiver: 3, SubjectRulesPerStream: 5, QueuedSETsPerStream: 4, LongPollTimeout: time.Second}
 	})
 	md := f.metadata()
 	for range 3 {
@@ -197,7 +197,7 @@ func TestReadOnlyTokenCannotReadPushCredential(t *testing.T) {
 // Only one long poll per stream waits at a time; another is answered at
 // once, so a Receiver cannot tie up any number of waiting requests.
 func TestOneLongPollPerStream(t *testing.T) {
-	f := newFixture(t, func(c *transmitter.Config) { c.LongPollTimeout = 2 * time.Second })
+	f := newFixture(t, func(c *transmitter.Config) { c.Limits.LongPollTimeout = 2 * time.Second })
 	c := pollStream(f, "alice")
 	first := make(chan struct{})
 	go func() {

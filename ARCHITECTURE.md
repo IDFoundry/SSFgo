@@ -214,8 +214,8 @@ RS256 with a 2048-bit key:
   while the Receiver fetches a rotated key, `authentication_failed` or
   `access_denied` while a credential is updated — is retried up to eight
   times; any other RFC 8935 error drops the SET at once.
-- **Keys.** The Receiver refetches the JWKS after `KeyMaxAge` (24 h by
-  default) so retired keys stop being trusted, and when a SET names an
+- **Keys.** The Receiver refetches the JWKS after `Limits.KeyMaxAge` (24 h
+  in `RecommendedLimits`) so retired keys stop being trusted, and when a SET names an
   unknown key; all refetches are rate-limited to one a minute and a failed
   refetch keeps the keys already held. A refetch runs on its own context
   and is shared by concurrent callers, so a push client that hangs up can

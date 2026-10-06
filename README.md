@@ -46,6 +46,8 @@ tx, err := transmitter.New(transmitter.Config{
 	Store:           memstore.NewStreamStore(),
 	Authorize:       authorizeAccessToken, // your OAuth resource-server check
 	PermitEvent:     permitEvent,          // which Receiver may see which subject's events
+	Limits:          transmitter.RecommendedLimits(),
+	PushRetry:       transmitter.RecommendedPushRetry(),
 })
 go tx.Run(ctx) // push delivery
 http.ListenAndServeTLS(":443", cert, key, tx.Handler())
@@ -66,6 +68,7 @@ rx, err := receiver.New(ctx, receiver.Config{
 	Algorithms:  []ssf.SignatureAlgorithm{ssf.RS256},
 	TokenSource: &receiver.ClientCredentials{TokenURL: tokenURL, ClientID: id, ClientSecret: secret, AuthMethod: receiver.ClientSecretBasic},
 	ReplayStore: memstore.NewReplayStore(),
+	Limits:      receiver.RecommendedLimits(), // replay window, key age, clock skew
 })
 // Optional: interop.ApplyReceiver(&cfg) before receiver.New holds the
 // Transmitter to the CAEP Interoperability Profile.

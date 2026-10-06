@@ -23,6 +23,8 @@ func config(t *testing.T) transmitter.Config {
 		t.Fatal(err)
 	}
 	return transmitter.Config{
+		Limits:          transmitter.RecommendedLimits(),
+		PushRetry:       transmitter.RecommendedPushRetry(),
 		PermitEvent:     transmitter.PermitAll,
 		Issuer:          "https://tx.example",
 		SigningKeys:     []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "k"}},

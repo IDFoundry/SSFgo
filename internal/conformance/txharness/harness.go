@@ -87,7 +87,12 @@ func Run(o *Options, store storage.StreamStore) error {
 	if err != nil {
 		return err
 	}
+	// The suite does not always delete the streams its modules create, so
+	// allow many more than recommended.
+	limits := transmitter.RecommendedLimits()
+	limits.StreamsPerReceiver = 1000
 	cfg := transmitter.Config{
+		PushRetry:                  transmitter.RecommendedPushRetry(),
 		PermitEvent:                transmitter.PermitAll,
 		Issuer:                     o.Issuer,
 		SigningKeys:                []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "ssfgo-conformance-1"}},
@@ -97,9 +102,7 @@ func Run(o *Options, store storage.StreamStore) error {
 		Store:                      store,
 		Authorize:                  as.authorize,
 		MultipleStreamsPerReceiver: !o.SingleStream,
-		// The suite does not always delete the streams its modules
-		// create, so allow many more than the default.
-		Limits: transmitter.Limits{StreamsPerReceiver: 1000},
+		Limits:                     limits,
 		// Exercise both optional SSF features against the suite: a
 		// Transmitter-initiated verification on every new stream (the
 		// suite accepts these, SSF §8.1.4), and an inactivity timeout
