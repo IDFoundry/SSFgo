@@ -82,9 +82,9 @@ func TestReceiverPush(t *testing.T) {
 		handled <- set
 		return nil
 	})
-	app.Config.Handler = rx.PushHandler(receiver.PushOptions{AuthorizationHeader: "Bearer push"})
+	app.Config.Handler = rx.PushHandler(receiver.PushOptions{AuthorizationHeader: ssf.NewSecret("Bearer push")})
 	if _, err := rx.EnsureStream(ctx, receiver.StreamRequest{Delivery: &ssf.Delivery{
-		Method: ssf.DeliveryPush, EndpointURL: app.URL + "/events", AuthorizationHeader: "Bearer push",
+		Method: ssf.DeliveryPush, EndpointURL: app.URL + "/events", AuthorizationHeader: ssf.NewSecret("Bearer push"),
 	}}); err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -31,8 +32,19 @@ type tokenInvalidator interface {
 }
 
 // StaticToken is a TokenSource that always returns the same token, for
-// access tokens issued out of band.
+// access tokens issued out of band. Printed or logged, it is withheld,
+// like an ssf.Secret.
 type StaticToken string
+
+// String returns a fixed placeholder, never the token.
+func (t StaticToken) String() string { return "[REDACTED]" }
+
+// GoString implements fmt.GoStringer, so %#v withholds the token too.
+func (t StaticToken) GoString() string { return "receiver.StaticToken([REDACTED])" }
+
+// LogValue implements slog.LogValuer, so a logged StaticToken is
+// withheld.
+func (t StaticToken) LogValue() slog.Value { return slog.StringValue("[REDACTED]") }
 
 // Token implements TokenSource.
 func (t StaticToken) Token(context.Context) (string, error) {
@@ -67,7 +79,7 @@ type ClientCredentials struct {
 	TokenURL string
 	ClientID string
 	// ClientSecret is used by every AuthMethod except PrivateKeyJWT.
-	ClientSecret string
+	ClientSecret ssf.Secret
 	// Scopes to request, e.g. "ssf.read" and "ssf.manage" (CAEP Interop
 	// §2.7.3). Optional.
 	Scopes     []string
@@ -131,7 +143,7 @@ func (c *ClientCredentials) fetch(ctx context.Context) (string, time.Duration, e
 	if c.AuthMethod == ClientSecretBasic {
 		// RFC 6749 §2.3.1: the credentials are form-encoded before being
 		// used as the Basic user name and password.
-		req.SetBasicAuth(url.QueryEscape(c.ClientID), url.QueryEscape(c.ClientSecret))
+		req.SetBasicAuth(url.QueryEscape(c.ClientID), url.QueryEscape(c.ClientSecret.Reveal()))
 	}
 	client := c.HTTPClient
 	if client == nil {
@@ -159,7 +171,7 @@ func (c *ClientCredentials) tokenForm() (url.Values, error) {
 		// The request carries the client's credentials.
 		return nil, fmt.Errorf("receiver: TokenURL %q must be an https URL", c.TokenURL)
 	}
-	if c.AuthMethod != PrivateKeyJWT && c.ClientSecret == "" {
+	if c.AuthMethod != PrivateKeyJWT && c.ClientSecret.IsZero() {
 		return nil, fmt.Errorf("receiver: %s needs a ClientSecret", c.AuthMethod)
 	}
 	form := url.Values{"grant_type": {"client_credentials"}}
@@ -170,7 +182,7 @@ func (c *ClientCredentials) tokenForm() (url.Values, error) {
 	case ClientSecretBasic:
 	case ClientSecretPost:
 		form.Set("client_id", c.ClientID)
-		form.Set("client_secret", c.ClientSecret)
+		form.Set("client_secret", c.ClientSecret.Reveal())
 	case ClientSecretJWT, PrivateKeyJWT:
 		assertion, err := c.assertion()
 		if err != nil {
@@ -191,7 +203,7 @@ func (c *ClientCredentials) assertion() (string, error) {
 		o.Audience = c.TokenURL
 	}
 	if c.AuthMethod == ClientSecretJWT {
-		o.Secret = []byte(c.ClientSecret)
+		o.Secret = []byte(c.ClientSecret.Reveal())
 	} else {
 		o.Signer, o.Algorithm, o.KeyID = c.SigningKey, c.SigningAlgorithm, c.KeyID
 	}

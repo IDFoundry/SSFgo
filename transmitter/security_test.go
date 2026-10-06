@@ -184,12 +184,12 @@ func TestReadOnlyTokenCannotReadPushCredential(t *testing.T) {
 	f.do("GET", url+"?stream_id="+c.StreamID, "alice-readonly", nil).json(t, &one)
 	var all []ssf.StreamConfiguration
 	f.do("GET", url, "alice-readonly", nil).json(t, &all)
-	if one.Delivery.AuthorizationHeader != "" || len(all) != 1 || all[0].Delivery.AuthorizationHeader != "" {
+	if !one.Delivery.AuthorizationHeader.IsZero() || len(all) != 1 || !all[0].Delivery.AuthorizationHeader.IsZero() {
 		t.Errorf("read-only token read authorization_header %q / %v", one.Delivery.AuthorizationHeader, all)
 	}
 	var managed ssf.StreamConfiguration
 	f.do("GET", url+"?stream_id="+c.StreamID, "alice", nil).json(t, &managed)
-	if managed.Delivery.AuthorizationHeader != "Bearer push-token" {
+	if managed.Delivery.AuthorizationHeader.Reveal() != "Bearer push-token" {
 		t.Errorf("manage token read authorization_header %q", managed.Delivery.AuthorizationHeader)
 	}
 }

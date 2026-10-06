@@ -54,7 +54,7 @@ func sampleStream(id, receiver string) storage.Stream {
 		ID:              id,
 		ReceiverID:      receiver,
 		Audience:        []string{"https://rx.example.com/" + receiver},
-		Delivery:        ssf.Delivery{Method: ssf.DeliveryPush, EndpointURL: "https://rx.example.com/events", AuthorizationHeader: "Bearer x"},
+		Delivery:        ssf.Delivery{Method: ssf.DeliveryPush, EndpointURL: "https://rx.example.com/events", AuthorizationHeader: ssf.NewSecret("Bearer x")},
 		EventsRequested: []ssf.EventType{"https://example.com/a", "https://example.com/b"},
 		EventsDelivered: []ssf.EventType{"https://example.com/a"},
 		Description:     "sample",

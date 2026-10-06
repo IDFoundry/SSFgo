@@ -92,12 +92,12 @@ func (s *session) run(ctx context.Context) error {
 	req := receiver.StreamRequest{Description: "SSFgo conformance Receiver"}
 	if s.o.delivery == "push" {
 		auth := "Bearer " + random()
-		s.push.set(s.moduleID, rx.PushHandler(receiver.PushOptions{AuthorizationHeader: auth}))
+		s.push.set(s.moduleID, rx.PushHandler(receiver.PushOptions{AuthorizationHeader: ssf.NewSecret(auth)}))
 		defer s.push.set(s.moduleID, nil)
 		req.Delivery = &ssf.Delivery{
 			Method:              ssf.DeliveryPush,
 			EndpointURL:         strings.TrimSuffix(s.o.pushBase, "/") + "/push/" + s.moduleID,
-			AuthorizationHeader: auth,
+			AuthorizationHeader: ssf.NewSecret(auth),
 		}
 	} else {
 		req.Delivery = &ssf.Delivery{Method: ssf.DeliveryPoll}
@@ -173,7 +173,7 @@ func (s *session) tokenSource() (receiver.TokenSource, error) {
 	cc := &receiver.ClientCredentials{
 		TokenURL:     s.exposed["ssf_token_endpoint"],
 		ClientID:     s.exposed["ssf_client_id"],
-		ClientSecret: s.exposed["ssf_client_secret"],
+		ClientSecret: ssf.NewSecret(s.exposed["ssf_client_secret"]),
 		Scopes:       strings.Fields(s.exposed["ssf_client_scope"]),
 		AuthMethod:   receiver.ClientAuthMethod(s.o.clientAuth),
 		HTTPClient:   s.client,

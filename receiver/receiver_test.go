@@ -350,13 +350,13 @@ func TestPushEndToEnd(t *testing.T) {
 	var rec recorder
 	rec.install(e.rx)
 
-	pushSrv := httptest.NewTLSServer(e.rx.PushHandler(receiver.PushOptions{AuthorizationHeader: "Bearer push-secret"}))
+	pushSrv := httptest.NewTLSServer(e.rx.PushHandler(receiver.PushOptions{AuthorizationHeader: ssf.NewSecret("Bearer push-secret")}))
 	defer pushSrv.Close()
 	// The Transmitter must trust the push server's test certificate.
 	e.setTransmitterClient(pushSrv.Client())
 
 	stream, err := e.rx.CreateStream(ctx, receiver.StreamRequest{Delivery: &ssf.Delivery{
-		Method: ssf.DeliveryPush, EndpointURL: pushSrv.URL + "/events", AuthorizationHeader: "Bearer push-secret",
+		Method: ssf.DeliveryPush, EndpointURL: pushSrv.URL + "/events", AuthorizationHeader: ssf.NewSecret("Bearer push-secret"),
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -455,7 +455,7 @@ func TestPushHandlerRejections(t *testing.T) {
 	e := newEnv(t)
 	var rec recorder
 	rec.install(e.rx)
-	h := e.rx.PushHandler(receiver.PushOptions{AuthorizationHeader: "Bearer push-secret"})
+	h := e.rx.PushHandler(receiver.PushOptions{AuthorizationHeader: ssf.NewSecret("Bearer push-secret")})
 	const auth = "Bearer push-secret"
 
 	for name, c := range map[string]struct {
@@ -910,7 +910,7 @@ func TestClientCredentials(t *testing.T) {
 	for _, method := range []receiver.ClientAuthMethod{receiver.ClientSecretBasic, receiver.ClientSecretPost} {
 		calls.Store(0)
 		cc := &receiver.ClientCredentials{
-			TokenURL: srv.URL, ClientID: "client", ClientSecret: "s3cret",
+			TokenURL: srv.URL, ClientID: "client", ClientSecret: ssf.NewSecret("s3cret"),
 			Scopes: []string{"ssf.read", "ssf.manage"}, AuthMethod: method, HTTPClient: srv.Client(),
 		}
 		first, err := cc.Token(context.Background())
@@ -925,11 +925,11 @@ func TestClientCredentials(t *testing.T) {
 			t.Errorf("%s: Invalidate did not force a new token", method)
 		}
 	}
-	bad := &receiver.ClientCredentials{TokenURL: srv.URL, ClientID: "client", ClientSecret: "wrong", AuthMethod: receiver.ClientSecretBasic, HTTPClient: srv.Client()}
+	bad := &receiver.ClientCredentials{TokenURL: srv.URL, ClientID: "client", ClientSecret: ssf.NewSecret("wrong"), AuthMethod: receiver.ClientSecretBasic, HTTPClient: srv.Client()}
 	if _, err := bad.Token(context.Background()); err == nil {
 		t.Error("wrong secret accepted")
 	}
-	unknown := &receiver.ClientCredentials{TokenURL: srv.URL, ClientID: "c", ClientSecret: "s", AuthMethod: "tls_client_auth"}
+	unknown := &receiver.ClientCredentials{TokenURL: srv.URL, ClientID: "c", ClientSecret: ssf.NewSecret("s"), AuthMethod: "tls_client_auth"}
 	if _, err := unknown.Token(context.Background()); err == nil {
 		t.Error("unsupported auth method accepted")
 	}
@@ -986,7 +986,7 @@ func TestClientAssertions(t *testing.T) {
 	tokenURL = srv.URL + "/token"
 
 	for _, cc := range []*receiver.ClientCredentials{
-		{TokenURL: tokenURL, ClientID: "client", ClientSecret: secret, AuthMethod: receiver.ClientSecretJWT, HTTPClient: srv.Client()},
+		{TokenURL: tokenURL, ClientID: "client", ClientSecret: ssf.NewSecret(secret), AuthMethod: receiver.ClientSecretJWT, HTTPClient: srv.Client()},
 		{TokenURL: tokenURL, ClientID: "client", AuthMethod: receiver.PrivateKeyJWT, SigningKey: key, SigningAlgorithm: ssf.PS256, KeyID: "k", HTTPClient: srv.Client()},
 	} {
 		if tok, err := cc.Token(context.Background()); err != nil || tok != "t" {

@@ -88,7 +88,7 @@ func TestHandlerPanicAllowsRedelivery(t *testing.T) {
 }
 
 func TestTokenURLMustBeHTTPS(t *testing.T) {
-	cc := &receiver.ClientCredentials{TokenURL: "http://as.example/token", ClientID: "c", ClientSecret: "s", AuthMethod: receiver.ClientSecretBasic}
+	cc := &receiver.ClientCredentials{TokenURL: "http://as.example/token", ClientID: "c", ClientSecret: ssf.NewSecret("s"), AuthMethod: receiver.ClientSecretBasic}
 	if _, err := cc.Token(context.Background()); err == nil || !strings.Contains(err.Error(), "https") {
 		t.Errorf("Token with an http TokenURL = %v", err)
 	}
@@ -381,5 +381,21 @@ func TestRejectionDescriptionBounded(t *testing.T) {
 	}
 	if info.Err == nil || len(info.Err.Error()) > 512 || strings.ContainsAny(info.Err.Error(), "\n") {
 		t.Errorf("hook error kept %d bytes: %.80q", len(fmt.Sprint(info.Err)), info.Err)
+	}
+}
+
+// A Receiver's credentials are withheld when its configuration is printed
+// or logged: a static access token, a client secret, a push
+// Authorization header.
+func TestCredentialsWithheld(t *testing.T) {
+	cfg := receiver.Config{TokenSource: receiver.StaticToken("tok3n-value")}
+	cc := &receiver.ClientCredentials{ClientID: "c", ClientSecret: ssf.NewSecret("s3cret-value")}
+	opts := receiver.PushOptions{AuthorizationHeader: ssf.NewSecret("Bearer h3ader-value")}
+	var buf strings.Builder
+	slog.New(slog.NewTextHandler(&buf, nil)).Info("x", "token", cfg.TokenSource, "cc", cc, "opts", opts)
+	for _, out := range []string{fmt.Sprintf("%v %+v %#v", cfg, cc, opts), fmt.Sprintf("%#v %+v", cfg, cc), buf.String()} {
+		if strings.Contains(out, "-value") {
+			t.Errorf("a credential was printed: %s", out)
+		}
 	}
 }

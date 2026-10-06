@@ -394,7 +394,7 @@ func TestStreamLifecycle(t *testing.T) {
 		t.Errorf("events_delivered = %v, want the three supported events requested", created.EventsDelivered)
 	}
 	if created.Delivery.Method != ssf.DeliveryPush || created.Delivery.EndpointURL != "https://rx.example/ssf-push" ||
-		created.Delivery.AuthorizationHeader != "Bearer push-token" {
+		created.Delivery.AuthorizationHeader.Reveal() != "Bearer push-token" {
 		t.Errorf("delivery = %+v", created.Delivery)
 	}
 	if created.MinVerificationInterval != 30 {
@@ -639,7 +639,7 @@ func TestPatchAcceptsMatchingTransmitterFields(t *testing.T) {
 	expect(t, r, http.StatusOK)
 	var got ssf.StreamConfiguration
 	r.json(t, &got)
-	if got.Description != "edited" || got.Delivery.AuthorizationHeader != "Bearer push-token" || len(got.EventsDelivered) != 3 {
+	if got.Description != "edited" || got.Delivery.AuthorizationHeader.Reveal() != "Bearer push-token" || len(got.EventsDelivered) != 3 {
 		t.Errorf("read-modify-replace lost data: %+v", got)
 	}
 }

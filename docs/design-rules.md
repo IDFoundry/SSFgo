@@ -55,15 +55,20 @@ writes it in Go, for example
 
 Durations follow FAPIgo's names: `MaxClockSkew`, `Retention`, `KeyMaxAge`.
 
-### 4. Secrets are a type, not a string *(adopting)*
+### 4. Secrets are a type, not a string
 
-A credential is held in a `Secret`:
-- `String`, `GoString` and `MarshalText` all redact;
-- `Reveal()` is the only way to read the value.
+A credential is held in an `ssf.Secret`:
+- `String`, `GoString` and `LogValue` withhold it, and `MarshalText`
+  fails;
+- `Reveal()` is the only way to read the value, where it is sent.
 
 So a client secret, a push `authorization_header` or a bearer token
-cannot reach a log, a `%v` or a JSON body by accident. The library never
-logs secrets, tokens or subject identifiers.
+cannot reach a log, a `%v` or a JSON body by accident. A wire type that
+must carry one reveals it in its own `MarshalJSON` — `ssf.Delivery`, whose
+JSON is the protocol's — and such a type is never logged whole. A
+credential that must stay a string type, such as `receiver.StaticToken`,
+withholds itself the same way. The library never logs secrets, tokens or
+subject identifiers.
 
 ### 5. Errors own their exposure *(adopting)*
 
@@ -196,7 +201,7 @@ An unsafe choice needs more code and a name that says what it does.
 | 1 | `revocation` trusted the issuer written in each subject | #45 |
 | 2 | The Receiver and Transmitter silently defaulted `ReplayWindow`, `KeyMaxAge`, `MaxClockSkew` (zero became 1 minute), the Transmitter's limits, `LongPollTimeout` and `PushRetry`; there were no `Recommended*()` presets | #50 |
 | 3 | `revocation.Retention` was unbounded, and `sqlstore` wrapped far-future times | #45 |
-| 4 | `ClientCredentials.ClientSecret` and `Delivery.AuthorizationHeader` are plain strings | `Secret` PR |
+| 4 | `ClientCredentials.ClientSecret`, `Delivery.AuthorizationHeader` and `PushOptions.AuthorizationHeader` were plain strings, and `StaticToken` printed itself | #51 |
 | 5 | `APIError.Error()` quotes response bodies; SET rejection descriptions carry up to 40 KB of attacker text into logs, responses and hooks | #47 |
 | 6 | SCIM full/notice exclusivity is case-sensitive; SCIM `uri` accepts `\`; proprietary format names accept invisible Unicode; `revocation` folded email with `strings.ToLower` | #45, #47 |
 | 7 | `Hooks.KeysRefreshed` runs on the detached key-refresh goroutine | #47 |

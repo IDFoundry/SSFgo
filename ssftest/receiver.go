@@ -92,7 +92,7 @@ func (rr *Receiver) Connect(cfg receiver.Config) {
 		rx.Handle(typ, rr.record)
 	}
 	rr.rx = rx
-	rr.srv.Config.Handler = rx.PushHandler(receiver.PushOptions{AuthorizationHeader: rr.auth})
+	rr.srv.Config.Handler = rx.PushHandler(receiver.PushOptions{AuthorizationHeader: ssf.NewSecret(rr.auth)})
 }
 
 func (rr *Receiver) record(_ context.Context, set ssf.SET) error {
@@ -116,7 +116,7 @@ func (rr *Receiver) PushStreamRequest() receiver.StreamRequest {
 	return receiver.StreamRequest{Delivery: &ssf.Delivery{
 		Method:              ssf.DeliveryPush,
 		EndpointURL:         rr.srv.URL + "/ssf/push",
-		AuthorizationHeader: rr.auth,
+		AuthorizationHeader: ssf.NewSecret(rr.auth),
 	}}
 }
 

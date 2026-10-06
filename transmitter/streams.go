@@ -120,7 +120,7 @@ func (t *Transmitter) validatePushEndpoint(d ssf.Delivery, rx Receiver) error {
 		return badRequest("push endpoint_url must not contain credentials; use authorization_header")
 	case len(d.EndpointURL) > maxURLBytes:
 		return badRequest("push endpoint_url is too long")
-	case !validHeaderValue(d.AuthorizationHeader):
+	case !validHeaderValue(d.AuthorizationHeader.Reveal()):
 		return badRequest("authorization_header must be a valid HTTP header value of at most %d bytes", maxHeaderBytes)
 	}
 	if t.cfg.AllowPushEndpoint != nil {
@@ -308,7 +308,7 @@ func (t *Transmitter) readStreams(w http.ResponseWriter, r *http.Request, rx Rec
 // push endpoint, which a read-only token has no need to see.
 func redactFor(rx Receiver, c ssf.StreamConfiguration) ssf.StreamConfiguration {
 	if rx.Access != AccessManage {
-		c.Delivery.AuthorizationHeader = ""
+		c.Delivery.AuthorizationHeader = ssf.Secret{}
 	}
 	return c
 }

@@ -293,3 +293,12 @@ Configuration that decides security has no implicit defaults
   defaults.
 - `ssftest` fills in the recommended values where a test leaves them
   unset.
+
+Credentials are a type, not a string (rule 4): the new `ssf.Secret`
+withholds its value from `String`, `%#v`, `slog` and encoding, and gives
+it up only through `Reveal`. `ssf.Delivery.AuthorizationHeader`,
+`receiver.PushOptions.AuthorizationHeader` and
+`receiver.ClientCredentials.ClientSecret` are now `ssf.Secret` — wrap
+values with `ssf.NewSecret`. `ssf.Delivery`'s JSON, the wire form, still
+carries the header; `receiver.StaticToken` withholds itself when printed
+or logged.
