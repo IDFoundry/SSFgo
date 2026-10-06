@@ -12,3 +12,10 @@ func SetKeepAliveUnknownInterval(t *testing.T, d time.Duration) {
 	keepAliveUnknownInterval = d
 	t.Cleanup(func() { keepAliveUnknownInterval = old })
 }
+
+// SetEnsureRetry shortens EnsureStream's backoff for the rest of the test.
+func SetEnsureRetry(t *testing.T, d time.Duration) {
+	oldMin, oldMax := ensureRetryMin, ensureRetryMax
+	ensureRetryMin, ensureRetryMax = d, d
+	t.Cleanup(func() { ensureRetryMin, ensureRetryMax = oldMin, oldMax })
+}

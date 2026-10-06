@@ -33,6 +33,12 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 
 ### Added since v0.5
 
+- `Receiver.EnsureStream`: reuses the stream with the wanted delivery
+  method (and push endpoint), updating its requested events, description
+  or push `authorization_header` where they differ, or creates one —
+  replacing the only stream on a Transmitter that allows one per
+  Receiver. It retries while the Transmitter is unreachable, overloaded
+  or not done processing, so a Receiver can call it on every start.
 - Signing algorithms RS384, RS512, PS384, PS512, ES384 (P-384) and ES512
   (P-521), alongside RS256, PS256, ES256 and EdDSA — every asymmetric
   algorithm of RFC 7518 §3.1 — for signing, verification, JWKs and

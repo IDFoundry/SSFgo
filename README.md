@@ -73,7 +73,9 @@ receiver.On(rx, func(ctx context.Context, set ssf.SET, e caep.SessionRevoked) er
 	return sessions.RevokeAll(ctx, set.Subject)
 })
 http.Handle("/ssf/events", rx.PushHandler(receiver.PushOptions{AuthorizationHeader: pushSecret}))
-stream, err := rx.CreateStream(ctx, receiver.StreamRequest{Delivery: &ssf.Delivery{
+// Creates the stream on the first start; later starts reuse it, updating
+// whatever changed, and wait out a Transmitter that is briefly unavailable.
+stream, err := rx.EnsureStream(ctx, receiver.StreamRequest{Delivery: &ssf.Delivery{
 	Method: ssf.DeliveryPush, EndpointURL: "https://rp.example.com/ssf/events", AuthorizationHeader: pushSecret,
 }})
 ```
