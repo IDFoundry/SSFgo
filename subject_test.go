@@ -341,3 +341,44 @@ func TestSCIMSubject(t *testing.T) {
 		t.Error("scim carried as a proprietary subject was encoded")
 	}
 }
+
+// A subject naming a member twice is refused: parsers disagree on which
+// occurrence wins, so two parties could read one subject differently.
+func TestParseSubjectRefusesRepeatedMembers(t *testing.T) {
+	for name, in := range map[string]string{
+		"email twice":            `{"format":"email","email":"a@example.com","email":"b@example.com"}`,
+		"format twice":           `{"format":"email","format":"opaque","id":"x"}`,
+		"complex member twice":   `{"format":"complex","user":{"format":"opaque","id":"a"},"user":{"format":"opaque","id":"b"}}`,
+		"repeat inside a member": `{"format":"complex","user":{"format":"opaque","id":"a","id":"b"}}`,
+		"repeat inside an alias": `{"format":"aliases","identifiers":[{"format":"opaque","id":"a","id":"b"}]}`,
+	} {
+		if _, err := ParseSubject([]byte(in)); !errors.Is(err, ErrInvalidSubject) {
+			t.Errorf("%s: %v, want ErrInvalidSubject", name, err)
+		}
+	}
+}
+
+// A proprietary format name follows the registry's syntax, as SSF 1.0's
+// own "catalog_item" does, or is an absolute URI.
+func TestProprietaryFormatNames(t *testing.T) {
+	for name, ok := range map[string]bool{
+		"catalog_item":                     true,
+		"vendor-format-2":                  true,
+		"urn:example:catalog":              true,
+		"https://formats.example.com/item": true,
+		"My Format!":                       false,
+		"Catalog":                          false,
+		"catalog item":                     false,
+		"relative/path":                    false,
+		"https://formats.example.com/a b":  false,
+		"mailto:":                          false,
+	} {
+		_, err := json.Marshal(ProprietarySubject{FormatName: SubjectFormat(name), Members: map[string]json.RawMessage{"id": json.RawMessage(`"x"`)}})
+		if ok && err != nil {
+			t.Errorf("%q refused: %v", name, err)
+		}
+		if !ok && err == nil {
+			t.Errorf("%q accepted", name)
+		}
+	}
+}

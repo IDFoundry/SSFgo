@@ -283,17 +283,22 @@ func TestDecodeRejects(t *testing.T) {
 		"two events": {mutate: func(c map[string]any) {
 			c["events"].(map[string]any)[string(risc.AccountEnabledEventType)] = map[string]any{}
 		}, code: CodeInvalidRequest},
-		"no events":     {mutate: func(c map[string]any) { c["events"] = map[string]any{} }, code: CodeInvalidRequest},
-		"events array":  {mutate: func(c map[string]any) { c["events"] = []any{} }, code: CodeInvalidRequest},
-		"wrong iss":     {mutate: func(c map[string]any) { c["iss"] = "https://evil.example" }, code: CodeInvalidIssuer},
-		"wrong aud":     {mutate: func(c map[string]any) { c["aud"] = "someone-else" }, code: CodeInvalidAudience},
-		"aud array":     {mutate: func(c map[string]any) { c["aud"] = []any{"x", "y"} }, code: CodeInvalidAudience},
-		"aud numeric":   {mutate: func(c map[string]any) { c["aud"] = 5 }, code: CodeInvalidRequest},
-		"no iss":        {mutate: func(c map[string]any) { delete(c, "iss") }, code: CodeInvalidRequest},
-		"no jti":        {mutate: func(c map[string]any) { delete(c, "jti") }, code: CodeInvalidRequest},
-		"no iat":        {mutate: func(c map[string]any) { delete(c, "iat") }, code: CodeInvalidRequest},
-		"string iat":    {mutate: func(c map[string]any) { c["iat"] = "1700000000" }, code: CodeInvalidRequest},
-		"future iat":    {mutate: func(c map[string]any) { c["iat"] = 1700000000 + 3600 }, opts: func(o *VerifyOptions) { o.Now = func() time.Time { return time.Unix(1700000000, 0) } }, code: CodeInvalidRequest},
+		"no events":    {mutate: func(c map[string]any) { c["events"] = map[string]any{} }, code: CodeInvalidRequest},
+		"events array": {mutate: func(c map[string]any) { c["events"] = []any{} }, code: CodeInvalidRequest},
+		"wrong iss":    {mutate: func(c map[string]any) { c["iss"] = "https://evil.example" }, code: CodeInvalidIssuer},
+		"wrong aud":    {mutate: func(c map[string]any) { c["aud"] = "someone-else" }, code: CodeInvalidAudience},
+		"aud array":    {mutate: func(c map[string]any) { c["aud"] = []any{"x", "y"} }, code: CodeInvalidAudience},
+		"aud numeric":  {mutate: func(c map[string]any) { c["aud"] = 5 }, code: CodeInvalidRequest},
+		"no iss":       {mutate: func(c map[string]any) { delete(c, "iss") }, code: CodeInvalidRequest},
+		"no jti":       {mutate: func(c map[string]any) { delete(c, "jti") }, code: CodeInvalidRequest},
+		"no iat":       {mutate: func(c map[string]any) { delete(c, "iat") }, code: CodeInvalidRequest},
+		"string iat":   {mutate: func(c map[string]any) { c["iat"] = "1700000000" }, code: CodeInvalidRequest},
+		"future iat":   {mutate: func(c map[string]any) { c["iat"] = 1700000000 + 3600 }, opts: func(o *VerifyOptions) { o.Now = func() time.Time { return time.Unix(1700000000, 0) } }, code: CodeInvalidRequest},
+		"future nbf":   {mutate: func(c map[string]any) { c["nbf"] = 1700000000 + 3600 }, opts: func(o *VerifyOptions) { o.Now = func() time.Time { return time.Unix(1700000000, 0) } }, code: CodeInvalidRequest},
+		"string nbf":   {mutate: func(c map[string]any) { c["nbf"] = "1700000000" }, code: CodeInvalidRequest},
+		"badly named proprietary sub_id": {mutate: func(c map[string]any) {
+			c["sub_id"] = map[string]any{"format": "My Format!", "id": "x"}
+		}, code: CodeInvalidRequest},
 		"no sub_id":     {mutate: func(c map[string]any) { delete(c, "sub_id") }, code: CodeInvalidRequest},
 		"bad sub_id":    {mutate: func(c map[string]any) { c["sub_id"] = map[string]any{"format": "email"} }, code: CodeInvalidRequest},
 		"legacy sub_id": {mutate: func(c map[string]any) { c["sub_id"] = map[string]any{"subject_type": "email", "email": "a@b"} }, code: CodeInvalidRequest},
@@ -382,6 +387,14 @@ func TestDecodeAccepts(t *testing.T) {
 			c["extra"] = true
 			c["sub_id"].(map[string]any)["extra"] = 1
 			c["events"].(map[string]any)[string(caep.SessionRevokedEventType)].(map[string]any)["extra"] = "x"
+		}},
+		"past nbf": {mutate: func(c map[string]any) { c["nbf"] = 1600000000 }},
+		"nbf within the clock skew": {
+			mutate: func(c map[string]any) { c["nbf"] = 1700000030 },
+			opts:   func(o *VerifyOptions) { o.Now = func() time.Time { return time.Unix(1700000000, 0) } },
+		},
+		"proprietary sub_id named by URI": {mutate: func(c map[string]any) {
+			c["sub_id"] = map[string]any{"format": "urn:example:catalog", "id": "x"}
 		}},
 		"small clock skew": {
 			mutate: func(c map[string]any) { c["iat"] = 1700000030 },
