@@ -33,6 +33,12 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 
 ### Added since v0.5
 
+- `ssftest`: an in-process Transmitter (`NewTransmitter`) for testing a
+  Receiver — with a ready `ReceiverConfig`, `Emit`, and `SetAvailable` to
+  simulate an outage — and an in-process Receiver (`NewReceiver`, then
+  `Connect`) for testing a Transmitter, recording every SET it receives
+  (`Received`, `WaitFor`). Both are real SSFgo implementations on TLS test
+  servers, closed when the test ends.
 - `Receiver.EnsureStream`: reuses the stream with the wanted delivery
   method (and push endpoint), updating its requested events, description
   or push `authorization_header` where they differ, or creates one —

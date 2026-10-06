@@ -31,6 +31,7 @@ github.com/idfoundry/ssfgo     // package ssf: shared value types only
 │   ├── sqlstore/              // PostgreSQL and SQLite (a separate module)
 │   │   └── cmd/conformance-transmitter/ // the conformance Transmitter on sqlstore
 │   └── storagetest/           // exported contract tests for third-party backends
+├── ssftest/                   // in-process Transmitter and Receiver for applications' tests
 ├── internal/
 │   ├── jose/                  // minimal JWS: RS, PS and ES 256/384/512, EdDSA; JWK/JWKS
 │   ├── critical/              // RFC 7515 "crit" check
@@ -79,12 +80,14 @@ scim        ──► ssf
 transmitter ──► ssf, storage, internal/*
 receiver    ──► ssf, storage, internal/*
 caep/interop ─► ssf, caep, transmitter, receiver
+ssftest     ──► ssf, caep, risc, scim, transmitter, receiver, storage/memstore
 ```
 
 - `transmitter` and `receiver` never import each other. They share
   protocol implementation through `internal/`, not role-level types.
 - Nothing in the library imports `caep`, `risc` or `scim` except
-  `caep/interop` and applications. Event families are plugged in through `ssf.Registry`.
+  `caep/interop`, `ssftest` (whose test parties know every event type)
+  and applications. Event families are plugged in through `ssf.Registry`.
 - `risc` may import `caep` only for value types RISC normatively
   references (RISC §2.7: `credential_type` takes CAEP's values). It never
   aliases or converts events between families: the deprecated RISC
