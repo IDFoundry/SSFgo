@@ -10,6 +10,11 @@ fix. A change that looks reasonable in isolation can conflict with a
 specification requirement, a rule in [ARCHITECTURE.md](ARCHITECTURE.md),
 or suite behaviour that is not obvious from the code.
 
+New API follows the security and developer-experience conventions in
+[docs/design-rules.md](docs/design-rules.md): explicit, fail-closed
+configuration; named limits; secrets and errors that control what they
+expose; hooks that cannot take down the process.
+
 ## Before you open a pull request
 
 - `gofmt -l .`, `go vet ./...`, `go test -race ./...` and
