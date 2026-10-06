@@ -2,6 +2,7 @@ package receiver
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,7 @@ import (
 
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/internal/jose"
+	"github.com/idfoundry/ssfgo/internal/peertext"
 )
 
 // Receiver is an SSF Receiver bound to one Transmitter. Create one with New.
@@ -212,10 +214,10 @@ const keyRefetchInterval = time.Minute
 // keyFetchTimeout bounds one JWKS refetch.
 const keyFetchTimeout = 30 * time.Second
 
-// keyFetch is one JWKS refetch; done is closed once ok is final.
+// keyFetch is one JWKS refetch; done is closed once err is final.
 type keyFetch struct {
 	done chan struct{}
-	ok   bool
+	err  error
 }
 
 // maybeRefreshKeys refetches the JWKS, or joins a refetch already running,
@@ -226,9 +228,15 @@ type keyFetch struct {
 // up — a push client that disconnects, say — neither cancels it nor uses up
 // the attempt, so nobody who can reach the push endpoint can keep the
 // Receiver from ever learning a rotated key or forgetting a retired one.
+//
+// The caller that starts a refetch waits for it whatever its own context,
+// then calls Hooks.KeysRefreshed: on its own goroutine, after waiting
+// callers are released, so a hook that blocks holds up that one caller
+// only. At most one caller a minute starts a refetch.
 func (r *Receiver) maybeRefreshKeys(ctx context.Context) bool {
 	r.keysMu.Lock()
 	f := r.keyFetch
+	started := false
 	if f == nil {
 		if r.cfg.Now().Sub(r.keysTried) < keyRefetchInterval {
 			r.keysMu.Unlock()
@@ -237,12 +245,20 @@ func (r *Receiver) maybeRefreshKeys(ctx context.Context) bool {
 		r.keysTried = r.cfg.Now()
 		f = &keyFetch{done: make(chan struct{})}
 		r.keyFetch = f
+		started = true
 		go r.fetchKeys(context.WithoutCancel(ctx), f)
 	}
 	r.keysMu.Unlock()
+	if started {
+		<-f.done
+		if r.cfg.Hooks.KeysRefreshed != nil {
+			r.observe(ctx, "KeysRefreshed", func() { r.cfg.Hooks.KeysRefreshed(context.WithoutCancel(ctx), f.err) })
+		}
+		return f.err == nil
+	}
 	select {
 	case <-f.done:
-		return f.ok
+		return f.err == nil
 	case <-ctx.Done():
 		return false
 	}
@@ -255,11 +271,8 @@ func (r *Receiver) fetchKeys(ctx context.Context, f *keyFetch) {
 	if err != nil {
 		r.cfg.Logger.WarnContext(ctx, "ssf receiver: refresh transmitter JWKS", "error", err)
 	}
-	if r.cfg.Hooks.KeysRefreshed != nil {
-		r.cfg.Hooks.KeysRefreshed(ctx, err)
-	}
 	r.keysMu.Lock()
-	f.ok = err == nil
+	f.err = err
 	r.keyFetch = nil
 	r.keysMu.Unlock()
 	close(f.done)
@@ -308,7 +321,7 @@ func (r *Receiver) get(ctx context.Context, u string) ([]byte, error) {
 		return nil, err
 	}
 	if res.StatusCode != http.StatusOK {
-		return nil, &APIError{Method: http.MethodGet, URL: u, StatusCode: res.StatusCode, Body: string(body)}
+		return nil, &APIError{Method: http.MethodGet, URL: u, StatusCode: res.StatusCode, Body: truncate(body, maxAPIErrorBody)}
 	}
 	return body, nil
 }
@@ -318,7 +331,9 @@ type APIError struct {
 	Method     string
 	URL        string
 	StatusCode int
-	// Body is the response body, cut to its first 1 KiB.
+	// Body is the response body, cut to its first 1 KiB. It is the
+	// Transmitter's text, unfiltered: Error shows only a cleaned error
+	// code and description from it.
 	Body string
 }
 
@@ -333,9 +348,37 @@ func truncate(b []byte, n int) string {
 	return string(b[:n]) + "…"
 }
 
+// Error describes the response by its status and, when the body is a
+// JSON error, its error code and description — cleaned, as the
+// Transmitter wrote them — or else by the body's length alone.
 func (e *APIError) Error() string {
-	return fmt.Sprintf("receiver: %s %s: HTTP %d: %s", e.Method, e.URL, e.StatusCode, e.Body)
+	msg := fmt.Sprintf("receiver: %s %s: HTTP %d", e.Method, e.URL, e.StatusCode)
+	var body struct {
+		Error            string `json:"error"`
+		Err              string `json:"err"`
+		ErrorDescription string `json:"error_description"`
+		Description      string `json:"description"`
+	}
+	if json.Unmarshal([]byte(e.Body), &body) == nil {
+		code, desc := cmp.Or(body.Error, body.Err), cmp.Or(body.ErrorDescription, body.Description)
+		switch {
+		case code != "" && desc != "":
+			return msg + ": " + peertext.Clean(code, maxAPIErrorCode) + ": " + peertext.Clean(desc, maxAPIErrorDescription)
+		case code != "":
+			return msg + ": " + peertext.Clean(code, maxAPIErrorCode)
+		}
+	}
+	if e.Body != "" {
+		return fmt.Sprintf("%s (%d-byte body)", msg, len(e.Body))
+	}
+	return msg
 }
+
+// Bounds on what APIError.Error shows of a Transmitter's error body.
+const (
+	maxAPIErrorCode        = 64
+	maxAPIErrorDescription = 256
+)
 
 // ErrNotFound is matched by an *APIError with status 404, so callers can
 // write errors.Is(err, receiver.ErrNotFound).

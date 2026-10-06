@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 
 	ssf "github.com/idfoundry/ssfgo"
 )
@@ -114,7 +115,7 @@ func decodeFull(typ ssf.EventType, data []byte) (full, error) {
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return full{}, err
 	}
-	if _, ok := obj["attributes"]; ok {
+	if hasMember(obj, "attributes") {
 		return full{}, invalid(typ, `a full event carries "data", not "attributes" (RFC 9967 §2.4)`)
 	}
 	var f full
@@ -123,6 +124,18 @@ func decodeFull(typ ssf.EventType, data []byte) (full, error) {
 	}
 	f.Data = compact(f.Data)
 	return f, nil
+}
+
+// hasMember reports whether obj has a member that encoding/json would
+// decode as name — which it matches ignoring case — so the check cannot
+// pass a member the decoding then reads.
+func hasMember(obj map[string]json.RawMessage, name string) bool {
+	for k := range obj {
+		if strings.EqualFold(k, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // compact returns raw in its compact form, as encoding/json writes it, so
@@ -142,7 +155,7 @@ func decodeNotice(typ ssf.EventType, data []byte) (notice, error) {
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return notice{}, err
 	}
-	if _, ok := obj["data"]; ok {
+	if hasMember(obj, "data") {
 		return notice{}, invalid(typ, `a notice event carries "attributes", not "data" (RFC 9967 §2.4)`)
 	}
 	var n notice

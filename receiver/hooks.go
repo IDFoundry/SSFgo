@@ -4,21 +4,28 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
 )
 
 // Hooks are callbacks that observe a Receiver, to feed metrics or traces.
-// Each is optional. They run synchronously on the Receiver's goroutines —
-// a push request's, a poller's — so they should return quickly.
+// Each is optional. They run synchronously on the goroutine of the work
+// they report — a push request's, a poller's — after it is complete, so
+// they must not block. A hook must not panic either; if one does, the
+// panic is recovered and logged, so a bug in a hook cannot take down the
+// process. Fields marked untrusted may carry text from whoever sent a
+// SET: log them, never use them as a metric label or return them to
+// anyone.
 type Hooks struct {
 	// SET is called once for every SET pushed or polled, with its outcome.
 	SET func(ctx context.Context, info SETInfo)
 	// Poll is called after every poll request, successful or not.
 	Poll func(ctx context.Context, info PollInfo)
 	// KeysRefreshed is called after every refetch of the Transmitter's
-	// JWKS, with nil or the reason it failed.
+	// JWKS, with nil or the reason it failed, on the goroutine that
+	// started the refetch.
 	KeysRefreshed func(ctx context.Context, err error)
 }
 
@@ -63,9 +70,12 @@ type SETInfo struct {
 	JTI       string
 	EventType ssf.EventType
 	Outcome   SETOutcome
-	// ErrorCode is the RFC 8935 error code of a rejected SET.
+	// ErrorCode is the RFC 8935 error code of a rejected SET: one of a
+	// few fixed values, fit for a metric label.
 	ErrorCode string
-	// Err is why a SET was rejected or failed.
+	// Err is why a SET was rejected or failed. Untrusted: a rejection
+	// quotes what the sender wrote, cleaned and cut to a few hundred
+	// bytes.
 	Err error
 	// Duration is how long verifying and handling took.
 	Duration time.Duration
@@ -78,7 +88,8 @@ type PollInfo struct {
 	Received int
 	// Duration includes any time the Transmitter held the request.
 	Duration time.Duration
-	// Err is why the request failed.
+	// Err is why the request failed. Untrusted: it may quote the
+	// Transmitter's error response, cleaned and bounded.
 	Err error
 }
 
@@ -98,4 +109,16 @@ func (r *Receiver) Ready(ctx context.Context) error {
 		return fmt.Errorf("receiver: the Transmitter's signing keys are %v old, and refetching them fails", age.Round(time.Second))
 	}
 	return nil
+}
+
+// observe calls a hook, recovering and logging a panic: a hook observes
+// the Receiver, and a bug in one must not take down a poller — and with
+// it the process.
+func (r *Receiver) observe(ctx context.Context, hook string, call func()) {
+	defer func() {
+		if v := recover(); v != nil {
+			r.cfg.Logger.ErrorContext(ctx, "ssf receiver: hook panicked", "hook", hook, "panic", v, "stack", string(debug.Stack()))
+		}
+	}()
+	call()
 }

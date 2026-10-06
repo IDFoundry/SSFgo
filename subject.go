@@ -12,6 +12,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/idfoundry/ssfgo/internal/jsonobj"
 )
@@ -411,11 +413,14 @@ var scimMembers = []string{"format", "uri", "externalId", "id"}
 // Validate implements Subject.
 func (s SCIMSubject) Validate() error {
 	u, err := url.Parse(s.URI)
-	if s.URI == "" || err != nil || u.IsAbs() || u.Host != "" {
+	// A backslash is no path character (RFC 3986), and browsers' URL
+	// resolution reads "\\host" as a network path.
+	if s.URI == "" || err != nil || u.IsAbs() || u.Host != "" || strings.ContainsRune(s.URI, '\\') {
 		return invalid(FormatSCIM, `"uri" must be a path relative to the SCIM service provider's base URI`)
 	}
 	for k, v := range s.Attributes {
-		if slices.Contains(scimMembers, k) {
+		// SCIM attribute names are case-insensitive (RFC 7643 §2.1).
+		if slices.ContainsFunc(scimMembers, func(m string) bool { return strings.EqualFold(m, k) }) {
 			return invalid(FormatSCIM, fmt.Sprintf("Attributes must not include %q", k))
 		}
 		if !json.Valid(v) {
@@ -471,7 +476,15 @@ func validFormatName(f SubjectFormat) bool {
 	}
 	u, err := url.Parse(name)
 	return err == nil && u.Scheme != "" && (u.Opaque != "" || u.Host != "") &&
-		!strings.ContainsFunc(name, func(r rune) bool { return r <= ' ' || r == 0x7f })
+		!strings.ContainsFunc(name, unseen)
+}
+
+// unseen reports whether r is a character a reader does not see as
+// itself — a space, a control character or a format character such as a
+// zero-width space or a bidirectional override — so names that look the
+// same are the same.
+func unseen(r rune) bool {
+	return unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == utf8.RuneError
 }
 
 func isKnownFormat(f SubjectFormat) bool {

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	ssf "github.com/idfoundry/ssfgo"
@@ -90,6 +91,8 @@ func TestDecodeRejects(t *testing.T) {
 		"data not an object":           {scim.PatchFullEventType, `{"data":"x"}`},
 		"notice without attributes":    {scim.CreateNoticeEventType, `{}`},
 		"notice with data too":         {scim.PatchNoticeEventType, `{"attributes":["a"],"data":{}}`},
+		"full with Attributes too":     {scim.PutFullEventType, `{"data":{},"Attributes":["a"]}`},
+		"notice with DATA too":         {scim.PatchNoticeEventType, `{"attributes":["a"],"DATA":{}}`},
 		"empty attribute name":         {scim.PutNoticeEventType, `{"attributes":[""]}`},
 		"async without method":         {scim.AsyncResponseEventType, `{"status":"200"}`},
 		"async with unknown method":    {scim.AsyncResponseEventType, `{"method":"GET","status":"200"}`},
@@ -199,6 +202,9 @@ func TestEmitAndReceive(t *testing.T) {
 		Response: json.RawMessage(`{"schemas":["urn:ietf:params:scim:api:messages:2.0:Error"],"scimType":"invalidSyntax","status":"400"}`)}
 	if err := tx.EmitTxn(ctx, "734f0614e3274f288f93ac74119dcf78", resource, failure); err != nil {
 		t.Fatal(err)
+	}
+	if err := tx.EmitTxn(ctx, strings.Repeat("t", transmitter.MaxTxnLength+1), resource, failure); err == nil {
+		t.Error("EmitTxn with an over-long txn succeeded")
 	}
 	if err := tx.EmitTxn(ctx, "", resource, failure); err == nil {
 		t.Error("EmitTxn without a txn succeeded")

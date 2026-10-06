@@ -12,6 +12,7 @@ import (
 	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/internal/peertext"
 	"github.com/idfoundry/ssfgo/storage"
 )
 
@@ -30,24 +31,34 @@ type pushState struct {
 }
 
 type pushStream struct {
-	busy     bool
+	busy    bool
+	retryAt time.Time
+	// failures counts the consecutive failed attempts on the SET head, the
+	// head of the queue when they were made.
 	failures int
-	retryAt  time.Time
+	head     string
 }
 
 func newPushState(policy PushRetryPolicy) *pushState {
 	return &pushState{streams: map[string]*pushStream{}, policy: policy}
 }
 
-// failures returns how many consecutive attempts on stream id have failed:
-// the attempts spent on the SET at the head of its queue.
-func (p *pushState) failures(id string) int {
+// attempt returns which attempt at delivering SET jti on stream id the
+// next is. Failures count against the SET they happened to: a SET that
+// reaches the head of the queue some other way than its predecessor being
+// done with — a control SET queued after a purge, or while a paused stream
+// sends only control SETs — starts from its first attempt.
+func (p *pushState) attempt(id, jti string) int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if st, ok := p.streams[id]; ok {
-		return st.failures
+	st, ok := p.streams[id]
+	if !ok {
+		return 1
 	}
-	return 0
+	if st.head != jti {
+		st.head, st.failures = jti, 0
+	}
+	return st.failures + 1
 }
 
 // reset clears stream id's failure count, after its head SET is dropped.
@@ -200,10 +211,12 @@ func (t *Transmitter) drain(ctx context.Context, id string) (failed bool) {
 // been delivered, rejected by the Receiver, or given up on. It reports
 // whether the stream should back off and retry.
 func (t *Transmitter) deliverOne(ctx context.Context, s storage.Stream, e storage.QueuedEvent) (retry bool) {
-	attempt := t.pushes.failures(s.ID) + 1
+	attempt := t.pushes.attempt(s.ID, e.JTI)
 	report := func(outcome PushOutcome, took time.Duration, detail string) {
 		if t.cfg.Hooks.Push != nil {
-			t.cfg.Hooks.Push(ctx, PushInfo{StreamID: s.ID, JTI: e.JTI, Outcome: outcome, Attempt: attempt, Duration: took, Detail: detail})
+			t.observe(ctx, "Push", func() {
+				t.cfg.Hooks.Push(ctx, PushInfo{StreamID: s.ID, JTI: e.JTI, Outcome: outcome, Attempt: attempt, Duration: took, Detail: detail})
+			})
 		}
 	}
 	if limit := t.cfg.PushRetry.MaxAttempts; limit > 0 && attempt > limit {
@@ -216,6 +229,8 @@ func (t *Transmitter) deliverOne(ctx context.Context, s storage.Stream, e storag
 	start := time.Now()
 	outcome, detail := t.push(ctx, s.Delivery, e)
 	took := time.Since(start)
+	// Mostly the Receiver's own words: it is logged and reported to hooks.
+	detail = peertext.Clean(detail, maxPushDetail)
 	switch outcome {
 	case pushDelivered:
 		report(PushDelivered, took, "")
@@ -248,6 +263,10 @@ func (t *Transmitter) deliverOne(ctx context.Context, s storage.Stream, e storag
 // four minutes — longer than a Receiver takes to refetch a rotated JWKS —
 // and the bound keeps one such SET from holding up its stream for good.
 const transientRejectAttempts = 8
+
+// maxPushDetail bounds what a failed push's description keeps of the
+// Receiver's error code and description.
+const maxPushDetail = 512
 
 // transientRejection reports whether a Receiver's RFC 8935 error code may
 // clear without the SET changing (RFC 8935 §2.3, §4): invalid_key while

@@ -78,7 +78,9 @@ func (r *Receiver) Poll(ctx context.Context, stream ssf.StreamConfiguration, opt
 	start := r.cfg.Now()
 	res, err := r.poll(ctx, stream, opts)
 	if r.cfg.Hooks.Poll != nil {
-		r.cfg.Hooks.Poll(ctx, PollInfo{StreamID: stream.StreamID, Received: res.Received, Duration: r.cfg.Now().Sub(start), Err: err})
+		r.observe(ctx, "Poll", func() {
+			r.cfg.Hooks.Poll(ctx, PollInfo{StreamID: stream.StreamID, Received: res.Received, Duration: r.cfg.Now().Sub(start), Err: err})
+		})
 	}
 	return res, err
 }

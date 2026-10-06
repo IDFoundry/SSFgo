@@ -38,6 +38,9 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
   every JWKS refetch; `transmitter.Config.Hooks` every emit (streams
   considered and queued on), push attempt (delivered, rejected, retry,
   dropped, with attempt and latency), poll served and stream change.
+  Hooks run on the goroutine of the work they report, once it is done; a
+  hook that panics is recovered and logged, and fields carrying the other
+  party's text are cleaned, bounded and documented as untrusted.
   `Receiver.Ready` and `Transmitter.Ready` back readiness probes. No
   metrics library is imported.
 - `revocation`: a `Revoker` records what session-revoked, account-disabled,
@@ -68,10 +71,12 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
   servers, closed when the test ends.
 - `Receiver.EnsureStream`: reuses the stream with the wanted delivery
   method (and push endpoint), updating its requested events, description
-  or push `authorization_header` where they differ, or creates one —
-  replacing the only stream on a Transmitter that allows one per
-  Receiver. It retries while the Transmitter is unreachable, overloaded
-  or not done processing, so a Receiver can call it on every start.
+  or push `authorization_header` where they differ, or creates one. On a
+  Transmitter that allows one stream per Receiver it replaces the only
+  stream only with `StreamRequest.ReplaceOnConflict`, as that stream may
+  be another application's. It retries while the Transmitter is
+  unreachable, overloaded or not done processing — never on TLS or
+  certificate failures — so a Receiver can call it on every start.
 - Signing algorithms RS384, RS512, PS384, PS512, ES384 (P-384) and ES512
   (P-521), alongside RS256, PS256, ES256 and EdDSA — every asymmetric
   algorithm of RFC 7518 §3.1 — for signing, verification, JWKs and

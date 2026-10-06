@@ -60,10 +60,10 @@ func (t *Transmitter) poll(w http.ResponseWriter, r *http.Request, rx Receiver) 
 	t.touch(r.Context(), s)
 	start, returned := t.now(), 0
 	if t.cfg.Hooks.Poll != nil {
-		defer func() {
+		defer t.observe(r.Context(), "Poll", func() {
 			t.cfg.Hooks.Poll(r.Context(), PollInfo{StreamID: id, Returned: returned,
 				Acknowledged: len(req.Ack), Reported: len(req.SetErrs), Duration: t.now().Sub(start)})
-		}()
+		})
 	}
 
 	if err := t.acknowledge(r, id, req); err != nil {

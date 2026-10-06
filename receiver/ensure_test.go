@@ -93,7 +93,8 @@ func TestEnsureStreamPush(t *testing.T) {
 }
 
 // A Transmitter allowing one stream per Receiver has its stream replaced
-// when the delivery method changes.
+// when the delivery changes — only with ReplaceOnConflict, as the stream
+// may be another application's.
 func TestEnsureStreamReplacesOnlyStream(t *testing.T) {
 	e := newEnv(t) // one stream per Receiver
 	ctx := context.Background()
@@ -101,7 +102,13 @@ func TestEnsureStreamReplacesOnlyStream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pushed, err := e.rx.EnsureStream(ctx, receiver.StreamRequest{Delivery: &ssf.Delivery{Method: ssf.DeliveryPush, EndpointURL: "https://rx.example/push"}})
+	push := receiver.StreamRequest{Delivery: &ssf.Delivery{Method: ssf.DeliveryPush, EndpointURL: "https://rx.example/push"}}
+	var apiErr *receiver.APIError
+	if _, err := e.rx.EnsureStream(ctx, push); !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusConflict {
+		t.Fatalf("without ReplaceOnConflict: %v, want the 409", err)
+	}
+	push.ReplaceOnConflict = true
+	pushed, err := e.rx.EnsureStream(ctx, push)
 	if err != nil {
 		t.Fatal(err)
 	}
