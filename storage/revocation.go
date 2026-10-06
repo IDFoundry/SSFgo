@@ -17,7 +17,8 @@ const (
 	// identity provider, Value the session's identifier ("sid").
 	RevokeSession RevocationKind = "session"
 	// RevokeEmail covers every token of a user known by email address:
-	// Value is the address in lowercase, Issuer is empty.
+	// Issuer is the identity provider, Value the address with ASCII
+	// letters in lowercase.
 	RevokeEmail RevocationKind = "email"
 )
 

@@ -72,8 +72,9 @@ What SSFgo enforces on its own, so reviewers know where to look:
 - **Operator control.** A stream status the Transmitter sets with
   `SetStreamStatus` cannot be undone by the Receiver.
 
-The most recent review, an adversarial one, is
-[docs/security-review-2026-10.md](docs/security-review-2026-10.md); the
+The most recent review, an adversarial one of what was added after the
+[October review](docs/security-review-2026-10.md), is
+[docs/security-review-2026-10-additions.md](docs/security-review-2026-10-additions.md); the
 trust boundaries are set out in
 [docs/security-review-2026-09.md](docs/security-review-2026-09.md).
 

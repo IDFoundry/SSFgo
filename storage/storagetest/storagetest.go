@@ -507,4 +507,15 @@ func RevocationStore(t *testing.T, newStore func(t *testing.T) storage.Revocatio
 			t.Error("a revocation outlived its expiry")
 		}
 	})
+	t.Run("FarFutureExpiry", func(t *testing.T) {
+		// An expiry beyond what a store can represent must not wrap into
+		// the past and silently drop the revocation.
+		st := newStore(t)
+		if err := st.Revoke(ctx, user, now, time.Date(3000, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok, err := st.RevokedAt(ctx, user, now); err != nil || !ok {
+			t.Errorf("a revocation expiring in the year 3000 is not in force: %v, %v", ok, err)
+		}
+	})
 }

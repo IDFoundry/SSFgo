@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,9 +31,25 @@ var (
 	sessionA = ssf.ComplexSubject{User: alice, Session: ssf.OpaqueSubject{ID: "sid-a"}}
 )
 
-func newRevoker(opts revocation.Options) *revocation.Revoker {
+// newRevoker returns a Revoker for the identity provider idp, filling in
+// the options a test leaves unset.
+func newRevoker(t *testing.T, opts revocation.Options) *revocation.Revoker {
+	t.Helper()
+	if opts.Issuers == nil {
+		opts.Issuers = revocation.SameIssuer
+	}
+	if opts.Events == nil {
+		opts.Events = revocation.RecommendedEvents()
+	}
+	if opts.Retention == 0 {
+		opts.Retention = 24 * time.Hour
+	}
 	opts.Now = func() time.Time { return now }
-	return revocation.New(memstore.NewRevocationStore(), opts)
+	r, err := revocation.New(memstore.NewRevocationStore(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
 }
 
 func set(subject ssf.Subject, event ssf.Event) ssf.SET {
@@ -79,7 +96,7 @@ func TestEventsRevoke(t *testing.T) {
 		}, bobRev: true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			r := newRevoker(c.opts)
+			r := newRevoker(t, c.opts)
 			if err := r.Handle(ctx, c.set); err != nil {
 				t.Fatal(err)
 			}
@@ -97,12 +114,115 @@ func TestEventsRevoke(t *testing.T) {
 }
 
 func TestMatchEmail(t *testing.T) {
-	r := newRevoker(revocation.Options{MatchEmail: true})
+	r := newRevoker(t, revocation.Options{MatchEmail: true})
 	if err := r.Handle(context.Background(), set(ssf.EmailSubject{Email: "Alice@Example.com"}, risc.AccountDisabled{})); err != nil {
 		t.Fatal(err)
 	}
-	if !revoked(t, r, revocation.Token{Email: "alice@example.COM", IssuedAt: before}) {
-		t.Error("email revocation not matched case-insensitively")
+	if !revoked(t, r, revocation.Token{Issuer: idp, Email: "alice@example.COM", IssuedAt: before}) {
+		t.Error("email revocation not matched ignoring ASCII case")
+	}
+	if revoked(t, r, revocation.Token{Issuer: "https://other.example", Email: "alice@example.com", IssuedAt: before}) {
+		t.Error("email revocation matched another issuer's token")
+	}
+}
+
+// Only ASCII letters are folded: the Kelvin sign (U+212A), which
+// strings.ToLower folds to "k", must not let one address revoke another.
+func TestMatchEmailFoldsASCIIOnly(t *testing.T) {
+	r := newRevoker(t, revocation.Options{MatchEmail: true})
+	if err := r.Handle(context.Background(), set(ssf.EmailSubject{Email: "\u212Aate@example.com"}, risc.AccountDisabled{})); err != nil {
+		t.Fatal(err)
+	}
+	if revoked(t, r, revocation.Token{Issuer: idp, Email: "kate@example.com", IssuedAt: before}) {
+		t.Error("an address with the Kelvin sign revoked kate@example.com")
+	}
+}
+
+// A Transmitter speaks only for the token issuer Options.Issuers gives
+// it: it cannot revoke another identity provider's users, and a
+// Transmitter Issuers does not name revokes nothing.
+func TestIssuers(t *testing.T) {
+	const tenantA, tenantB = "https://tx-a.example", "https://idp-b.example"
+	r := newRevoker(t, revocation.Options{Issuers: revocation.StaticTokenIssuers{tenantA: "https://idp-a.example", "https://tx-b.example": tenantB}})
+	victim := ssf.IssSubSubject{Issuer: tenantB, Subject: "victim"}
+	for _, s := range []ssf.SET{
+		{Issuer: tenantA, IssuedAt: now, Subject: victim, Event: risc.AccountDisabled{}},
+		{Issuer: tenantA, IssuedAt: now, Subject: ssf.ComplexSubject{Session: ssf.IssSubSubject{Issuer: tenantB, Subject: "sid"}}, Event: caep.SessionRevoked{Common: reason}},
+		{Issuer: "https://unknown.example", IssuedAt: now, Subject: ssf.IssSubSubject{Issuer: "https://unknown.example", Subject: "victim"}, Event: risc.AccountDisabled{}},
+	} {
+		if err := r.Handle(context.Background(), s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tok := range []revocation.Token{
+		{Issuer: tenantB, Subject: "victim", IssuedAt: before},
+		{Issuer: tenantB, Subject: "other", SessionID: "sid", IssuedAt: before},
+		{Issuer: "https://unknown.example", Subject: "victim", IssuedAt: before},
+	} {
+		if revoked(t, r, tok) {
+			t.Errorf("%+v revoked by a Transmitter that does not speak for its issuer", tok)
+		}
+	}
+}
+
+// A session is revoked under the token issuer the Transmitter speaks for,
+// whatever the complex subject's "user" is — even when the Transmitter's
+// own issuer differs from the tokens'.
+func TestSessionUnderTokenIssuer(t *testing.T) {
+	const tx = "https://ssf.idp.example"
+	for name, user := range map[string]ssf.Subject{
+		"no user":      nil,
+		"email user":   ssf.EmailSubject{Email: "alice@example.com"},
+		"opaque user":  ssf.OpaqueSubject{ID: "u1"},
+		"aliases user": ssf.AliasesSubject{Identifiers: []ssf.Subject{ssf.OpaqueSubject{ID: "u1"}, alice}},
+		"iss_sub user": alice,
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := newRevoker(t, revocation.Options{Issuers: revocation.StaticTokenIssuers{tx: idp}})
+			s := ssf.SET{Issuer: tx, IssuedAt: now, Subject: ssf.ComplexSubject{User: user, Session: ssf.OpaqueSubject{ID: "sid-a"}}, Event: caep.SessionRevoked{Common: reason}}
+			if err := r.Handle(context.Background(), s); err != nil {
+				t.Fatal(err)
+			}
+			if !revoked(t, r, revocation.Token{Issuer: idp, Subject: "alice", SessionID: "sid-a", IssuedAt: before}) {
+				t.Error("session not revoked")
+			}
+			if revoked(t, r, revocation.Token{Issuer: idp, Subject: "alice", SessionID: "sid-b", IssuedAt: before}) {
+				t.Error("another session revoked")
+			}
+		})
+	}
+}
+
+// MaxClockSkew counts a token whose iat runs slightly ahead of the
+// revocation — its identity provider's clock being ahead — as issued
+// before it.
+func TestMaxClockSkew(t *testing.T) {
+	tok := revocation.Token{Issuer: idp, Subject: "alice", IssuedAt: now.Add(5 * time.Second)}
+	for skew, want := range map[time.Duration]bool{0: false, 10 * time.Second: true} {
+		r := newRevoker(t, revocation.Options{MaxClockSkew: skew})
+		if err := r.Handle(context.Background(), set(alice, risc.AccountDisabled{})); err != nil {
+			t.Fatal(err)
+		}
+		if got := revoked(t, r, tok); got != want {
+			t.Errorf("MaxClockSkew %v: revoked = %v, want %v", skew, got, want)
+		}
+	}
+}
+
+// New refuses incomplete or out-of-range options, reporting every problem
+// at once.
+func TestNewValidates(t *testing.T) {
+	_, err := revocation.New(nil, revocation.Options{Retention: revocation.MaxRetention + 1, MaxClockSkew: -1})
+	if err == nil {
+		t.Fatal("New accepted invalid options")
+	}
+	for _, want := range []string{"store is required", "issuers is required", "events is required", "retention must be", "max_clock_skew must not be negative"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q lacks %q", err, want)
+		}
+	}
+	if _, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{Issuers: revocation.SameIssuer, Events: revocation.RecommendedEvents(), Retention: revocation.MaxRetention}); err != nil {
+		t.Errorf("New refused valid options: %v", err)
 	}
 }
 
@@ -110,7 +230,7 @@ func TestMatchEmail(t *testing.T) {
 // signing in again — are not. CAEP's event_timestamp, not the SET's iat,
 // says when the event happened.
 func TestRevocationTime(t *testing.T) {
-	r := newRevoker(revocation.Options{})
+	r := newRevoker(t, revocation.Options{})
 	event := caep.SessionRevoked{Common: caep.Common{ReasonAdmin: reason.ReasonAdmin, EventTimestamp: ssf.NewNumericDate(now.Add(-10 * time.Minute))}}
 	if err := r.Handle(context.Background(), set(alice, event)); err != nil {
 		t.Fatal(err)
@@ -133,7 +253,7 @@ func TestRevocationTime(t *testing.T) {
 func TestOnRevoke(t *testing.T) {
 	var got []storage.RevocationKey
 	failure := errors.New("session store down")
-	r := newRevoker(revocation.Options{OnRevoke: func(_ context.Context, keys []storage.RevocationKey, _ ssf.SET) error {
+	r := newRevoker(t, revocation.Options{OnRevoke: func(_ context.Context, keys []storage.RevocationKey, _ ssf.SET) error {
 		got = keys
 		return failure
 	}})
@@ -150,7 +270,7 @@ func (failingStore) RevokedAt(context.Context, storage.RevocationKey, time.Time)
 }
 
 func TestMiddleware(t *testing.T) {
-	r := newRevoker(revocation.Options{})
+	r := newRevoker(t, revocation.Options{})
 	if err := r.Handle(context.Background(), set(alice, risc.AccountDisabled{})); err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +298,11 @@ func TestMiddleware(t *testing.T) {
 	if rec := serve(h, ""); rec.Code != http.StatusOK {
 		t.Errorf("unauthenticated request not passed through: %d", rec.Code)
 	}
-	broken := revocation.New(failingStore{}, revocation.Options{}).Middleware(extract, ok)
+	failing, err := revocation.New(failingStore{}, revocation.Options{Issuers: revocation.SameIssuer, Events: revocation.RecommendedEvents(), Retention: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	broken := failing.Middleware(extract, ok)
 	if rec := serve(broken, "bob"); rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("store failure: %d, want 503", rec.Code)
 	}
@@ -197,7 +321,14 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rev := revocation.New(memstore.NewRevocationStore(), revocation.Options{})
+	rev, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{
+		Issuers:   revocation.StaticTokenIssuers{tx.Issuer(): idp},
+		Events:    revocation.RecommendedEvents(),
+		Retention: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	rev.Register(rx)
 	stream, err := rx.EnsureStream(ctx, receiver.StreamRequest{})
 	if err != nil {

@@ -44,10 +44,17 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
   account-purged, sessions-revoked and SCIM deactivate and delete events
   mean — a user's or one session's tokens, issued before the event, are
   revoked — and checks tokens the application validated against it, with
-  `IsRevoked` or as `net/http` middleware answering 401. Events map to
-  users and sessions through iss_sub and complex subjects, to email
-  addresses only with `MatchEmail`, and to anything else through
-  `KeysFor`; `OnRevoke` lets the application end its own sessions. New
+  `IsRevoked` or as `net/http` middleware answering 401. `New` takes
+  explicit options and reports every problem with them: `Issuers` says
+  which token issuer each Transmitter speaks for (`StaticTokenIssuers`,
+  or `SameIssuer` for an identity provider that is its own Transmitter),
+  so no Transmitter can revoke another identity provider's users;
+  `Events` (`RecommendedEvents` is the usual choice); `Retention`, at
+  most `MaxRetention`; and `MaxClockSkew`. Events map to users and
+  sessions through iss_sub and complex subjects, to email addresses only
+  with `MatchEmail` (scoped to the token issuer, ignoring ASCII case
+  only), and to anything else through `KeysFor`; `OnRevoke` lets the
+  application end its own sessions. New
   `storage.RevocationStore` contract, with `memstore.NewRevocationStore`
   and `storagetest.RevocationStore`, and `sqlstore.NewRevocationStore`
   for revocations that survive restarts and are shared by Receiver
@@ -128,7 +135,9 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 A trust-boundary review of the whole repository
 ([docs/security-review-2026-09.md](docs/security-review-2026-09.md)),
 then an adversarial one
-([docs/security-review-2026-10.md](docs/security-review-2026-10.md));
+([docs/security-review-2026-10.md](docs/security-review-2026-10.md)),
+and an adversarial review of what was added after it
+([docs/security-review-2026-10-additions.md](docs/security-review-2026-10-additions.md));
 each finding was reproduced by a failing test before it was fixed.
 
 - New `transmitter.Config.PermitEvent`: the Transmitter decides which

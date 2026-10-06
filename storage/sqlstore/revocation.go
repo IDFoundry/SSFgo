@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -40,7 +41,7 @@ func (s *RevocationStore) Revoke(ctx context.Context, key storage.RevocationKey,
 				THEN excluded.revoked_at ELSE ssf_revocations.revoked_at END,
 			expires_at = CASE WHEN excluded.expires_at > ssf_revocations.expires_at
 				THEN excluded.expires_at ELSE ssf_revocations.expires_at END`),
-		string(key.Kind), key.Issuer, key.Value, at.UnixNano(), expires.UnixNano())
+		string(key.Kind), key.Issuer, key.Value, unixNano(at), unixNano(expires))
 	if err != nil {
 		return err
 	}
@@ -56,7 +57,7 @@ func (s *RevocationStore) RevokedAt(ctx context.Context, key storage.RevocationK
 	var at int64
 	err := s.db.QueryRowContext(ctx, s.d.rebind(`SELECT revoked_at FROM ssf_revocations
 		WHERE kind = ? AND issuer = ? AND value = ? AND expires_at > ?`),
-		string(key.Kind), key.Issuer, key.Value, now.UnixNano()).Scan(&at)
+		string(key.Kind), key.Issuer, key.Value, unixNano(now)).Scan(&at)
 	if errors.Is(err, sql.ErrNoRows) {
 		return time.Time{}, false, nil
 	}
@@ -65,3 +66,21 @@ func (s *RevocationStore) RevokedAt(ctx context.Context, key storage.RevocationK
 	}
 	return time.Unix(0, at), true, nil
 }
+
+// unixNano is t.UnixNano clamped to the int64 range, which UnixNano
+// leaves undefined beyond: an expiry after 2262 would otherwise wrap into
+// the past, and the revocation would never be in force.
+func unixNano(t time.Time) int64 {
+	switch {
+	case t.After(maxTime):
+		return math.MaxInt64
+	case t.Before(minTime):
+		return math.MinInt64
+	}
+	return t.UnixNano()
+}
+
+var (
+	maxTime = time.Unix(0, math.MaxInt64)
+	minTime = time.Unix(0, math.MinInt64)
+)
