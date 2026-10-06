@@ -247,7 +247,10 @@ the Transmitter's JWKS.
   the stream is returned with `ErrAudienceMismatch` so the caller can
   delete it). Access tokens come from a `TokenSource` — `StaticToken`, or
   `ClientCredentials`, which caches and is invalidated once on a 401.
-  `KeepAlive` keeps a stream inside its `inactivity_timeout`.
+  `EnsureStream` reuses a stream with the wanted delivery, updating what
+  differs, or creates one — replacing the only stream on a Transmitter
+  that allows one per Receiver — retrying while the Transmitter is
+  unavailable. `KeepAlive` keeps a stream inside its `inactivity_timeout`.
 - **Delivery.** `PushHandler` answers 202 once a SET is verified and
   handled, 400 with an RFC 8935 error body for a SET it rejects, and 500
   when a handler fails, so the Transmitter retries. `Poll` acknowledges

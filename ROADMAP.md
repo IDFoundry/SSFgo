@@ -105,8 +105,6 @@ Ideas recorded for later; none is committed to.
   with a helper matching an event's subject to a user's claims.
 - **Test kit.** A public `ssftest` package: an in-process Transmitter for
   testing Receivers, and a Receiver for testing Transmitters.
-- **Stream registration.** `EnsureStream`: find, create or update the
-  stream a Receiver wants, retrying while the Transmitter is unreachable.
 - **Observability.** A dependency-free observer interface for both roles
   (SETs received, rejected, handled, emitted and pushed; delivery
   latency; key refreshes) and readiness checks.
