@@ -94,6 +94,18 @@ replay, err := sqlstore.NewReplayStore(db, sqlstore.Postgres)  // receiver.Confi
 [`examples/session-revocation`](examples/session-revocation) runs both
 sides in one process: `go run ./examples/session-revocation`.
 
+To test an application that plays one role, [`ssftest`](ssftest) runs the
+other in-process: `ssftest.NewTransmitter` for testing a Receiver,
+`ssftest.NewReceiver` for testing a Transmitter.
+
+```go
+tx := ssftest.NewTransmitter(t)
+rx, err := receiver.New(ctx, tx.ReceiverConfig(registry))
+stream, err := rx.EnsureStream(ctx, receiver.StreamRequest{})
+err = tx.Emit(ctx, subject, caep.SessionRevoked{...})
+_, err = rx.Poll(ctx, stream, receiver.PollOptions{}) // your handlers run
+```
+
 ## Design
 
 See [ARCHITECTURE.md](ARCHITECTURE.md), and [SECURITY.md](SECURITY.md) for

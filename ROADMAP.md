@@ -103,8 +103,6 @@ Ideas recorded for later; none is committed to.
   revocation store (`IsRevoked(sid, sub, iat)`) with `net/http`
   middleware that rejects matching tokens, and a session-terminator hook
   with a helper matching an event's subject to a user's claims.
-- **Test kit.** A public `ssftest` package: an in-process Transmitter for
-  testing Receivers, and a Receiver for testing Transmitters.
 - **Observability.** A dependency-free observer interface for both roles
   (SETs received, rejected, handled, emitted and pushed; delivery
   latency; key refreshes) and readiness checks.

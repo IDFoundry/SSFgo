@@ -16,6 +16,7 @@ The public API is every exported identifier in these packages:
 | `.../scim` | SCIM events (RFC 9967) |
 | `.../transmitter`, `.../receiver` | the two roles |
 | `.../storage`, `.../storage/memstore`, `.../storage/storagetest` | persistence contracts and implementations |
+| `.../ssftest` | in-process Transmitter and Receiver for tests |
 
 Not covered: `internal/...` (not importable), `cmd/...` and
 `storage/sqlstore/cmd/...` (conformance harnesses), `examples/...` and
