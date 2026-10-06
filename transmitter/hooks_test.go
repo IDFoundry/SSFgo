@@ -142,3 +142,22 @@ func TestTransmitterReady(t *testing.T) {
 		t.Error("Ready with the store down")
 	}
 }
+
+func TestHookValueNames(t *testing.T) {
+	for o, want := range map[transmitter.PushOutcome]string{
+		transmitter.PushDelivered: "delivered", transmitter.PushRejected: "rejected",
+		transmitter.PushRetry: "retry", transmitter.PushDropped: "dropped", 0: "unknown",
+	} {
+		if got := o.String(); got != want {
+			t.Errorf("PushOutcome %d = %q, want %q", o, got, want)
+		}
+	}
+	for c, want := range map[transmitter.StreamChange]string{
+		transmitter.StreamCreated: "created", transmitter.StreamUpdated: "updated",
+		transmitter.StreamStatusChanged: "status_changed", transmitter.StreamDeleted: "deleted", 0: "unknown",
+	} {
+		if got := c.String(); got != want {
+			t.Errorf("StreamChange %d = %q, want %q", c, got, want)
+		}
+	}
+}

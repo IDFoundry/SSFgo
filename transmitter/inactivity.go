@@ -61,28 +61,33 @@ func (t *Transmitter) ExpireInactiveStreams(ctx context.Context) error {
 		if now.Sub(lastActivity(s)) <= policy.Timeout {
 			continue
 		}
-		const reason = "inactivity timeout"
-		switch policy.Action {
-		case InactivityDelete:
-			if err = t.cfg.Store.DeleteStream(ctx, s.ID); err == nil {
-				t.streamChanged(ctx, s, StreamDeleted, true)
-			}
-		case InactivityDisable:
-			if s.Status != ssf.StreamDisabled {
-				err = t.setStatus(ctx, s.ID, ssf.StreamDisabled, reason, false)
-			}
-		case InactivityPause:
-			if s.Status == ssf.StreamEnabled {
-				err = t.setStatus(ctx, s.ID, ssf.StreamPaused, reason, false)
-			}
-		}
-		if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		if err := t.expireStream(ctx, s, policy.Action); err != nil && !errors.Is(err, storage.ErrNotFound) {
 			errs = append(errs, fmt.Errorf("stream %s: %w", s.ID, err))
 		}
-		err = nil
 	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("transmitter: expire inactive streams: %w", err)
+	}
+	return nil
+}
+
+// expireStream applies action to a stream that has reached its timeout.
+func (t *Transmitter) expireStream(ctx context.Context, s storage.Stream, action InactivityAction) error {
+	const reason = "inactivity timeout"
+	switch action {
+	case InactivityDelete:
+		if err := t.cfg.Store.DeleteStream(ctx, s.ID); err != nil {
+			return err
+		}
+		t.streamChanged(ctx, s, StreamDeleted, true)
+	case InactivityDisable:
+		if s.Status != ssf.StreamDisabled {
+			return t.setStatus(ctx, s.ID, ssf.StreamDisabled, reason, false)
+		}
+	case InactivityPause:
+		if s.Status == ssf.StreamEnabled {
+			return t.setStatus(ctx, s.ID, ssf.StreamPaused, reason, false)
+		}
 	}
 	return nil
 }

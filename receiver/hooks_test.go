@@ -96,3 +96,14 @@ func TestHooksReportPollsAndKeys(t *testing.T) {
 		t.Errorf("failed refetch reports: %v", log.keys)
 	}
 }
+
+func TestSETOutcomeNames(t *testing.T) {
+	for o, want := range map[receiver.SETOutcome]string{
+		receiver.SETHandled: "handled", receiver.SETDuplicate: "duplicate",
+		receiver.SETRejected: "rejected", receiver.SETFailed: "failed", 0: "unknown",
+	} {
+		if got := o.String(); got != want {
+			t.Errorf("%d.String() = %q, want %q", o, got, want)
+		}
+	}
+}
