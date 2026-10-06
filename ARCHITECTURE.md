@@ -237,6 +237,18 @@ RS256 with a 2048-bit key:
 
 See [SECURITY.md](SECURITY.md) for the security model as a whole.
 
+## Observability
+
+`transmitter.Config.Hooks` and `receiver.Config.Hooks` are structs of
+optional callbacks — SET outcomes, polls and key refreshes on the
+Receiver; emits, push attempts, polls served and stream changes on the
+Transmitter — that applications feed into the metrics or tracing system
+they use. A struct of functions, as `net/http/httptrace` uses, rather than
+an interface: a callback can be added in a minor release without breaking
+anyone. They run synchronously and must be quick. `Ready` on each role
+backs a readiness probe: the Receiver holds signing keys fetched within
+`KeyMaxAge` (refetching overdue ones), the Transmitter's store answers.
+
 ## Receiver (v0.4)
 
 `receiver.New(ctx, Config)` fetches the Transmitter Configuration Metadata

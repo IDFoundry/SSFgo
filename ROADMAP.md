@@ -98,9 +98,6 @@ SCIM events (RFC 9967).
 
 Ideas recorded for later; none is committed to.
 
-- **Observability.** A dependency-free observer interface for both roles
-  (SETs received, rejected, handled, emitted and pushed; delivery
-  latency; key refreshes) and readiness checks.
 - **Interoperability.** Testing against deployed Transmitters, such as
   Keycloak's, and handling their conventions — a `session` of `ALL`
   meaning every session, audiences of the form `<client>/<stream>`.

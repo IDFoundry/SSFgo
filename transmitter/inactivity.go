@@ -64,7 +64,9 @@ func (t *Transmitter) ExpireInactiveStreams(ctx context.Context) error {
 		const reason = "inactivity timeout"
 		switch policy.Action {
 		case InactivityDelete:
-			err = t.cfg.Store.DeleteStream(ctx, s.ID)
+			if err = t.cfg.Store.DeleteStream(ctx, s.ID); err == nil {
+				t.streamChanged(ctx, s, StreamDeleted, true)
+			}
 		case InactivityDisable:
 			if s.Status != ssf.StreamDisabled {
 				err = t.setStatus(ctx, s.ID, ssf.StreamDisabled, reason, false)

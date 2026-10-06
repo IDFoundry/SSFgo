@@ -56,16 +56,46 @@ func (e *rejectedSET) Error() string {
 	return "receiver: rejected SET: " + e.code + ": " + e.description
 }
 
-// process verifies, de-duplicates and dispatches one SET. It returns the
-// SET's jti when known; the error is a *rejectedSET for a SET that must not
-// be retried, or any other error for a handler failure that should be.
-func (r *Receiver) process(ctx context.Context, token string) (string, error) {
+// processed is what process learned of a SET: its jti and event type when
+// known, and whether it was a redelivery of one already handled.
+type processed struct {
+	jti       string
+	eventType ssf.EventType
+	duplicate bool
+}
+
+// processObserved is process, reported to Hooks.SET.
+func (r *Receiver) processObserved(ctx context.Context, method ssf.DeliveryMethod, token string) (string, error) {
+	start := r.cfg.Now()
+	p, err := r.process(ctx, token)
+	if r.cfg.Hooks.SET != nil {
+		info := SETInfo{Delivery: method, JTI: p.jti, EventType: p.eventType, Duration: r.cfg.Now().Sub(start), Err: err}
+		switch rej, ok := isRejection(err); {
+		case ok:
+			info.Outcome, info.ErrorCode = SETRejected, rej.code
+		case err != nil:
+			info.Outcome = SETFailed
+		case p.duplicate:
+			info.Outcome = SETDuplicate
+		default:
+			info.Outcome = SETHandled
+		}
+		r.cfg.Hooks.SET(ctx, info)
+	}
+	return p.jti, err
+}
+
+// process verifies, de-duplicates and dispatches one SET. The error is a
+// *rejectedSET for a SET that must not be retried, or any other error for
+// a handler failure that should be.
+func (r *Receiver) process(ctx context.Context, token string) (processed, error) {
 	set, err := r.decode(ctx, token)
 	if err != nil {
-		return "", err
+		return processed{}, err
 	}
+	p := processed{jti: set.JWTID, eventType: set.Event.EventType()}
 	if err := r.checkCriticalMembers(set.Subject); err != nil {
-		return set.JWTID, err
+		return p, err
 	}
 	// A SET is accepted only within ReplayWindow of its "iat", and its
 	// replay record lasts until that window (plus clock skew) ends, so
@@ -73,7 +103,7 @@ func (r *Receiver) process(ctx context.Context, token string) (string, error) {
 	// forgotten.
 	expires := set.IssuedAt.Add(r.cfg.ReplayWindow)
 	if r.cfg.Now().After(expires) {
-		return set.JWTID, &rejectedSET{code: setcodec.CodeInvalidRequest,
+		return p, &rejectedSET{code: setcodec.CodeInvalidRequest,
 			description: "the SET is older than the Receiver's replay window"}
 	}
 	// A redelivery that arrives while this Receiver is still handling the
@@ -84,25 +114,27 @@ func (r *Receiver) process(ctx context.Context, token string) (string, error) {
 	if !first {
 		select {
 		case <-h.done:
-			return set.JWTID, h.err
+			p.duplicate = h.err == nil
+			return p, h.err
 		case <-ctx.Done():
-			return set.JWTID, ctx.Err()
+			return p, ctx.Err()
 		}
 	}
 	defer r.finishHandling(set, h)
 	fresh, err := r.cfg.ReplayStore.MarkSET(ctx, set.Issuer, set.JWTID, expires.Add(r.cfg.MaxClockSkew))
 	if err != nil {
 		h.err = fmt.Errorf("receiver: replay store: %w", err)
-		return set.JWTID, h.err
+		return p, h.err
 	}
 	if !fresh {
 		// A redelivery (RFC 8935 §2, RFC 8936 §2.4) of a SET already
 		// handled: acknowledge it again without handling it twice.
 		h.err = nil
-		return set.JWTID, nil
+		p.duplicate = true
+		return p, nil
 	}
 	h.err = r.dispatchOrForget(ctx, set)
-	return set.JWTID, h.err
+	return p, h.err
 }
 
 // setKey identifies a SET across Transmitters.

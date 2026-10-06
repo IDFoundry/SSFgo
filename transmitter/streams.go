@@ -229,6 +229,7 @@ func (t *Transmitter) createStream(w http.ResponseWriter, r *http.Request, rx Re
 		t.serverError(w, r, op, err)
 		return
 	}
+	t.streamChanged(r.Context(), s, StreamCreated, false)
 	if t.cfg.VerifyNewStreams {
 		if err := t.SendVerification(r.Context(), s.ID); err != nil {
 			// The stream exists; a failed verification must not fail
@@ -368,6 +369,7 @@ func (t *Transmitter) modifyStream(w http.ResponseWriter, r *http.Request, rx Re
 		return
 	}
 	t.touch(r.Context(), s)
+	t.streamChanged(r.Context(), s, StreamUpdated, false)
 	writeJSON(w, http.StatusOK, t.configuration(s))
 }
 
@@ -435,6 +437,9 @@ func (t *Transmitter) deleteStream(w http.ResponseWriter, r *http.Request, rx Re
 		return
 	}
 	err = t.cfg.Store.DeleteStream(r.Context(), id)
+	if err == nil {
+		t.streamChanged(r.Context(), s, StreamDeleted, false)
+	}
 	if errors.Is(err, storage.ErrNotFound) {
 		t.writeAPIError(w, r, op, errStreamNotFound)
 		return

@@ -44,15 +44,24 @@ func (t *Transmitter) EmitTxn(ctx context.Context, txn string, subject ssf.Subje
 		return fmt.Errorf("transmitter: emit: %w", err)
 	}
 	var errs []error
+	queued := 0
 	for _, s := range streams {
-		if err := t.emitTo(ctx, s, subject, event, txn); err != nil {
+		ok, err := t.emitTo(ctx, s, subject, event, txn)
+		if err != nil {
 			errs = append(errs, fmt.Errorf("stream %s: %w", s.ID, err))
 		}
+		if ok {
+			queued++
+		}
 	}
-	if err := errors.Join(errs...); err != nil {
-		return fmt.Errorf("transmitter: emit: %w", err)
+	err = errors.Join(errs...)
+	if err != nil {
+		err = fmt.Errorf("transmitter: emit: %w", err)
 	}
-	return nil
+	if t.cfg.Hooks.Emit != nil {
+		t.cfg.Hooks.Emit(ctx, EmitInfo{EventType: event.EventType(), Streams: len(streams), Queued: queued, Err: err})
+	}
+	return err
 }
 
 // checkEmit validates an event and its subject before anything is queued.
@@ -85,27 +94,28 @@ func (t *Transmitter) checkEmit(subject ssf.Subject, event ssf.Event) error {
 // emitTo queues event on stream s if the stream should get it: not
 // disabled, the event type delivered, the subject included, and
 // PermitEvent allowing it. A stream deleted meanwhile is skipped.
-func (t *Transmitter) emitTo(ctx context.Context, s storage.Stream, subject ssf.Subject, event ssf.Event, txn string) error {
+func (t *Transmitter) emitTo(ctx context.Context, s storage.Stream, subject ssf.Subject, event ssf.Event, txn string) (queued bool, err error) {
 	if s.Status == ssf.StreamDisabled || !slices.Contains(s.EventsDelivered, event.EventType()) {
-		return nil
+		return false, nil
 	}
 	rules, err := t.cfg.Store.SubjectRules(ctx, s.ID)
 	if errors.Is(err, storage.ErrNotFound) {
-		return nil
+		return false, nil
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !t.includes(rules, subject) {
-		return nil
+		return false, nil
 	}
 	if !t.cfg.PermitEvent(ctx, s.ReceiverID, subject, event) {
-		return nil
+		return false, nil
 	}
-	if err := t.enqueue(ctx, s, subject, event, txn, false); err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return err
+	err = t.enqueue(ctx, s, subject, event, txn, false)
+	if errors.Is(err, storage.ErrNotFound) {
+		return false, nil
 	}
-	return nil
+	return err == nil, err
 }
 
 // includes applies a stream's subject rules to subject: the last rule whose
@@ -157,6 +167,7 @@ func (t *Transmitter) setStatus(ctx context.Context, streamID string, status ssf
 	if previous == status {
 		return nil
 	}
+	t.streamChanged(ctx, s, StreamStatusChanged, true)
 	if status == ssf.StreamDisabled {
 		if err := t.cfg.Store.PurgeEvents(ctx, streamID); err != nil {
 			return fmt.Errorf("transmitter: set stream status: %w", err)

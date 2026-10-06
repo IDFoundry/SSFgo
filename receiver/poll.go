@@ -75,6 +75,16 @@ type PollResult struct {
 // handler fails is neither acknowledged nor reported, so the Transmitter
 // returns it again.
 func (r *Receiver) Poll(ctx context.Context, stream ssf.StreamConfiguration, opts PollOptions) (PollResult, error) {
+	start := r.cfg.Now()
+	res, err := r.poll(ctx, stream, opts)
+	if r.cfg.Hooks.Poll != nil {
+		r.cfg.Hooks.Poll(ctx, PollInfo{StreamID: stream.StreamID, Received: res.Received, Duration: r.cfg.Now().Sub(start), Err: err})
+	}
+	return res, err
+}
+
+// poll is Poll without reporting it.
+func (r *Receiver) poll(ctx context.Context, stream ssf.StreamConfiguration, opts PollOptions) (PollResult, error) {
 	if stream.Delivery.Method != ssf.DeliveryPoll || stream.Delivery.EndpointURL == "" {
 		return PollResult{}, errors.New("receiver: the stream does not use poll delivery")
 	}
@@ -103,7 +113,7 @@ func (r *Receiver) Poll(ctx context.Context, stream ssf.StreamConfiguration, opt
 			break
 		}
 		handled++
-		got, err := r.process(ctx, token)
+		got, err := r.processObserved(ctx, ssf.DeliveryPoll, token)
 		if got == "" {
 			got = jti
 		}

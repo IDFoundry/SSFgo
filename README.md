@@ -105,6 +105,21 @@ rev.Register(rx)                     // session-revoked, account-disabled, ...
 api = rev.Middleware(tokenOf, api)   // 401 for a token issued before its revocation
 ```
 
+Both roles report what they do through optional `Hooks` in their config,
+for metrics or traces without a dependency on any metrics library, and
+answer readiness probes with `Ready`:
+
+```go
+cfg.Hooks = receiver.Hooks{SET: func(ctx context.Context, i receiver.SETInfo) {
+	setsTotal.WithLabelValues(string(i.EventType), i.Outcome.String()).Inc() // e.g. Prometheus
+}}
+http.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+	if err := rx.Ready(r.Context()); err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+	}
+})
+```
+
 To test an application that plays one role, [`ssftest`](ssftest) runs the
 other in-process: `ssftest.NewTransmitter` for testing a Receiver,
 `ssftest.NewReceiver` for testing a Transmitter.

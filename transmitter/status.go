@@ -82,5 +82,6 @@ func (t *Transmitter) updateStatus(w http.ResponseWriter, r *http.Request, rx Re
 	}
 	t.notify.notify(id)
 	t.touch(r.Context(), s)
+	t.streamChanged(r.Context(), s, StreamStatusChanged, false)
 	writeJSON(w, http.StatusOK, stateOf(s))
 }
