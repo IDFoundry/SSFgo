@@ -211,11 +211,39 @@ func (t *Transmitter) deliverOne(ctx context.Context, s storage.Stream, e storag
 		// The Receiver says the SET itself is invalid; retrying will not
 		// change that (RFC 8935 §2.3).
 		t.log.WarnContext(ctx, "ssf transmitter: receiver rejected a pushed SET", "stream_id", s.ID, "jti", e.JTI, "error", detail)
+	case pushRejectedTransient:
+		if t.pushes.failures(s.ID)+1 < transientRejectAttempts {
+			t.log.WarnContext(ctx, "ssf transmitter: receiver rejected a pushed SET, will retry", "stream_id", s.ID, "jti", e.JTI, "error", detail)
+			return true
+		}
+		t.log.ErrorContext(ctx, "ssf transmitter: dropping SET the receiver kept rejecting", "stream_id", s.ID, "jti", e.JTI, "attempts", transientRejectAttempts, "error", detail)
 	default:
 		t.log.WarnContext(ctx, "ssf transmitter: push delivery failed, will retry", "stream_id", s.ID, "jti", e.JTI, "error", detail)
 		return true
 	}
+	// The SET is done with: the next one starts with no failures.
+	t.pushes.reset(s.ID)
 	return t.dequeue(ctx, s.ID, e.JTI)
+}
+
+// transientRejectAttempts is how many times a SET is tried while the
+// Receiver rejects it with an error that may clear on its own (see
+// transientRejection). With the default backoff the attempts span about
+// four minutes — longer than a Receiver takes to refetch a rotated JWKS —
+// and the bound keeps one such SET from holding up its stream for good.
+const transientRejectAttempts = 8
+
+// transientRejection reports whether a Receiver's RFC 8935 error code may
+// clear without the SET changing (RFC 8935 §2.3, §4): invalid_key while
+// the Receiver has yet to fetch a rotated signing key, or
+// authentication_failed and access_denied while a credential is being
+// updated.
+func transientRejection(code string) bool {
+	switch code {
+	case "invalid_key", "authentication_failed", "access_denied":
+		return true
+	}
+	return false
 }
 
 // dequeue removes a SET from a stream's queue, reporting whether that
@@ -234,6 +262,7 @@ type pushOutcome int
 const (
 	pushDelivered pushOutcome = iota
 	pushRejected
+	pushRejectedTransient
 	pushRetry
 )
 
@@ -267,6 +296,9 @@ func (t *Transmitter) push(ctx context.Context, d ssf.Delivery, e storage.Queued
 			Description string `json:"description"`
 		}
 		if json.Unmarshal(body, &e) == nil && e.Err != "" {
+			if transientRejection(e.Err) {
+				return pushRejectedTransient, fmt.Sprintf("%s: %s", e.Err, e.Description)
+			}
 			return pushRejected, fmt.Sprintf("%s: %s", e.Err, e.Description)
 		}
 		return pushRetry, "HTTP 400 without an RFC 8935 error body"

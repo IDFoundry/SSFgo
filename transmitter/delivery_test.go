@@ -580,6 +580,115 @@ func TestPushMaxAttempts(t *testing.T) {
 	})
 }
 
+// A rejection that may clear on its own — the Receiver has yet to fetch a
+// rotated key, say — is retried rather than taken as final.
+func TestPushRetriesTransientRejection(t *testing.T) {
+	rx := newPushReceiver(t)
+	rx.respond = func(n int) (int, string) {
+		if n <= 2 {
+			return http.StatusBadRequest, `{"err":"invalid_key","description":"no key matches kid"}`
+		}
+		return http.StatusAccepted, ""
+	}
+	f := newFixture(t, func(c *transmitter.Config) {
+		c.HTTPClient = rx.srv.Client()
+		c.PushRetry = transmitter.PushRetryPolicy{MinBackoff: 10 * time.Millisecond, MaxBackoff: 20 * time.Millisecond}
+	})
+	c := pushStream(f, rx, "")
+	runTransmitter(t, f)
+	ctx := context.Background()
+	if err := f.tx.Emit(ctx, bob, revoked()); err != nil {
+		t.Fatal(err)
+	}
+	rx.wait(t, 3)
+	rx.mu.Lock()
+	if rx.bodies[0] != rx.bodies[2] {
+		t.Error("the retry did not resend the same SET")
+	}
+	rx.mu.Unlock()
+	waitFor(t, func() bool {
+		q, _ := f.store.PendingEvents(ctx, c.StreamID, 0, false)
+		return len(q) == 0
+	})
+}
+
+// A rejection that does not clear is retried a bounded number of times,
+// then the SET is dropped so the stream is not held up for good.
+func TestPushGivesUpOnPersistentTransientRejection(t *testing.T) {
+	const attempts = 8
+	rx := newPushReceiver(t)
+	rx.respond = func(n int) (int, string) {
+		if n <= attempts {
+			return http.StatusBadRequest, `{"err":"authentication_failed","description":"no"}`
+		}
+		return http.StatusAccepted, ""
+	}
+	f := newFixture(t, func(c *transmitter.Config) {
+		c.HTTPClient = rx.srv.Client()
+		c.PushRetry = transmitter.PushRetryPolicy{MinBackoff: time.Millisecond, MaxBackoff: 5 * time.Millisecond}
+	})
+	c := pushStream(f, rx, "")
+	runTransmitter(t, f)
+	ctx := context.Background()
+	if err := f.tx.Emit(ctx, bob, revoked()); err != nil {
+		t.Fatal(err)
+	}
+	rx.wait(t, attempts)
+	cc := caep.CredentialChange{CredentialType: caep.CredentialPIN, ChangeType: caep.ChangeCreate, Common: caep.Common{ReasonAdmin: ssf.LocalizedText{"en": "x"}}}
+	if err := f.tx.Emit(ctx, bob, cc); err != nil {
+		t.Fatal(err)
+	}
+	rx.wait(t, 1)
+	rx.mu.Lock()
+	next := rx.bodies[attempts]
+	rx.mu.Unlock()
+	if _, ok := f.decodeSET(next, "https://bob.example").Event.(caep.CredentialChange); !ok {
+		t.Error("after the dropped SET, the next one should be delivered")
+	}
+	waitFor(t, func() bool {
+		q, _ := f.store.PendingEvents(ctx, c.StreamID, 0, false)
+		return len(q) == 0
+	})
+}
+
+// Each SET gets its full MaxAttempts: failures of the SET before it do not
+// count against it.
+func TestPushAttemptsCountPerSET(t *testing.T) {
+	rx := newPushReceiver(t)
+	rx.respond = func(n int) (int, string) {
+		switch n {
+		case 1, 2, 4: // the first SET fails twice; the second fails once
+			return http.StatusBadGateway, ""
+		}
+		return http.StatusAccepted, ""
+	}
+	f := newFixture(t, func(c *transmitter.Config) {
+		c.HTTPClient = rx.srv.Client()
+		c.PushRetry = transmitter.PushRetryPolicy{MinBackoff: 10 * time.Millisecond, MaxBackoff: 20 * time.Millisecond, MaxAttempts: 3}
+	})
+	c := pushStream(f, rx, "")
+	ctx := context.Background()
+	if err := f.tx.Emit(ctx, bob, revoked()); err != nil {
+		t.Fatal(err)
+	}
+	cc := caep.CredentialChange{CredentialType: caep.CredentialPIN, ChangeType: caep.ChangeCreate, Common: caep.Common{ReasonAdmin: ssf.LocalizedText{"en": "x"}}}
+	if err := f.tx.Emit(ctx, bob, cc); err != nil {
+		t.Fatal(err)
+	}
+	runTransmitter(t, f)
+	rx.wait(t, 5)
+	rx.mu.Lock()
+	fourth, fifth := rx.bodies[3], rx.bodies[4]
+	rx.mu.Unlock()
+	if fourth != fifth {
+		t.Error("the second SET was dropped after one attempt instead of retried")
+	}
+	waitFor(t, func() bool {
+		q, _ := f.store.PendingEvents(ctx, c.StreamID, 0, false)
+		return len(q) == 0
+	})
+}
+
 // With the default client, a push to a Receiver on a private address is
 // refused and retried rather than sent.
 func TestDefaultClientRefusesPrivatePushEndpoints(t *testing.T) {

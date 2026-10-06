@@ -204,7 +204,11 @@ RS256 with a 2048-bit key:
   proxy. Deployments with Receivers on a private network pass their own
   `HTTPClient`.
 - **Retries.** `Config.PushRetry` sets the backoff bounds and an optional
-  attempt cap after which a SET is dropped and logged.
+  attempt cap after which a SET is dropped and logged; each SET gets the
+  full cap. An RFC 8935 error that may clear on its own — `invalid_key`
+  while the Receiver fetches a rotated key, `authentication_failed` or
+  `access_denied` while a credential is updated — is retried up to eight
+  times; any other RFC 8935 error drops the SET at once.
 - **Keys.** The Receiver refetches the JWKS after `KeyMaxAge` (24 h by
   default) so retired keys stop being trusted, and when a SET names an
   unknown key; all refetches are rate-limited to one a minute and a failed

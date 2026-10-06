@@ -117,7 +117,3 @@ Ideas recorded for later; none is committed to.
   on loopback addresses.
 - **Conformance kit.** Starting the OIDF suite from Go tests, rather than
   only from the shell scripts.
-
-Open questions from the spec review: keeping SETs a Receiver rejects
-with a likely transient `invalid_key` or `authentication_failed`, and the
-Interop Receiver check requiring both push and poll.

@@ -39,6 +39,9 @@ func CheckTransmitterMetadata(md ssf.TransmitterMetadata) error {
 	if !specVersionAtLeast10(md.SpecVersion) {
 		errs = append(errs, fmt.Errorf("§2.3.1: spec_version must be 1_0 or greater, got %q", md.SpecVersion))
 	}
+	// §2.3.2 requires the field but not both methods in it: §2.3.8.1 is
+	// about the Create Stream requests a Transmitter handles, and the OIDF
+	// suite's emulated Transmitter lists only the method of the run.
 	if len(md.DeliveryMethodsSupported) == 0 {
 		errs = append(errs, errors.New("§2.3.2: delivery_methods_supported is required"))
 	}
