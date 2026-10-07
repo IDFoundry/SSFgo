@@ -42,7 +42,7 @@ github.com/idfoundry/ssfgo     // package ssf: shared value types only
 │   └── testcert/              // throwaway TLS certificates for the harnesses
 ├── cmd/conformance-transmitter/ // the conformance Transmitter on memstore
 ├── cmd/conformance-receiver/  // drives the Receiver through OIDF Receiver plans
-├── examples/session-revocation/ // both roles in one process
+├── examples/session-revocation/ // both roles in one process (its own module)
 └── conformance/               // suite configs, run scripts, recorded results
 ```
 

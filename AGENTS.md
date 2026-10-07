@@ -47,6 +47,10 @@ lives.
   the module, `go mod edit -dropreplace=github.com/idfoundry/ssfgo`,
   `GOFLAGS=-mod=mod go vet ./...`.
 - `.github/workflows/fuzz.yml` lists every fuzz target.
+- Each example under `examples/` is its own module, so root `go test`
+  skips it; the `examples` job builds, tests and checks it uses only the
+  public API. A new example adds itself to that job's matrix. Run them
+  locally from the example's directory.
 
 ## Where conformance knowledge lives
 
