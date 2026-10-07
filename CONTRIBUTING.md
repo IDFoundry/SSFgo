@@ -20,8 +20,8 @@ expose; hooks that cannot take down the process.
 - `gofmt -l .`, `go vet ./...`, `go test -race ./...` and
   `golangci-lint run ./...` are clean — CI enforces them, along with
   `govulncheck` and `actionlint`.
-- `storage/sqlstore` is its own module: run the same checks in that
-  directory. Its tests use SQLite, and PostgreSQL too when
+- `storage/sqlstore` and each example under `examples/` are their own
+  modules: run the same checks in those directories. Its tests use SQLite, and PostgreSQL too when
   `SSFGO_TEST_POSTGRES` holds a URL, for example
   `postgres://postgres@localhost:5432/postgres?sslmode=disable`
   (`docker run -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432:5432 postgres:17-alpine`).

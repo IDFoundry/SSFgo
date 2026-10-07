@@ -101,7 +101,8 @@ revocations, err := sqlstore.NewRevocationStore(db, sqlstore.Postgres) // revoca
 ```
 
 [`examples/session-revocation`](examples/session-revocation) runs both
-sides in one process: `go run ./examples/session-revocation`.
+sides in one process: `cd examples/session-revocation && go run .`. Like
+every example, it is its own module and uses only the public API.
 
 To revoke tokens as events arrive, [`revocation`](revocation) records
 what session-revoked, account-disabled and similar events mean and checks

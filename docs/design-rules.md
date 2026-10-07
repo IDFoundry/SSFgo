@@ -176,9 +176,9 @@ An unsafe choice needs more code and a name that says what it does.
 - Every exported symbol has a doc comment. It states the field's unit,
   what zero means, its bounds and its security consequence.
 - The README shows a working configuration for each role.
-- Runnable examples in `examples/` are tested in CI and use only the
-  public API. *(adopting: each example becomes its own module, with a
-  check that it imports nothing internal.)*
+- Runnable examples in `examples/` are each their own module, built
+  against the checkout, tested in CI, and checked to use only the public
+  API.
 - `GETTING_STARTED.md` walks through each role, and `docs/guides/` has
   one guide per feature. *(adopting)*
 
@@ -213,5 +213,5 @@ An unsafe choice needs more code and a name that says what it does.
 | 8 | `EnsureStream` retries TLS alerts; push failures are counted per stream | #47 |
 | 9 | `EnsureStream` replaces the only stream on 409 | #47 |
 | 10 | There were no assurance levels or store capabilities | #52 |
-| 14 | Examples share the root module; no `GETTING_STARTED.md` or guides | Examples and guides PRs |
+| 14 | Examples shared the root module, now fixed in #54; there is no `GETTING_STARTED.md` or guides yet | Guides PR |
 | 15 | There was no `UPGRADING.md` or `AGENTS.md`; release-please is not set up | #53; release-please when v1 is cut |
