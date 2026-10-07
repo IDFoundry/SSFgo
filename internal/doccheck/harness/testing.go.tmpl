@@ -1,0 +1,31 @@
+package main
+
+import (
+	"context"
+	"net/http"
+	"testing"
+	"time"
+
+	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/caep"
+	"github.com/idfoundry/ssfgo/receiver"
+	"github.com/idfoundry/ssfgo/ssftest"
+)
+
+// What docs/guides/testing.md marks as the application's own.
+type app struct{}
+
+func (*app) signedIn(ssf.Subject) bool { return false }
+
+func newApp(*receiver.Receiver) *app                                    { return &app{} }
+func startTransmitter(*testing.T, *http.Client) (any, string, *http.Client) { return nil, "", nil }
+func revokeSession(*testing.T, any, string)                             {}
+
+// SNIPPETS docs/guides/testing.md "## Testing a Receiver"
+
+// SNIPPETS docs/guides/testing.md "## Testing a Transmitter"
+
+func main() {
+	_, _ = TestRevokedSessionEnded, TestSessionRevokedDelivered
+	_, _, _, _ = context.Background, time.Now, caep.Register, ssftest.NewReceiver
+}

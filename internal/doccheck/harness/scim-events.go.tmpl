@@ -1,0 +1,30 @@
+package main
+
+import (
+	"context"
+
+	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/receiver"
+	"github.com/idfoundry/ssfgo/scim"
+	"github.com/idfoundry/ssfgo/transmitter"
+)
+
+func refreshFromSCIM(context.Context, string, []string) error { return nil }
+func disableAccount(context.Context, string) error           { return nil }
+
+func transmitterSide(ctx context.Context, tx *transmitter.Transmitter) error {
+	// SNIPPETS docs/guides/scim-events.md "## A Transmitter"
+	return nil
+}
+
+func receiverSide(ctx context.Context, rx *receiver.Receiver) error {
+	// SNIPPETS docs/guides/scim-events.md "## A Receiver"
+	return nil
+}
+
+func main() {
+	_ = transmitterSide(context.Background(), nil)
+	_ = receiverSide(context.Background(), nil)
+	_ = ssf.SCIMSubject{}
+	_ = scim.Register
+}

@@ -1,0 +1,51 @@
+package main
+
+import (
+	"context"
+	"crypto"
+	"database/sql"
+	"log"
+	"log/slog"
+	"net/http"
+	"os"
+	"time"
+
+	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/caep"
+	"github.com/idfoundry/ssfgo/receiver"
+	"github.com/idfoundry/ssfgo/storage/sqlstore"
+	"github.com/idfoundry/ssfgo/transmitter"
+)
+
+// What GETTING_STARTED.md marks as the application's own.
+type client struct {
+	ID, URI string
+	Scopes  []string
+}
+
+func loadSigningKey() (crypto.Signer, error)                    { return nil, nil }
+func verifyAccessToken(context.Context, string) (client, error) { return client{}, nil }
+func tenantOwns(context.Context, string, ssf.Subject) bool      { return true }
+func endSessions(context.Context, ssf.Subject) error            { return nil }
+func randomToken() string                                       { return "" }
+
+var (
+	dsn, certFile, keyFile string
+	newKey                 crypto.Signer
+)
+
+func transmitterPart(ctx context.Context) error {
+	// SNIPPETS GETTING_STARTED.md "## Part 1: a Transmitter"
+	return err
+}
+
+func receiverPart(ctx context.Context, db *sql.DB) error {
+	// SNIPPETS GETTING_STARTED.md "## Part 2: a Receiver"
+	return nil
+}
+
+func main() {
+	_ = transmitterPart(context.Background())
+	_ = receiverPart(context.Background(), nil)
+	_, _, _, _ = slog.Default, os.Getenv, log.Fatal, time.Now
+}

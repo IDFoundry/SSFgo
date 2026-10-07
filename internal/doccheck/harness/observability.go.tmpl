@@ -1,0 +1,32 @@
+package main
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+
+	"github.com/idfoundry/ssfgo/receiver"
+	"github.com/idfoundry/ssfgo/transmitter"
+)
+
+// What docs/guides/observability.md marks as the application's own.
+type metricsSink struct{}
+
+func (metricsSink) Count(string, ...string)    {}
+func (metricsSink) Observe(string, float64)    {}
+
+var metrics metricsSink
+
+func hooks(rxCfg *receiver.Config, txCfg *transmitter.Config) {
+	// SNIPPETS docs/guides/observability.md "## Metrics"
+}
+
+func readiness(rx *receiver.Receiver) {
+	// SNIPPETS docs/guides/observability.md "## Readiness"
+}
+
+func main() {
+	hooks(&receiver.Config{}, &transmitter.Config{})
+	readiness(nil)
+	_, _, _ = context.Background, slog.Default, http.Error
+}

@@ -1,0 +1,34 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"net/url"
+	"strings"
+
+	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/receiver"
+	"github.com/idfoundry/ssfgo/transmitter"
+)
+
+func randomToken() string { return "" }
+
+func push(ctx context.Context, rx *receiver.Receiver, cfg transmitter.Config) error {
+	// SNIPPETS docs/guides/push-or-poll.md "## Push"
+	_ = stream
+	return nil
+}
+
+func poll(ctx context.Context, rx *receiver.Receiver) error {
+	// SNIPPETS docs/guides/push-or-poll.md "## Poll"
+	// SNIPPETS docs/guides/push-or-poll.md "## Either way"
+	return nil
+}
+
+func main() {
+	_ = push(context.Background(), nil, transmitter.Config{})
+	_ = poll(context.Background(), nil)
+	_, _, _ = ssf.DeliveryPush, http.Handle, url.Parse
+	_, _ = strings.HasSuffix, errors.New
+}

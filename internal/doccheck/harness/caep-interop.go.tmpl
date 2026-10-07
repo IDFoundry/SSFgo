@@ -1,0 +1,33 @@
+package main
+
+import (
+	"context"
+	"crypto"
+	"time"
+
+	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/caep"
+	"github.com/idfoundry/ssfgo/caep/interop"
+	"github.com/idfoundry/ssfgo/receiver"
+	"github.com/idfoundry/ssfgo/storage"
+	"github.com/idfoundry/ssfgo/transmitter"
+)
+
+func transmitterSide(ctx context.Context, key crypto.Signer, tx *transmitter.Transmitter) error {
+	var err error
+	// SNIPPETS docs/guides/caep-interop.md "## A Transmitter"
+	_, _ = cfg, time.Now
+	return err
+}
+
+func receiverSide(ctx context.Context, registry *ssf.Registry, tokens receiver.TokenSource, replay storage.ReplayStore) error {
+	// SNIPPETS docs/guides/caep-interop.md "## A Receiver"
+	_ = rx
+	return nil
+}
+
+func main() {
+	_ = transmitterSide(context.Background(), nil, nil)
+	_ = receiverSide(context.Background(), nil, nil, nil)
+	_ = caep.SessionRevokedEventType
+}

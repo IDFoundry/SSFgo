@@ -34,7 +34,10 @@ itself.
 ## Usage
 
 [GETTING_STARTED.md](GETTING_STARTED.md) walks through embedding each
-role step by step. In brief:
+role step by step, and [docs/guides](docs/guides) covers one feature
+each — session revocation, push or poll, the CAEP Interoperability
+Profile, SCIM events, storage and scaling, testing and observability. In
+brief:
 
 A Transmitter — for example inside an identity provider — serves the SSF
 endpoints and emits events:

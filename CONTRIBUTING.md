@@ -46,7 +46,9 @@ expose; hooks that cannot take down the process.
   [`conformance/scripts/run-all.sh`](conformance/scripts/run-all.sh) runs
   the full matrix against a local suite (see
   [conformance/README.md](conformance/README.md)).
-- Public API changes respect [COMPATIBILITY.md](COMPATIBILITY.md).
+- Public API changes respect [COMPATIBILITY.md](COMPATIBILITY.md), and
+  update the documentation they affect: `go run ./internal/doccheck`
+  builds the code in `GETTING_STARTED.md` and `docs/guides`.
 - Agents: see also [AGENTS.md](AGENTS.md).
 
 ## Commit messages

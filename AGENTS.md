@@ -47,6 +47,11 @@ lives.
   the module, `go mod edit -dropreplace=github.com/idfoundry/ssfgo`,
   `GOFLAGS=-mod=mod go vet ./...`.
 - `.github/workflows/fuzz.yml` lists every fuzz target.
+- `go run ./internal/doccheck` builds the Go code in `GETTING_STARTED.md`
+  and `docs/guides` against the checkout. A new guide's code needs a
+  harness in `internal/doccheck/harness`, with stubs for what the guide
+  marks as the application's own; the check fails on any code block no
+  harness covers.
 - Each example under `examples/` is its own module, so root `go test`
   skips it; the `examples` job builds, tests and checks it uses only the
   public API. A new example adds itself to that job's matrix. Run them
