@@ -10,7 +10,7 @@
 // act on the event, EnsureStream to set up its stream, and Hooks to observe
 // both roles.
 //
-//	go run ./examples/session-revocation
+//	cd examples/session-revocation && go run .
 package main
 
 import (
