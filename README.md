@@ -33,6 +33,9 @@ itself.
 
 ## Usage
 
+[GETTING_STARTED.md](GETTING_STARTED.md) walks through embedding each
+role step by step. In brief:
+
 A Transmitter — for example inside an identity provider — serves the SSF
 endpoints and emits events:
 
