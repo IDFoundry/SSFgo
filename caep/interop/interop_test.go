@@ -23,6 +23,7 @@ func config(t *testing.T) transmitter.Config {
 		t.Fatal(err)
 	}
 	return transmitter.Config{
+		Assurance:       ssf.AssuranceDevelopment,
 		Limits:          transmitter.RecommendedLimits(),
 		PushRetry:       transmitter.RecommendedPushRetry(),
 		PermitEvent:     transmitter.PermitAll,

@@ -9,6 +9,7 @@
 //		Issuers:   revocation.SameIssuer, // the identity provider is its own Transmitter
 //		Events:    revocation.RecommendedEvents(),
 //		Retention: 24 * time.Hour, // at least the longest token lifetime
+//		Assurance: ssf.AssuranceDevelopment, // production needs a durable store
 //	})
 //	rev.Register(rx) // handle the events of Options.Events
 //	api := rev.Middleware(func(r *http.Request) (revocation.Token, bool) {

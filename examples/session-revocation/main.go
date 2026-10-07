@@ -97,6 +97,7 @@ func run(ctx context.Context, w io.Writer) error {
 	var rpServer atomic.Pointer[httptest.Server] // the relying party, created below
 
 	txCfg := transmitter.Config{
+		Assurance:       ssf.AssuranceDevelopment,
 		Limits:          transmitter.RecommendedLimits(),
 		PushRetry:       transmitter.RecommendedPushRetry(),
 		Issuer:          issuer,
@@ -144,6 +145,7 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	rx, err := receiver.New(ctx, receiver.Config{
+		Assurance:   ssf.AssuranceDevelopment,
 		Limits:      receiver.RecommendedLimits(),
 		Issuer:      issuer,
 		Audience:    "https://rp.example",
@@ -170,6 +172,7 @@ func run(ctx context.Context, w io.Writer) error {
 	revoked := make(chan struct{})
 	var once sync.Once
 	rev, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{
+		Assurance: ssf.AssuranceDevelopment,
 		Issuers:   revocation.SameIssuer, // the IdP is its own Transmitter
 		Events:    revocation.RecommendedEvents(),
 		Retention: time.Hour, // the longest access token lifetime

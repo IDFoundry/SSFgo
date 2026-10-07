@@ -130,14 +130,19 @@ application's stream, say) returns the conflict instead of overwriting
 it. An explicit field such as `ReplaceOnConflict` makes overwriting the
 caller's decision.
 
-### 10. Production refuses development shortcuts *(adopting)*
+### 10. Production refuses development shortcuts
 
-- An assurance setting lets production deployments refuse in-memory
-  stores.
-- A setting for horizontally scaled deployments requires stores that
-  declare cross-instance consistency.
-- Development conveniences, such as plain HTTP on loopback, are opt-in
-  and refused in production.
+- Every role takes a required `ssf.Assurance`. Under
+  `AssuranceProduction`, each store it depends on must declare itself
+  durable through `storage.Capabilities`, so an in-memory store cannot
+  reach production by accident.
+- `HorizontallyScaled` also requires stores that declare consistency
+  across instances.
+- Configured issuers and endpoints must not be loopback hosts in
+  production. Development conveniences added later, such as plain HTTP
+  on loopback, are opt-in and refused in production the same way.
+- Store capabilities are the implementer's own declaration; the
+  `storagetest` contract suites check what is observable.
 
 ### 11. Every finding is reproduced before it is fixed
 
@@ -207,6 +212,6 @@ An unsafe choice needs more code and a name that says what it does.
 | 7 | `Hooks.KeysRefreshed` runs on the detached key-refresh goroutine | #47 |
 | 8 | `EnsureStream` retries TLS alerts; push failures are counted per stream | #47 |
 | 9 | `EnsureStream` replaces the only stream on 409 | #47 |
-| 10 | No assurance levels or store capabilities | Assurance PR |
+| 10 | There were no assurance levels or store capabilities | #52 |
 | 14 | Examples share the root module; no `GETTING_STARTED.md` or guides | Examples and guides PRs |
 | 15 | No release-please, `UPGRADING.md` or `AGENTS.md` | Release tooling PR |

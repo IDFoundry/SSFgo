@@ -44,6 +44,7 @@ tx, err := transmitter.New(transmitter.Config{
 	DeliveryMethods: []ssf.DeliveryMethod{ssf.DeliveryPush, ssf.DeliveryPoll},
 	DefaultSubjects: ssf.DefaultSubjectsAll,
 	Store:           memstore.NewStreamStore(),
+	Assurance:       ssf.AssuranceDevelopment, // AssuranceProduction refuses in-memory stores: use storage/sqlstore
 	Authorize:       authorizeAccessToken, // your OAuth resource-server check
 	PermitEvent:     permitEvent,          // which Receiver may see which subject's events
 	Limits:          transmitter.RecommendedLimits(),
@@ -68,6 +69,7 @@ rx, err := receiver.New(ctx, receiver.Config{
 	Algorithms:  []ssf.SignatureAlgorithm{ssf.RS256},
 	TokenSource: &receiver.ClientCredentials{TokenURL: tokenURL, ClientID: id, ClientSecret: ssf.NewSecret(secret), AuthMethod: receiver.ClientSecretBasic},
 	ReplayStore: memstore.NewReplayStore(),
+	Assurance:   ssf.AssuranceDevelopment,
 	Limits:      receiver.RecommendedLimits(), // replay window, key age, clock skew
 })
 // Optional: interop.ApplyReceiver(&cfg) before receiver.New holds the
@@ -84,8 +86,10 @@ stream, err := rx.EnsureStream(ctx, receiver.StreamRequest{Delivery: &ssf.Delive
 }})
 ```
 
-`memstore` keeps everything in memory. To survive restarts, or to run
-several Transmitter instances on one database, use `storage/sqlstore`:
+`memstore` keeps everything in memory, so `ssf.AssuranceProduction`
+refuses it. To survive restarts, or to run several instances on one
+database (`HorizontallyScaled`, which needs PostgreSQL), use
+`storage/sqlstore`:
 
 ```go
 // go get github.com/idfoundry/ssfgo/storage/sqlstore
@@ -108,6 +112,7 @@ rev, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{
 	Issuers:   revocation.SameIssuer,           // or StaticTokenIssuers{transmitter: tokenIssuer}
 	Events:    revocation.RecommendedEvents(),  // session-revoked, account-disabled, ...
 	Retention: 24 * time.Hour,                  // at least the longest token lifetime
+	Assurance: ssf.AssuranceDevelopment,        // production needs a durable store, e.g. sqlstore
 })
 rev.Register(rx)
 api = rev.Middleware(tokenOf, api)   // 401 for a token issued before its revocation

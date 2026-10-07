@@ -74,6 +74,7 @@ func newFixture(t testing.TB, mutate ...func(*transmitter.Config)) *fixture {
 	f.issuer = f.srv.URL + "/tenant-a"
 
 	cfg := transmitter.Config{
+		Assurance:       ssf.AssuranceDevelopment,
 		Limits:          transmitter.RecommendedLimits(),
 		PushRetry:       transmitter.RecommendedPushRetry(),
 		PermitEvent:     transmitter.PermitAll,
@@ -186,6 +187,7 @@ func pushBody() map[string]any {
 func TestConfigValidation(t *testing.T) {
 	good := func() transmitter.Config {
 		return transmitter.Config{
+			Assurance:       ssf.AssuranceDevelopment,
 			Limits:          transmitter.RecommendedLimits(),
 			PushRetry:       transmitter.RecommendedPushRetry(),
 			PermitEvent:     transmitter.PermitAll,
@@ -227,9 +229,12 @@ func TestConfigValidation(t *testing.T) {
 		"braces in issuer path": func(c *transmitter.Config) { c.Issuer = "https://tx.example/{x}" },
 		"negative retry":        func(c *transmitter.Config) { c.PushRetry.MaxAttempts = -1 },
 		// No implicit defaults for what bounds a Receiver's state.
-		"no limits":      func(c *transmitter.Config) { c.Limits = transmitter.Limits{} },
-		"no queue limit": func(c *transmitter.Config) { c.Limits.QueuedSETsPerStream = 0 },
-		"no long poll":   func(c *transmitter.Config) { c.Limits.LongPollTimeout = 0 },
+		"no limits":    func(c *transmitter.Config) { c.Limits = transmitter.Limits{} },
+		"no assurance": func(c *transmitter.Config) { c.Assurance = "" },
+		// An in-memory store loses every stream and queued SET on restart.
+		"production memstore": func(c *transmitter.Config) { c.Assurance = ssf.AssuranceProduction },
+		"no queue limit":      func(c *transmitter.Config) { c.Limits.QueuedSETsPerStream = 0 },
+		"no long poll":        func(c *transmitter.Config) { c.Limits.LongPollTimeout = 0 },
 		"push without retry": func(c *transmitter.Config) {
 			c.DeliveryMethods = []ssf.DeliveryMethod{ssf.DeliveryPush}
 			c.PushRetry = transmitter.PushRetryPolicy{}
@@ -314,6 +319,7 @@ func TestConfigAndMetadataAreCopied(t *testing.T) {
 	events := []ssf.EventType{caep.SessionRevokedEventType}
 	methods := []ssf.DeliveryMethod{ssf.DeliveryPoll}
 	tx, err := transmitter.New(transmitter.Config{
+		Assurance:       ssf.AssuranceDevelopment,
 		Limits:          transmitter.RecommendedLimits(),
 		PushRetry:       transmitter.RecommendedPushRetry(),
 		PermitEvent:     transmitter.PermitAll,
@@ -348,6 +354,7 @@ func TestMetadataAtIssuerWithoutPath(t *testing.T) {
 	srv := httptest.NewTLSServer(nil)
 	defer srv.Close()
 	tx, err := transmitter.New(transmitter.Config{
+		Assurance:       ssf.AssuranceDevelopment,
 		Limits:          transmitter.RecommendedLimits(),
 		PushRetry:       transmitter.RecommendedPushRetry(),
 		PermitEvent:     transmitter.PermitAll,

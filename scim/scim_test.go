@@ -154,6 +154,7 @@ func TestEmitAndReceive(t *testing.T) {
 	t.Cleanup(srv.Close)
 	issuer := srv.URL + "/scim"
 	tx, err := transmitter.New(transmitter.Config{
+		Assurance:       ssf.AssuranceDevelopment,
 		Limits:          transmitter.RecommendedLimits(),
 		PushRetry:       transmitter.RecommendedPushRetry(),
 		Issuer:          issuer,
@@ -174,6 +175,7 @@ func TestEmitAndReceive(t *testing.T) {
 	srv.Config.Handler = tx.Handler()
 
 	rx, err := receiver.New(ctx, receiver.Config{
+		Assurance:   ssf.AssuranceDevelopment,
 		Limits:      receiver.RecommendedLimits(),
 		Issuer:      issuer,
 		Audience:    "https://rx.example",

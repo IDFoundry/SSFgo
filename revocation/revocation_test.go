@@ -44,6 +44,9 @@ func newRevoker(t *testing.T, opts revocation.Options) *revocation.Revoker {
 	if opts.Retention == 0 {
 		opts.Retention = 24 * time.Hour
 	}
+	if opts.Assurance == "" {
+		opts.Assurance = ssf.AssuranceDevelopment
+	}
 	opts.Now = func() time.Time { return now }
 	r, err := revocation.New(memstore.NewRevocationStore(), opts)
 	if err != nil {
@@ -209,6 +212,18 @@ func TestMaxClockSkew(t *testing.T) {
 	}
 }
 
+// Under production assurance, an in-memory store — which forgets its
+// revocations on restart, so revoked tokens are accepted again — is
+// refused.
+func TestProductionRefusesMemstore(t *testing.T) {
+	_, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{
+		Issuers: revocation.SameIssuer, Events: revocation.RecommendedEvents(), Retention: time.Hour, Assurance: ssf.AssuranceProduction,
+	})
+	if err == nil || !strings.Contains(err.Error(), "durable") {
+		t.Errorf("New = %v, want the store refused", err)
+	}
+}
+
 // New refuses incomplete or out-of-range options, reporting every problem
 // at once.
 func TestNewValidates(t *testing.T) {
@@ -216,12 +231,12 @@ func TestNewValidates(t *testing.T) {
 	if err == nil {
 		t.Fatal("New accepted invalid options")
 	}
-	for _, want := range []string{"store is required", "Options.Issuers is required", "Options.Events is required", "Options.Retention must be", "Options.MaxClockSkew must not be negative"} {
+	for _, want := range []string{"store is required", "Options.Issuers is required", "Options.Events is required", "Options.Retention must be", "Options.MaxClockSkew must not be negative", "Assurance level must be"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q lacks %q", err, want)
 		}
 	}
-	if _, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{Issuers: revocation.SameIssuer, Events: revocation.RecommendedEvents(), Retention: revocation.MaxRetention}); err != nil {
+	if _, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{Issuers: revocation.SameIssuer, Events: revocation.RecommendedEvents(), Retention: revocation.MaxRetention, Assurance: ssf.AssuranceDevelopment}); err != nil {
 		t.Errorf("New refused valid options: %v", err)
 	}
 }
@@ -298,7 +313,7 @@ func TestMiddleware(t *testing.T) {
 	if rec := serve(h, ""); rec.Code != http.StatusOK {
 		t.Errorf("unauthenticated request not passed through: %d", rec.Code)
 	}
-	failing, err := revocation.New(failingStore{}, revocation.Options{Issuers: revocation.SameIssuer, Events: revocation.RecommendedEvents(), Retention: time.Hour})
+	failing, err := revocation.New(failingStore{}, revocation.Options{Issuers: revocation.SameIssuer, Events: revocation.RecommendedEvents(), Retention: time.Hour, Assurance: ssf.AssuranceDevelopment})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,6 +337,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	rev, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{
+		Assurance: ssf.AssuranceDevelopment,
 		Issuers:   revocation.StaticTokenIssuers{tx.Issuer(): idp},
 		Events:    revocation.RecommendedEvents(),
 		Retention: time.Hour,

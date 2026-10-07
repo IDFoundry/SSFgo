@@ -3,7 +3,7 @@ module github.com/idfoundry/ssfgo/storage/sqlstore
 go 1.26.6
 
 require (
-	github.com/idfoundry/ssfgo v0.0.0-20261006165046-03bc71a7ec8c
+	github.com/idfoundry/ssfgo v0.0.0-20261007012238-3f48b8915794
 	github.com/jackc/pgx/v5 v5.11.0
 	modernc.org/sqlite v1.59.0
 )

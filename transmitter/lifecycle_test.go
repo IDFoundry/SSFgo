@@ -186,6 +186,7 @@ func TestInactivityDisableAndDelete(t *testing.T) {
 func TestInactivityConfigValidation(t *testing.T) {
 	cfg := func(p transmitter.InactivityPolicy) transmitter.Config {
 		return transmitter.Config{
+			Assurance:       ssf.AssuranceDevelopment,
 			Limits:          transmitter.RecommendedLimits(),
 			PushRetry:       transmitter.RecommendedPushRetry(),
 			PermitEvent:     transmitter.PermitAll,

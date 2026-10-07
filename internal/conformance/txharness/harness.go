@@ -92,6 +92,7 @@ func Run(o *Options, store storage.StreamStore) error {
 	limits := transmitter.RecommendedLimits()
 	limits.StreamsPerReceiver = 1000
 	cfg := transmitter.Config{
+		Assurance:                  ssf.AssuranceDevelopment,
 		PushRetry:                  transmitter.RecommendedPushRetry(),
 		PermitEvent:                transmitter.PermitAll,
 		Issuer:                     o.Issuer,

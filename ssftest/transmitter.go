@@ -54,6 +54,7 @@ func NewTransmitter(t testing.TB, options ...func(*transmitter.Config)) *Transmi
 	t.Cleanup(tt.srv.Close)
 
 	cfg := transmitter.Config{
+		Assurance:       ssf.AssuranceDevelopment,
 		Limits:          transmitter.RecommendedLimits(),
 		PushRetry:       transmitter.RecommendedPushRetry(),
 		Issuer:          tt.srv.URL + "/ssftest",
@@ -121,6 +122,7 @@ func (tt *Transmitter) Client() *http.Client { return tt.srv.Client() }
 // other field, or override these, before calling receiver.New.
 func (tt *Transmitter) ReceiverConfig(registry *ssf.Registry) receiver.Config {
 	return receiver.Config{
+		Assurance:   ssf.AssuranceDevelopment,
 		Limits:      receiver.RecommendedLimits(),
 		Issuer:      tt.Issuer(),
 		Audience:    ReceiverAudience,
