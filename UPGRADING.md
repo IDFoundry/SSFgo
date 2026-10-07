@@ -44,6 +44,33 @@ Under `AssuranceProduction` the issuer, and the Receiver's
 it guarantees by implementing `storage.StoreAssurance`; one that doesn't
 counts as neither durable nor shared.
 
+### Signing keys declare their custody (transmitter, receiver, *production only*)
+
+**Affects:** a `transmitter.Config` or `receiver.Config` with
+`Assurance: ssf.AssuranceProduction` — every Transmitter signing key,
+and a `receiver.ClientCredentials` key for `private_key_jwt`.
+
+**Why:** a Transmitter signs SETs when it queues them. A key generated
+at each start strands every SET queued before a restart — Receivers no
+longer find its key, and reject it — and instances with keys of their
+own sign SETs that only some JWKS documents verify
+([design rule 17](docs/design-rules.md#17-keys-are-operations-never-raw-private-keys)).
+
+**What to change:** keep the key in a KMS, an HSM or durable storage,
+and declare it — on the key, or by a signer implementing
+`ssf.KeyCustodyAssurance`:
+
+```go
+cfg.SigningKeys = []transmitter.SigningKey{{
+	Signer: kmsSigner, Algorithm: ssf.RS256, KeyID: "set-signing-3",
+	Custody: ssf.KeyCustody{Durable: true, CrossInstanceConsistent: true},
+}}
+```
+
+For a `private_key_jwt` client key, set
+`ClientCredentials.SigningKeyCustody`. See
+[Keys in a KMS or HSM](docs/guides/keys.md).
+
 ### Limits and retries are explicit (transmitter, receiver)
 
 **Affects:** every `transmitter.Config` and `receiver.Config`.

@@ -1,0 +1,38 @@
+package main
+
+import (
+	"context"
+	"crypto"
+	"io"
+
+	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/receiver"
+	"github.com/idfoundry/ssfgo/transmitter"
+)
+
+// What docs/guides/keys.md marks as the application's own.
+type signingService interface {
+	AsymmetricSign(ctx context.Context, key string, digest []byte, opts crypto.SignerOpts) ([]byte, error)
+}
+
+var (
+	kms                      signingService
+	publicKey, nextPublicKey crypto.PublicKey
+	sdkSigner, clientKey     crypto.Signer
+)
+
+// SNIPPETS docs/guides/keys.md "## Adapting a signing service"
+
+var _ ssf.KeyCustodyAssurance = (*kmsSigner)(nil)
+
+func configure(cfg *transmitter.Config) *receiver.ClientCredentials {
+	// SNIPPETS docs/guides/keys.md "## Configure the Transmitter"
+	// SNIPPETS docs/guides/keys.md "## A Receiver's client key"
+	// SNIPPETS docs/guides/keys.md "## Rotation"
+	return tokens
+}
+
+func main() {
+	_ = configure(&transmitter.Config{})
+	_ = io.EOF
+}

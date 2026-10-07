@@ -313,3 +313,13 @@ production every store must be durable — memstore is refused, sqlstore
 accepted — and, when horizontally scaled, consistent across instances,
 which sqlstore declares on PostgreSQL only; configured issuers and the
 metadata URL must not be loopback hosts.
+
+Keys are operations, never raw private keys (rule 17): how a signing key
+is held is declared as the new `ssf.KeyCustody` — by the signer, through
+`ssf.KeyCustodyAssurance`, or with the new
+`transmitter.SigningKey.Custody` and
+`receiver.ClientCredentials.SigningKeyCustody`. Under production every
+Transmitter signing key, and a `private_key_jwt` client key, must be
+declared durable, and when horizontally scaled shared by every instance:
+SETs are signed when queued, so a key made at each start would strand
+them on restart.

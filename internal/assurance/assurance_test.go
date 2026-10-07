@@ -1,6 +1,8 @@
 package assurance
 
 import (
+	"crypto"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -36,7 +38,7 @@ func TestCheck(t *testing.T) {
 		"production, .localhost":    {ssf.AssuranceProduction, false, shared, "https://tx.localhost", "U must not be a loopback host"},
 		"production, missing store": {ssf.AssuranceProduction, false, nil, "", ""},
 	} {
-		errs := Check(c.level, c.scaled, []Store{{Field: "S", Store: c.store}}, []URL{{Field: "U", Value: c.url}})
+		errs := Check(c.level, c.scaled, Deps{Stores: []Store{{Field: "S", Store: c.store}}, URLs: []URL{{Field: "U", Value: c.url}}})
 		var got []string
 		for _, err := range errs {
 			got = append(got, err.Error())
@@ -44,6 +46,53 @@ func TestCheck(t *testing.T) {
 		joined := strings.Join(got, "; ")
 		if (c.want == "") != (len(errs) == 0) || !strings.Contains(joined, c.want) {
 			t.Errorf("%s: %q, want %q", name, joined, c.want)
+		}
+	}
+}
+
+// Keys are held to the same rules as stores: durable in production, and
+// shared by every instance when scaled.
+func TestCheckKeys(t *testing.T) {
+	for name, c := range map[string]struct {
+		level   ssf.Assurance
+		scaled  bool
+		custody ssf.KeyCustody
+		want    string
+	}{
+		"development, undeclared": {ssf.AssuranceDevelopment, true, ssf.KeyCustody{}, ""},
+		"production, undeclared":  {ssf.AssuranceProduction, false, ssf.KeyCustody{}, "K must be declared durable"},
+		"production, durable":     {ssf.AssuranceProduction, false, ssf.KeyCustody{Durable: true}, ""},
+		"scaled, durable only":    {ssf.AssuranceProduction, true, ssf.KeyCustody{Durable: true}, "K must be declared shared by every instance"},
+		"scaled, shared":          {ssf.AssuranceProduction, true, ssf.KeyCustody{Durable: true, CrossInstanceConsistent: true}, ""},
+	} {
+		errs := Check(c.level, c.scaled, Deps{Keys: []Key{{Field: "K", Custody: c.custody}}})
+		joined := fmt.Sprint(errs)
+		if (c.want == "") != (len(errs) == 0) || !strings.Contains(joined, c.want) {
+			t.Errorf("%s: %s, want %q", name, joined, c.want)
+		}
+	}
+}
+
+type kmsKey struct{ crypto.Signer }
+
+func (kmsKey) KeyCustody() ssf.KeyCustody { return ssf.KeyCustody{Durable: true} }
+
+// Custody declared in the configuration wins over what a signer declares;
+// a signer that declares nothing has no custody.
+func TestCustodyOf(t *testing.T) {
+	shared := ssf.KeyCustody{Durable: true, CrossInstanceConsistent: true}
+	for _, c := range []struct {
+		signer   crypto.Signer
+		declared ssf.KeyCustody
+		want     ssf.KeyCustody
+	}{
+		{nil, ssf.KeyCustody{}, ssf.KeyCustody{}},
+		{kmsKey{}, ssf.KeyCustody{}, ssf.KeyCustody{Durable: true}},
+		{kmsKey{}, shared, shared},
+		{nil, shared, shared},
+	} {
+		if got := CustodyOf(c.signer, c.declared); got != c.want {
+			t.Errorf("CustodyOf(%T, %+v) = %+v, want %+v", c.signer, c.declared, got, c.want)
 		}
 	}
 }

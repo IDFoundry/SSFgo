@@ -91,6 +91,12 @@ type ClientCredentials struct {
 	SigningKey       crypto.Signer
 	SigningAlgorithm ssf.SignatureAlgorithm
 	KeyID            string
+	// SigningKeyCustody declares how SigningKey is held, for a key that
+	// does not declare it itself (ssf.KeyCustodyAssurance). It is your own
+	// assertion: under ssf.AssuranceProduction a PrivateKeyJWT key must be
+	// declared durable, and with HorizontallyScaled shared by every
+	// instance.
+	SigningKeyCustody ssf.KeyCustody
 	// AssertionAudience is the "aud" of client assertions. Defaults to
 	// TokenURL (RFC 7523 §3).
 	AssertionAudience string

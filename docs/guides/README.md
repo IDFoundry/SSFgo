@@ -14,3 +14,4 @@ code in these guides is built against the library in CI.
 | [Storage and scaling in Go](storage-and-scaling.md) | memstore and sqlstore, production assurance, running several instances, and writing your own store |
 | [Testing with ssftest](testing.md) | Testing a Receiver or a Transmitter against a real in-process counterpart |
 | [Observability in Go](observability.md) | Hooks for metrics and traces, and readiness probes |
+| [Keys in a KMS or HSM](keys.md) | Signing keys that never enter your process: adapting a signing service, declaring custody, and rotation |

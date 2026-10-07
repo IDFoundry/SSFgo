@@ -137,8 +137,9 @@ func New(store storage.RevocationStore, opts Options) (*Revoker, error) {
 	if opts.Retention <= 0 || opts.Retention > MaxRetention {
 		errs = append(errs, fmt.Errorf("Options.Retention must be positive and at most %v", MaxRetention))
 	}
-	errs = append(errs, assurance.Check(opts.Assurance, opts.HorizontallyScaled,
-		[]assurance.Store{{Field: "the store", Store: store}}, nil)...)
+	errs = append(errs, assurance.Check(opts.Assurance, opts.HorizontallyScaled, assurance.Deps{
+		Stores: []assurance.Store{{Field: "the store", Store: store}},
+	})...)
 	if opts.MaxClockSkew < 0 {
 		errs = append(errs, errors.New("Options.MaxClockSkew must not be negative"))
 	}

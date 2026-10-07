@@ -25,6 +25,11 @@ type SigningKey struct {
 	// KeyID is the key's "kid". It is required, so Receivers can select
 	// the right key during rotation.
 	KeyID string
+	// Custody declares how Signer's key is held, for a Signer that does
+	// not declare it itself (ssf.KeyCustodyAssurance). It is your own
+	// assertion: under ssf.AssuranceProduction the key must be declared
+	// durable, and with HorizontallyScaled shared by every instance.
+	Custody ssf.KeyCustody
 }
 
 // Config configures a Transmitter. Every field without a documented
@@ -243,9 +248,15 @@ type PushRetryPolicy struct {
 
 func (c *Config) validate() error {
 	errs := c.requiredErrors()
-	errs = append(errs, assurance.Check(c.Assurance, c.HorizontallyScaled,
-		[]assurance.Store{{Field: "Store", Store: c.Store}},
-		[]assurance.URL{{Field: "Issuer", Value: c.Issuer}})...)
+	keys := make([]assurance.Key, len(c.SigningKeys))
+	for i, k := range c.SigningKeys {
+		keys[i] = assurance.Key{Field: fmt.Sprintf("SigningKeys[%d]", i), Custody: assurance.CustodyOf(k.Signer, k.Custody)}
+	}
+	errs = append(errs, assurance.Check(c.Assurance, c.HorizontallyScaled, assurance.Deps{
+		Stores: []assurance.Store{{Field: "Store", Store: c.Store}},
+		URLs:   []assurance.URL{{Field: "Issuer", Value: c.Issuer}},
+		Keys:   keys,
+	})...)
 	errs = append(errs, c.signingKeyErrors()...)
 	errs = append(errs, c.tuningErrors()...)
 	if err := errors.Join(errs...); err != nil {
