@@ -47,6 +47,7 @@ expose; hooks that cannot take down the process.
   the full matrix against a local suite (see
   [conformance/README.md](conformance/README.md)).
 - Public API changes respect [COMPATIBILITY.md](COMPATIBILITY.md).
+- Agents: see also [AGENTS.md](AGENTS.md).
 
 ## Commit messages
 
@@ -54,6 +55,9 @@ expose; hooks that cannot take down the process.
 `fix:`, `docs:`, `test:`, `refactor:`, `ci:`, `chore:`; `feat!:` or
 `fix!:` for a breaking change, with a `BREAKING CHANGE:` footer. Describe
 what changed and why.
+
+A breaking change also adds its section to [UPGRADING.md](UPGRADING.md)
+in the same pull request: who it affects, why, and what to change.
 
 ## Security
 

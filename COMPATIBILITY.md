@@ -47,7 +47,8 @@ when:
 - validation is found to accept input a specification forbids, or to
   reject input it allows.
 
-Such changes are called out in [CHANGELOG.md](CHANGELOG.md). Loosening
+Such changes are called out in [CHANGELOG.md](CHANGELOG.md), and
+[UPGRADING.md](UPGRADING.md) says what to change for each. Loosening
 validation beyond what the specifications allow only ever happens behind
 an explicit opt-in, such as `receiver.Config.AcceptLegacySubjects`.
 
