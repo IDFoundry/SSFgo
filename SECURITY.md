@@ -74,7 +74,9 @@ What SSFgo enforces on its own, so reviewers know where to look:
 - **Production assurance.** Under `ssf.AssuranceProduction` every store
   must declare itself durable, so an in-memory replay or revocation store
   — which would accept replayed SETs, or revoked tokens, after a restart
-  — cannot reach production by accident.
+  — cannot reach production by accident. Signing keys must be declared
+  durable too (`ssf.KeyCustody`): the library takes keys as
+  `crypto.Signer`, so they can stay in a KMS or HSM.
 
 The most recent review, an adversarial one of what was added after the
 [October review](docs/security-review-2026-10.md), is

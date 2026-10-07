@@ -747,3 +747,44 @@ type failingStore struct{ storage.StreamStore }
 func (failingStore) StreamsForReceiver(context.Context, string) ([]storage.Stream, error) {
 	return nil, errors.New("disk on fire")
 }
+
+// durableStore is memstore declaring itself durable and shared, to test
+// what production assurance asks of everything else.
+type durableStore struct{ *memstore.StreamStore }
+
+func (durableStore) Capabilities() storage.Capabilities {
+	return storage.Capabilities{Durable: true, CrossInstanceConsistent: true}
+}
+
+// Under production assurance a signing key must be declared durable — a
+// key made at each start strands the SETs queued before a restart — and,
+// when scaled, shared by every instance.
+func TestProductionSigningKeyCustody(t *testing.T) {
+	cfg := transmitter.Config{
+		Assurance:       ssf.AssuranceProduction,
+		Limits:          transmitter.RecommendedLimits(),
+		PermitEvent:     transmitter.PermitAll,
+		Issuer:          "https://tx.example",
+		SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1"}},
+		EventsSupported: interopEvents,
+		DeliveryMethods: []ssf.DeliveryMethod{ssf.DeliveryPoll},
+		DefaultSubjects: ssf.DefaultSubjectsNone,
+		Store:           durableStore{memstore.NewStreamStore()},
+		Authorize:       func(context.Context, string) (transmitter.Receiver, error) { return transmitter.Receiver{}, nil },
+	}
+	if _, err := transmitter.New(cfg); err == nil || !strings.Contains(err.Error(), "SigningKeys[0] must be declared durable") {
+		t.Errorf("an undeclared key: %v", err)
+	}
+	cfg.SigningKeys[0].Custody = ssf.KeyCustody{Durable: true}
+	if _, err := transmitter.New(cfg); err != nil {
+		t.Errorf("a durable key: %v", err)
+	}
+	cfg.HorizontallyScaled = true
+	if _, err := transmitter.New(cfg); err == nil || !strings.Contains(err.Error(), "shared by every instance") {
+		t.Errorf("a durable key, scaled: %v", err)
+	}
+	cfg.SigningKeys[0].Custody.CrossInstanceConsistent = true
+	if _, err := transmitter.New(cfg); err != nil {
+		t.Errorf("a shared key, scaled: %v", err)
+	}
+}

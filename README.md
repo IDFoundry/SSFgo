@@ -36,7 +36,8 @@ itself.
 [GETTING_STARTED.md](GETTING_STARTED.md) walks through embedding each
 role step by step, and [docs/guides](docs/guides) covers one feature
 each — session revocation, push or poll, the CAEP Interoperability
-Profile, SCIM events, storage and scaling, testing and observability. In
+Profile, SCIM events, storage and scaling, testing, observability and
+keys in a KMS or HSM. In
 brief:
 
 A Transmitter — for example inside an identity provider — serves the SSF

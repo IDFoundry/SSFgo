@@ -173,9 +173,15 @@ func (l Limits) errors() []error {
 
 func (c *Config) validate() error {
 	errs := c.Limits.errors()
-	errs = append(errs, assurance.Check(c.Assurance, c.HorizontallyScaled,
-		[]assurance.Store{{Field: "ReplayStore", Store: c.ReplayStore}},
-		[]assurance.URL{{Field: "Issuer", Value: c.Issuer}, {Field: "MetadataURL", Value: c.MetadataURL}})...)
+	var keys []assurance.Key
+	if cc, ok := c.TokenSource.(*ClientCredentials); ok && cc.AuthMethod == PrivateKeyJWT {
+		keys = append(keys, assurance.Key{Field: "TokenSource.SigningKey", Custody: assurance.CustodyOf(cc.SigningKey, cc.SigningKeyCustody)})
+	}
+	errs = append(errs, assurance.Check(c.Assurance, c.HorizontallyScaled, assurance.Deps{
+		Stores: []assurance.Store{{Field: "ReplayStore", Store: c.ReplayStore}},
+		URLs:   []assurance.URL{{Field: "Issuer", Value: c.Issuer}, {Field: "MetadataURL", Value: c.MetadataURL}},
+		Keys:   keys,
+	})...)
 	if err := ssf.ValidateIssuer(c.Issuer); err != nil {
 		errs = append(errs, err)
 	}

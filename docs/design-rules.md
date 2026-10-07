@@ -7,6 +7,8 @@ change cannot follow a rule, the pull request says why.
 
 Rules marked *adopting* are not yet followed everywhere; the
 [status table](#adoption-status) lists the gaps and how they close.
+Rules keep their numbers: a new one takes the next free number, in the
+section it belongs to.
 
 ## Security
 
@@ -150,6 +152,18 @@ A security fix lands with a test that failed before it. Reviews are
 recorded, dated, in `docs/security-review-*.md`, together with what was
 attacked and held up.
 
+### 17. Keys are operations, never raw private keys
+
+- Every private key is a `crypto.Signer`: a public key and a `Sign`
+  operation. The library never reads private key material, so a key can
+  stay in a KMS or HSM.
+- How a key is held is declared, as `ssf.KeyCustody` — by the signer
+  (`ssf.KeyCustodyAssurance`) or in the configuration — and production
+  assurance checks it like a store's capabilities: durable, and shared
+  by every instance when horizontally scaled.
+- Rotation publishes the outgoing key beside the incoming one until
+  everything signed with it has been verified.
+
 ## Developer experience
 
 ### 12. One package and constructor per role
@@ -216,3 +230,4 @@ An unsafe choice needs more code and a name that says what it does.
 | 10 | There were no assurance levels or store capabilities | #52 |
 | 14 | Examples shared the root module (#54); there was no `GETTING_STARTED.md` (#55) or guides (#56) | Closed |
 | 15 | There was no `UPGRADING.md` or `AGENTS.md`; release-please is not set up | #53; release-please when v1 is cut |
+| 17 | Key custody was not declared or checked: a key generated at startup passed production assurance | #57 |

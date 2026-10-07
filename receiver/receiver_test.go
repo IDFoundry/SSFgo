@@ -1119,3 +1119,28 @@ func TestStreamsReportsRejectedStreams(t *testing.T) {
 		t.Errorf("deleting the rejected stream: %v", err)
 	}
 }
+
+// Under production assurance a private_key_jwt key must be declared
+// durable: a key made at each start is not the one registered with the
+// authorization server after a restart.
+func TestProductionClientKeyCustody(t *testing.T) {
+	cfg := receiver.Config{
+		Assurance:   ssf.AssuranceProduction,
+		Limits:      receiver.RecommendedLimits(),
+		Issuer:      "https://tx.example",
+		Audience:    audience,
+		Registry:    ssf.NewRegistry(),
+		Algorithms:  []ssf.SignatureAlgorithm{ssf.RS256},
+		TokenSource: &receiver.ClientCredentials{TokenURL: "https://as.example/token", ClientID: "rx", AuthMethod: receiver.PrivateKeyJWT, SigningKey: signingKey(t), SigningAlgorithm: ssf.RS256, KeyID: "c1"},
+		ReplayStore: memstore.NewReplayStore(),
+	}
+	_, err := receiver.New(context.Background(), cfg)
+	if err == nil || !strings.Contains(err.Error(), "TokenSource.SigningKey must be declared durable") {
+		t.Errorf("an undeclared client key: %v", err)
+	}
+	cfg.TokenSource.(*receiver.ClientCredentials).SigningKeyCustody = ssf.KeyCustody{Durable: true}
+	_, err = receiver.New(context.Background(), cfg)
+	if err != nil && strings.Contains(err.Error(), "TokenSource.SigningKey") {
+		t.Errorf("a durable client key was refused: %v", err)
+	}
+}

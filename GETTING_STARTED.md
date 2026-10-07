@@ -18,13 +18,17 @@ invalid setting at once, naming the field.
 ### 1. A signing key
 
 The Transmitter signs every SET. Any `crypto.Signer` works, so the key
-can stay in a KMS or HSM:
+can stay in a KMS or HSM — see [Keys in a KMS or HSM](docs/guides/keys.md):
 
 ```go
-key, err := loadSigningKey() // yours: an *rsa.PrivateKey, or a KMS-backed crypto.Signer
+key, err := loadSigningKey() // yours: a KMS-backed crypto.Signer, say
 if err != nil {
 	return err
 }
+// How the key is held. Production requires it durable — SETs are signed
+// when queued, so a key made at each start strands them on restart —
+// and, with several instances, shared by all of them.
+custody := ssf.KeyCustody{Durable: true, CrossInstanceConsistent: true}
 ```
 
 RS256 is what the CAEP Interoperability Profile requires; PS, ES and
@@ -89,13 +93,13 @@ A single-tenant Transmitter whose every Receiver may see everything sets
 ```go
 cfg := transmitter.Config{
 	Issuer:          "https://idp.example.com",
-	SigningKeys:     []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "2026-10"}},
+	SigningKeys:     []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "2026-10", Custody: custody}},
 	EventsSupported: []ssf.EventType{caep.SessionRevokedEventType, caep.CredentialChangeEventType},
 	DeliveryMethods: []ssf.DeliveryMethod{ssf.DeliveryPush, ssf.DeliveryPoll},
 	DefaultSubjects: ssf.DefaultSubjectsNone, // Receivers add the subjects they want
 
 	Store:     streams,
-	Assurance: ssf.AssuranceProduction, // refuses in-memory stores and loopback issuers
+	Assurance: ssf.AssuranceProduction, // refuses in-memory stores, undeclared keys and loopback issuers
 	Limits:    transmitter.RecommendedLimits(),
 	PushRetry: transmitter.RecommendedPushRetry(),
 
@@ -156,8 +160,8 @@ has refetched the JWKS — a Receiver refetches when it meets an unknown
 
 ```go
 cfg.SigningKeys = []transmitter.SigningKey{
-	{Signer: newKey, Algorithm: ssf.RS256, KeyID: "2027-01"},
-	{Signer: key, Algorithm: ssf.RS256, KeyID: "2026-10"}, // remove after KeyMaxAge
+	{Signer: newKey, Algorithm: ssf.RS256, KeyID: "2027-01", Custody: custody},
+	{Signer: key, Algorithm: ssf.RS256, KeyID: "2026-10", Custody: custody}, // remove after KeyMaxAge
 }
 ```
 
