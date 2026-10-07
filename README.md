@@ -153,7 +153,8 @@ the security model and how to report a vulnerability.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Changes are listed in
-[CHANGELOG.md](CHANGELOG.md).
+[CHANGELOG.md](CHANGELOG.md), and [UPGRADING.md](UPGRADING.md) says what
+to change for each breaking one.
 
 ## License
 

@@ -214,4 +214,4 @@ An unsafe choice needs more code and a name that says what it does.
 | 9 | `EnsureStream` replaces the only stream on 409 | #47 |
 | 10 | There were no assurance levels or store capabilities | #52 |
 | 14 | Examples share the root module; no `GETTING_STARTED.md` or guides | Examples and guides PRs |
-| 15 | No release-please, `UPGRADING.md` or `AGENTS.md` | Release tooling PR |
+| 15 | There was no `UPGRADING.md` or `AGENTS.md`; release-please is not set up | #53; release-please when v1 is cut |
