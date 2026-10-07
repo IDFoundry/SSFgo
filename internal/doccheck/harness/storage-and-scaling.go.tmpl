@@ -1,0 +1,36 @@
+package main
+
+import (
+	"context"
+	"database/sql"
+	"testing"
+
+	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/receiver"
+	"github.com/idfoundry/ssfgo/storage"
+	"github.com/idfoundry/ssfgo/storage/sqlstore"
+	"github.com/idfoundry/ssfgo/storage/storagetest"
+	"github.com/idfoundry/ssfgo/transmitter"
+)
+
+// What docs/guides/storage-and-scaling.md marks as the application's own.
+type redisReplayStore struct{ storage.ReplayStore }
+
+func newRedisReplayStore(*testing.T) *redisReplayStore { return nil }
+
+var dsn string
+
+func production(ctx context.Context, txCfg *transmitter.Config, rxCfg *receiver.Config) error {
+	// SNIPPETS docs/guides/storage-and-scaling.md "## Production"
+	// SNIPPETS docs/guides/storage-and-scaling.md "## Several instances"
+	_ = revocations
+	return nil
+}
+
+// SNIPPETS docs/guides/storage-and-scaling.md "## Your own store"
+
+func main() {
+	_ = production(context.Background(), &transmitter.Config{}, &receiver.Config{})
+	_, _, _ = ssf.AssuranceProduction, sql.Open, sqlstore.Postgres
+	_ = storagetest.ReplayStore
+}

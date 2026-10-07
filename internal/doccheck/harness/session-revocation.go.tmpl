@@ -1,0 +1,47 @@
+package main
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"net/http"
+	"time"
+
+	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/receiver"
+	"github.com/idfoundry/ssfgo/revocation"
+	"github.com/idfoundry/ssfgo/storage"
+	"github.com/idfoundry/ssfgo/storage/sqlstore"
+)
+
+// What docs/guides/session-revocation.md marks as the application's own.
+type claims struct {
+	Issuer, Subject, SessionID string
+	IssuedAt                   time.Time
+}
+
+var errRevoked = errors.New("revoked")
+
+func endLocalSessions(context.Context, []storage.RevocationKey) error { return nil }
+func accessTokenClaims(context.Context) (claims, bool)               { return claims{}, false }
+func subjectForSCIM(string) (string, bool)                           { return "", false }
+
+func wire(ctx context.Context, db *sql.DB, rx *receiver.Receiver) error {
+	var api http.Handler
+	var issuedAt time.Time
+	// SNIPPETS docs/guides/session-revocation.md "## Wire it up"
+	// SNIPPETS docs/guides/session-revocation.md "## Check tokens"
+	_ = api
+	return nil
+}
+
+func scimKeys() revocation.Options {
+	var opts revocation.Options
+	// SNIPPETS docs/guides/session-revocation.md "## SCIM resources"
+	return opts
+}
+
+func main() {
+	_ = wire(context.Background(), nil, nil)
+	_ = scimKeys()
+}

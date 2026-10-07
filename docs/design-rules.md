@@ -180,7 +180,8 @@ An unsafe choice needs more code and a name that says what it does.
   against the checkout, tested in CI, and checked to use only the public
   API.
 - `GETTING_STARTED.md` walks through each role, and `docs/guides/` has
-  one guide per feature. *(adopting: the guides are to come.)*
+  one guide per feature. Their code is built against the library in CI
+  (`internal/doccheck`).
 
 ### 15. Breaking changes are announced where users look *(adopting)*
 
@@ -213,5 +214,5 @@ An unsafe choice needs more code and a name that says what it does.
 | 8 | `EnsureStream` retries TLS alerts; push failures are counted per stream | #47 |
 | 9 | `EnsureStream` replaces the only stream on 409 | #47 |
 | 10 | There were no assurance levels or store capabilities | #52 |
-| 14 | Examples shared the root module, now fixed in #54; there was no `GETTING_STARTED.md` (#55) and there are no guides yet | Guides PR |
+| 14 | Examples shared the root module (#54); there was no `GETTING_STARTED.md` (#55) or guides (#56) | Closed |
 | 15 | There was no `UPGRADING.md` or `AGENTS.md`; release-please is not set up | #53; release-please when v1 is cut |

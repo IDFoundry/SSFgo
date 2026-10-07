@@ -256,6 +256,22 @@ jobs:
       - name: go test (race)
         run: go test -race ./...
 
+  # The Go code in GETTING_STARTED.md and docs/guides, built against this
+  # checkout so the documentation cannot drift from the API it describes.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache-dependency-path: storage/sqlstore/go.sum
+
+      - name: documentation code builds
+        run: go run ./internal/doccheck
+
   lint:
     runs-on: ubuntu-latest
     steps:
