@@ -230,3 +230,17 @@ func (m *StreamStore) PurgeEvents(_ context.Context, streamID string) error {
 	e.queue = nil
 	return nil
 }
+
+// None of memstore's stores is durable or shared across instances: what
+// they hold lives in one process's memory. Under ssf.AssuranceProduction
+// they are refused.
+var none = storage.Capabilities{}
+
+// Capabilities implements storage.StoreAssurance: none.
+func (s *StreamStore) Capabilities() storage.Capabilities { return none }
+
+// Capabilities implements storage.StoreAssurance: none.
+func (s *ReplayStore) Capabilities() storage.Capabilities { return none }
+
+// Capabilities implements storage.StoreAssurance: none.
+func (s *RevocationStore) Capabilities() storage.Capabilities { return none }

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/idfoundry/ssfgo/storage"
 )
 
 // Dialect selects the SQL a store generates.
@@ -150,3 +152,19 @@ func (d Dialect) inTx(ctx context.Context, db *sql.DB, fn func(querier) error) e
 func discard(conn *sql.Conn) {
 	_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 }
+
+// capabilities is what a store on dialect d declares: durable, and on
+// PostgreSQL consistent across instances. A SQLite file is durable, but
+// not shared by Transmitter or Receiver instances on other hosts.
+func (d Dialect) capabilities() storage.Capabilities {
+	return storage.Capabilities{Durable: true, CrossInstanceConsistent: d == Postgres}
+}
+
+// Capabilities implements storage.StoreAssurance.
+func (s *StreamStore) Capabilities() storage.Capabilities { return s.d.capabilities() }
+
+// Capabilities implements storage.StoreAssurance.
+func (s *ReplayStore) Capabilities() storage.Capabilities { return s.d.capabilities() }
+
+// Capabilities implements storage.StoreAssurance.
+func (s *RevocationStore) Capabilities() storage.Capabilities { return s.d.capabilities() }

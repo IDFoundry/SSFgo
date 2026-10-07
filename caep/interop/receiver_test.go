@@ -25,6 +25,7 @@ func receiverConfig(t *testing.T, issuer string, client *http.Client) receiver.C
 		t.Fatal(err)
 	}
 	return receiver.Config{
+		Assurance:   ssf.AssuranceDevelopment,
 		Limits:      receiver.RecommendedLimits(),
 		Issuer:      issuer,
 		Audience:    "https://rx.example",

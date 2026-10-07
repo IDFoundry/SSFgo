@@ -12,6 +12,7 @@ import (
 	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/internal/assurance"
 	"github.com/idfoundry/ssfgo/internal/jose"
 	"github.com/idfoundry/ssfgo/storage"
 )
@@ -53,6 +54,16 @@ type Config struct {
 
 	// Store persists streams.
 	Store storage.StreamStore
+
+	// Assurance is the deployment the Transmitter is for. Required.
+	// Under ssf.AssuranceProduction, Store must declare itself durable
+	// (storage.Capabilities) and Issuer must not be a loopback host.
+	Assurance ssf.Assurance
+
+	// HorizontallyScaled declares that several Transmitter instances share
+	// Store. Under ssf.AssuranceProduction, Store must then declare itself
+	// consistent across instances.
+	HorizontallyScaled bool
 
 	// Authorize resolves bearer tokens to Receivers.
 	Authorize AuthorizeFunc
@@ -232,6 +243,9 @@ type PushRetryPolicy struct {
 
 func (c *Config) validate() error {
 	errs := c.requiredErrors()
+	errs = append(errs, assurance.Check(c.Assurance, c.HorizontallyScaled,
+		[]assurance.Store{{Field: "Store", Store: c.Store}},
+		[]assurance.URL{{Field: "Issuer", Value: c.Issuer}})...)
 	errs = append(errs, c.signingKeyErrors()...)
 	errs = append(errs, c.tuningErrors()...)
 	if err := errors.Join(errs...); err != nil {

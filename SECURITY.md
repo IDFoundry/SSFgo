@@ -71,6 +71,10 @@ What SSFgo enforces on its own, so reviewers know where to look:
   back off exponentially; JWKS refetches are rate-limited to one a minute.
 - **Operator control.** A stream status the Transmitter sets with
   `SetStreamStatus` cannot be undone by the Receiver.
+- **Production assurance.** Under `ssf.AssuranceProduction` every store
+  must declare itself durable, so an in-memory replay or revocation store
+  — which would accept replayed SETs, or revoked tokens, after a restart
+  — cannot reach production by accident.
 
 The most recent review, an adversarial one of what was added after the
 [October review](docs/security-review-2026-10.md), is

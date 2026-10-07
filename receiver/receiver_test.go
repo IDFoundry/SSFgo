@@ -79,6 +79,7 @@ func newEnvTx(t testing.TB, txMutate func(*transmitter.Config), mutate ...func(*
 	txLimits := transmitter.RecommendedLimits()
 	txLimits.LongPollTimeout = 2 * time.Second
 	txCfg := transmitter.Config{
+		Assurance:       ssf.AssuranceDevelopment,
 		Limits:          txLimits,
 		PushRetry:       transmitter.RecommendedPushRetry(),
 		PermitEvent:     transmitter.PermitAll,
@@ -115,6 +116,7 @@ func newEnvTx(t testing.TB, txMutate func(*transmitter.Config), mutate ...func(*
 		t.Fatal(err)
 	}
 	e.cfg = receiver.Config{
+		Assurance:   ssf.AssuranceDevelopment,
 		Limits:      receiver.RecommendedLimits(),
 		Issuer:      issuer,
 		Audience:    audience,
@@ -215,7 +217,11 @@ func TestDiscovery(t *testing.T) {
 		"no token":     func(c *receiver.Config) { c.TokenSource = nil },
 		"no replay":    func(c *receiver.Config) { c.ReplayStore = nil },
 		// No implicit defaults for what decides how much is trusted.
-		"no limits":           func(c *receiver.Config) { c.Limits = receiver.Limits{} },
+		"no limits":    func(c *receiver.Config) { c.Limits = receiver.Limits{} },
+		"no assurance": func(c *receiver.Config) { c.Assurance = "" },
+		// An in-memory replay store forgets on restart, so handled SETs
+		// would be accepted again.
+		"production memstore": func(c *receiver.Config) { c.Assurance = ssf.AssuranceProduction },
 		"no replay window":    func(c *receiver.Config) { c.Limits.ReplayWindow = 0 },
 		"huge replay window":  func(c *receiver.Config) { c.Limits.ReplayWindow = receiver.MaxReplayWindow + 1 },
 		"no key max age":      func(c *receiver.Config) { c.Limits.KeyMaxAge = 0 },
@@ -383,6 +389,7 @@ func TestPushEndToEnd(t *testing.T) {
 func (e *env) setTransmitterClient(c *http.Client) {
 	e.t.Helper()
 	tx, err := transmitter.New(transmitter.Config{
+		Assurance:       ssf.AssuranceDevelopment,
 		Limits:          transmitter.RecommendedLimits(),
 		PushRetry:       transmitter.RecommendedPushRetry(),
 		PermitEvent:     transmitter.PermitAll,
@@ -597,6 +604,7 @@ func TestKeyRotation(t *testing.T) {
 func (e *env) rotate(newKey *rsa.PrivateKey) {
 	e.t.Helper()
 	tx, err := transmitter.New(transmitter.Config{
+		Assurance:   ssf.AssuranceDevelopment,
 		Limits:      transmitter.RecommendedLimits(),
 		PushRetry:   transmitter.RecommendedPushRetry(),
 		PermitEvent: transmitter.PermitAll,
@@ -631,6 +639,7 @@ func TestKeyMaxAge(t *testing.T) {
 		t.Fatal(err)
 	}
 	tx, err := transmitter.New(transmitter.Config{
+		Assurance:       ssf.AssuranceDevelopment,
 		Limits:          transmitter.RecommendedLimits(),
 		PushRetry:       transmitter.RecommendedPushRetry(),
 		PermitEvent:     transmitter.PermitAll,
@@ -674,6 +683,7 @@ func TestKeyMaxAge(t *testing.T) {
 func TestCriticalSubjectMembers(t *testing.T) {
 	e := newEnv(t)
 	tx, err := transmitter.New(transmitter.Config{
+		Assurance:              ssf.AssuranceDevelopment,
 		Limits:                 transmitter.RecommendedLimits(),
 		PushRetry:              transmitter.RecommendedPushRetry(),
 		PermitEvent:            transmitter.PermitAll,

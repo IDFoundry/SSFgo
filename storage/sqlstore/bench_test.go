@@ -114,6 +114,7 @@ func BenchmarkEmit(b *testing.B) {
 				b.Fatal(err)
 			}
 			tx, err := transmitter.New(transmitter.Config{
+				Assurance:       ssf.AssuranceDevelopment,
 				Limits:          transmitter.RecommendedLimits(),
 				PushRetry:       transmitter.RecommendedPushRetry(),
 				PermitEvent:     transmitter.PermitAll,

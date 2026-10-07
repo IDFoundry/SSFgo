@@ -10,6 +10,7 @@ import (
 
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/caep"
+	"github.com/idfoundry/ssfgo/internal/assurance"
 	"github.com/idfoundry/ssfgo/receiver"
 	"github.com/idfoundry/ssfgo/risc"
 	"github.com/idfoundry/ssfgo/scim"
@@ -36,6 +37,15 @@ type Options struct {
 	// lifetime of the longest-lived token it should catch, and at most
 	// MaxRetention. Required.
 	Retention time.Duration
+	// Assurance is the deployment the Revoker is for. Required. Under
+	// ssf.AssuranceProduction its store must declare itself durable
+	// (storage.Capabilities): an in-memory one forgets its revocations on
+	// restart, and revoked tokens are accepted again.
+	Assurance ssf.Assurance
+	// HorizontallyScaled declares that several Revoker instances share the
+	// store. Under ssf.AssuranceProduction, it must then declare itself
+	// consistent across instances.
+	HorizontallyScaled bool
 	// MaxClockSkew is how far a token's "iat" may run ahead of the
 	// revocation time and still count as issued before it, for identity
 	// providers whose clocks run ahead of the Transmitter's. Zero allows
@@ -127,6 +137,8 @@ func New(store storage.RevocationStore, opts Options) (*Revoker, error) {
 	if opts.Retention <= 0 || opts.Retention > MaxRetention {
 		errs = append(errs, fmt.Errorf("Options.Retention must be positive and at most %v", MaxRetention))
 	}
+	errs = append(errs, assurance.Check(opts.Assurance, opts.HorizontallyScaled,
+		[]assurance.Store{{Field: "the store", Store: store}}, nil)...)
 	if opts.MaxClockSkew < 0 {
 		errs = append(errs, errors.New("Options.MaxClockSkew must not be negative"))
 	}

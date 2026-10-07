@@ -302,3 +302,14 @@ it up only through `Reveal`. `ssf.Delivery.AuthorizationHeader`,
 values with `ssf.NewSecret`. `ssf.Delivery`'s JSON, the wire form, still
 carries the header; `receiver.StaticToken` withholds itself when printed
 or logged.
+
+Production refuses development shortcuts (rule 10): `transmitter.Config`,
+`receiver.Config` and `revocation.Options` take a required
+`ssf.Assurance` — `ssf.AssuranceDevelopment` or
+`ssf.AssuranceProduction` — and `HorizontallyScaled`. Stores declare
+what they guarantee through the new `storage.StoreAssurance`
+(`storage.Capabilities`: `Durable`, `CrossInstanceConsistent`). Under
+production every store must be durable — memstore is refused, sqlstore
+accepted — and, when horizontally scaled, consistent across instances,
+which sqlstore declares on PostgreSQL only; configured issuers and the
+metadata URL must not be loopback hosts.

@@ -58,9 +58,9 @@ func NewReceiver(t testing.TB) *Receiver {
 // Connect connects the Receiver to the Transmitter cfg names. cfg must set
 // Issuer, Audience, TokenSource and an HTTPClient that trusts the
 // Transmitter; Connect fills in a registry of every SSF, CAEP, RISC and
-// SCIM event type, every signature algorithm, recommended limits, an
-// in-memory replay store and a quiet logger where they are unset. The test fails if the Receiver
-// cannot be built.
+// SCIM event type, every signature algorithm, development assurance,
+// recommended limits, an in-memory replay store and a quiet logger where
+// they are unset. The test fails if the Receiver cannot be built.
 func (rr *Receiver) Connect(cfg receiver.Config) {
 	t := rr.t
 	t.Helper()
@@ -74,6 +74,9 @@ func (rr *Receiver) Connect(cfg receiver.Config) {
 	}
 	if cfg.Algorithms == nil {
 		cfg.Algorithms = ssf.SignatureAlgorithms()
+	}
+	if cfg.Assurance == "" {
+		cfg.Assurance = ssf.AssuranceDevelopment
 	}
 	if cfg.Limits == (receiver.Limits{}) {
 		cfg.Limits = receiver.RecommendedLimits()

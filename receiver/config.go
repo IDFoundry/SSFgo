@@ -9,6 +9,7 @@ import (
 	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/internal/assurance"
 	"github.com/idfoundry/ssfgo/storage"
 )
 
@@ -48,6 +49,18 @@ type Config struct {
 	// ReplayStore records processed SETs, so redelivered ones are
 	// acknowledged without being handled twice.
 	ReplayStore storage.ReplayStore
+
+	// Assurance is the deployment the Receiver is for. Required. Under
+	// ssf.AssuranceProduction, ReplayStore must declare itself durable
+	// (storage.Capabilities) — an in-memory one forgets on restart, and
+	// SETs handled before it are accepted again — and Issuer and
+	// MetadataURL must not be loopback hosts.
+	Assurance ssf.Assurance
+
+	// HorizontallyScaled declares that several Receiver instances share
+	// ReplayStore. Under ssf.AssuranceProduction, it must then declare
+	// itself consistent across instances.
+	HorizontallyScaled bool
 
 	// Limits bound how old a SET, and how old the Transmitter's keys, the
 	// Receiver accepts. Required: RecommendedLimits is the usual choice.
@@ -160,6 +173,9 @@ func (l Limits) errors() []error {
 
 func (c *Config) validate() error {
 	errs := c.Limits.errors()
+	errs = append(errs, assurance.Check(c.Assurance, c.HorizontallyScaled,
+		[]assurance.Store{{Field: "ReplayStore", Store: c.ReplayStore}},
+		[]assurance.URL{{Field: "Issuer", Value: c.Issuer}, {Field: "MetadataURL", Value: c.MetadataURL}})...)
 	if err := ssf.ValidateIssuer(c.Issuer); err != nil {
 		errs = append(errs, err)
 	}

@@ -57,6 +57,7 @@ func (s *session) run(ctx context.Context) error {
 		return err
 	}
 	cfg := receiver.Config{
+		Assurance:   ssf.AssuranceDevelopment,
 		Limits:      receiver.RecommendedLimits(),
 		Issuer:      issuer,
 		Audience:    s.o.audience,

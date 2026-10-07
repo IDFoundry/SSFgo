@@ -281,3 +281,25 @@ func TestConcurrentLimits(t *testing.T) {
 		})
 	}
 }
+
+// Every store is durable; only on PostgreSQL is it shared across
+// instances — a SQLite file is not, across hosts.
+func TestCapabilities(t *testing.T) {
+	db := openSQLite(t)
+	streams, _ := sqlstore.NewStreamStore(db, sqlstore.SQLite)
+	replay, _ := sqlstore.NewReplayStore(db, sqlstore.SQLite)
+	revocations, _ := sqlstore.NewRevocationStore(db, sqlstore.SQLite)
+	for _, s := range []any{streams, replay, revocations} {
+		if got := storage.CapabilitiesOf(s); got != (storage.Capabilities{Durable: true}) {
+			t.Errorf("SQLite %T declares %+v", s, got)
+		}
+	}
+	if os.Getenv(postgresEnv) == "" {
+		return
+	}
+	pg := openPostgres(t)
+	streams, _ = sqlstore.NewStreamStore(pg, sqlstore.Postgres)
+	if got := storage.CapabilitiesOf(streams); got != (storage.Capabilities{Durable: true, CrossInstanceConsistent: true}) {
+		t.Errorf("PostgreSQL store declares %+v", got)
+	}
+}
