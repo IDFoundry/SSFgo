@@ -28,7 +28,7 @@ the user signing in again — is not.
 ## Wire it up
 
 ```go
-store, err := sqlstore.NewRevocationStore(db, sqlstore.Postgres)
+store, err := sqlstore.NewRevocationStore(ctx, db, sqlstore.Postgres)
 if err != nil {
 	return err
 }

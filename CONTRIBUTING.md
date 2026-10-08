@@ -25,6 +25,9 @@ expose; hooks that cannot take down the process.
   `SSFGO_TEST_POSTGRES` holds a URL, for example
   `postgres://postgres@localhost:5432/postgres?sslmode=disable`
   (`docker run -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432:5432 postgres:17-alpine`).
+- A change to `storage/sqlstore`'s schema adds a migration to the end of
+  `migrations` in `schema.go`; a migration already released is never
+  edited.
 - `storage/sqlstore` builds against the core in the same checkout (its
   `go.mod` has a `replace`), but its users get the core version its
   `go.mod` requires. CI checks that version is enough. If a change makes

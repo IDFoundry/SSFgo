@@ -41,20 +41,43 @@ func openSQLite(t testing.TB) *sql.DB {
 
 func openSQLiteAt(t testing.TB, path string) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := rawSQLiteAt(t, path)
 	if err := sqlstore.CreateSchema(ctx, db, sqlstore.SQLite); err != nil {
 		t.Fatal(err)
 	}
 	return db
 }
 
+// rawSQLite opens a new SQLite database with no schema.
+func rawSQLite(t testing.TB) *sql.DB {
+	t.Helper()
+	return rawSQLiteAt(t, filepath.Join(t.TempDir(), "ssf.db"))
+}
+
+func rawSQLiteAt(t testing.TB, path string) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
 // openPostgres opens a connection to a new, empty PostgreSQL schema with
 // the tables created in it, and drops the schema when the test ends.
 func openPostgres(t testing.TB) *sql.DB {
+	t.Helper()
+	db := rawPostgres(t)
+	if err := sqlstore.CreateSchema(ctx, db, sqlstore.Postgres); err != nil {
+		t.Fatal(err)
+	}
+	return db
+}
+
+// rawPostgres opens a connection to a new, empty PostgreSQL schema with no
+// tables, and drops the schema when the test ends.
+func rawPostgres(t testing.TB) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv(postgresEnv)
 	if dsn == "" {
@@ -85,26 +108,24 @@ func openPostgres(t testing.TB) *sql.DB {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	if err := sqlstore.CreateSchema(ctx, db, sqlstore.Postgres); err != nil {
-		t.Fatal(err)
-	}
 	return db
 }
 
 var dialects = []struct {
 	name    string
 	dialect sqlstore.Dialect
-	open    func(testing.TB) *sql.DB
+	open    func(testing.TB) *sql.DB // with the schema
+	raw     func(testing.TB) *sql.DB // without
 }{
-	{"SQLite", sqlstore.SQLite, openSQLite},
-	{"Postgres", sqlstore.Postgres, openPostgres},
+	{"SQLite", sqlstore.SQLite, openSQLite, rawSQLite},
+	{"Postgres", sqlstore.Postgres, openPostgres, rawPostgres},
 }
 
 func TestContract(t *testing.T) {
 	for _, d := range dialects {
 		t.Run(d.name, func(t *testing.T) {
 			storagetest.StreamStore(t, func(t *testing.T) storage.StreamStore {
-				st, err := sqlstore.NewStreamStore(d.open(t), d.dialect)
+				st, err := sqlstore.NewStreamStore(ctx, d.open(t), d.dialect)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -118,7 +139,7 @@ func TestReplayContract(t *testing.T) {
 	for _, d := range dialects {
 		t.Run(d.name, func(t *testing.T) {
 			storagetest.ReplayStore(t, func(t *testing.T) storage.ReplayStore {
-				st, err := sqlstore.NewReplayStore(d.open(t), d.dialect)
+				st, err := sqlstore.NewReplayStore(ctx, d.open(t), d.dialect)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -132,7 +153,7 @@ func TestRevocationContract(t *testing.T) {
 	for _, d := range dialects {
 		t.Run(d.name, func(t *testing.T) {
 			storagetest.RevocationStore(t, func(t *testing.T) storage.RevocationStore {
-				st, err := sqlstore.NewRevocationStore(d.open(t), d.dialect)
+				st, err := sqlstore.NewRevocationStore(ctx, d.open(t), d.dialect)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -156,8 +177,8 @@ func TestDurable(t *testing.T) {
 	subject := ssf.ComplexSubject{User: ssf.EmailSubject{Email: "alice@example.com"}, Tenant: ssf.OpaqueSubject{ID: "t1"}}
 
 	db := openSQLiteAt(t, path)
-	st, _ := sqlstore.NewStreamStore(db, sqlstore.SQLite)
-	replay, _ := sqlstore.NewReplayStore(db, sqlstore.SQLite)
+	st, _ := sqlstore.NewStreamStore(ctx, db, sqlstore.SQLite)
+	replay, _ := sqlstore.NewReplayStore(ctx, db, sqlstore.SQLite)
 	if err := st.CreateStream(ctx, want, storage.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -175,8 +196,8 @@ func TestDurable(t *testing.T) {
 	}
 
 	db = openSQLiteAt(t, path)
-	st, _ = sqlstore.NewStreamStore(db, sqlstore.SQLite)
-	replay, _ = sqlstore.NewReplayStore(db, sqlstore.SQLite)
+	st, _ = sqlstore.NewStreamStore(ctx, db, sqlstore.SQLite)
+	replay, _ = sqlstore.NewReplayStore(ctx, db, sqlstore.SQLite)
 	got, err := st.Stream(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -217,11 +238,11 @@ func TestSchemaIdempotent(t *testing.T) {
 }
 
 func TestInvalidArguments(t *testing.T) {
-	if _, err := sqlstore.NewStreamStore(nil, sqlstore.SQLite); err == nil {
+	if _, err := sqlstore.NewStreamStore(ctx, nil, sqlstore.SQLite); err == nil {
 		t.Error("NewStreamStore(nil db) succeeded")
 	}
 	db := openSQLite(t)
-	if _, err := sqlstore.NewReplayStore(db, sqlstore.Dialect(0)); err == nil {
+	if _, err := sqlstore.NewReplayStore(ctx, db, sqlstore.Dialect(0)); err == nil {
 		t.Error("NewReplayStore(zero Dialect) succeeded")
 	}
 	if err := sqlstore.CreateSchema(ctx, db, sqlstore.Dialect(9)); err == nil {
@@ -235,7 +256,7 @@ func TestInvalidArguments(t *testing.T) {
 func TestConcurrentLimits(t *testing.T) {
 	for _, d := range dialects {
 		t.Run(d.name, func(t *testing.T) {
-			st, err := sqlstore.NewStreamStore(d.open(t), d.dialect)
+			st, err := sqlstore.NewStreamStore(ctx, d.open(t), d.dialect)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -286,9 +307,9 @@ func TestConcurrentLimits(t *testing.T) {
 // instances — a SQLite file is not, across hosts.
 func TestCapabilities(t *testing.T) {
 	db := openSQLite(t)
-	streams, _ := sqlstore.NewStreamStore(db, sqlstore.SQLite)
-	replay, _ := sqlstore.NewReplayStore(db, sqlstore.SQLite)
-	revocations, _ := sqlstore.NewRevocationStore(db, sqlstore.SQLite)
+	streams, _ := sqlstore.NewStreamStore(ctx, db, sqlstore.SQLite)
+	replay, _ := sqlstore.NewReplayStore(ctx, db, sqlstore.SQLite)
+	revocations, _ := sqlstore.NewRevocationStore(ctx, db, sqlstore.SQLite)
 	for _, s := range []any{streams, replay, revocations} {
 		if got := storage.CapabilitiesOf(s); got != (storage.Capabilities{Durable: true}) {
 			t.Errorf("SQLite %T declares %+v", s, got)
@@ -298,7 +319,7 @@ func TestCapabilities(t *testing.T) {
 		return
 	}
 	pg := openPostgres(t)
-	streams, _ = sqlstore.NewStreamStore(pg, sqlstore.Postgres)
+	streams, _ = sqlstore.NewStreamStore(ctx, pg, sqlstore.Postgres)
 	if got := storage.CapabilitiesOf(streams); got != (storage.Capabilities{Durable: true, CrossInstanceConsistent: true}) {
 		t.Errorf("PostgreSQL store declares %+v", got)
 	}

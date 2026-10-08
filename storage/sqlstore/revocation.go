@@ -21,10 +21,15 @@ type RevocationStore struct {
 
 var _ storage.RevocationStore = (*RevocationStore)(nil)
 
-// NewRevocationStore returns a RevocationStore on db, whose schema
-// CreateSchema has created.
-func NewRevocationStore(db *sql.DB, d Dialect) (*RevocationStore, error) {
+// NewRevocationStore returns a RevocationStore on db, whose schema CreateSchema has
+// created or migrated. It fails if the database's schema version is not
+// SchemaVersion, so a database left unmigrated is found at startup rather
+// than at the first query that needs what changed.
+func NewRevocationStore(ctx context.Context, db *sql.DB, d Dialect) (*RevocationStore, error) {
 	if err := d.check(db); err != nil {
+		return nil, err
+	}
+	if err := checkSchema(ctx, db); err != nil {
 		return nil, err
 	}
 	return &RevocationStore{db: db, d: d}, nil

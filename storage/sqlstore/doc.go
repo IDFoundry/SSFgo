@@ -3,22 +3,30 @@
 // storage/storagetest contract suite on both.
 //
 // The package imports no database driver: open the *sql.DB with the
-// driver of your choice, create the schema once, and build the stores:
+// driver of your choice, create or migrate the schema, and build the
+// stores:
 //
 //	db, err := sql.Open("pgx", dsn) // github.com/jackc/pgx/v5/stdlib
 //	if err := sqlstore.CreateSchema(ctx, db, sqlstore.Postgres); err != nil { ... }
-//	streams, err := sqlstore.NewStreamStore(db, sqlstore.Postgres)
-//	replay, err := sqlstore.NewReplayStore(db, sqlstore.Postgres)
-//	revocations, err := sqlstore.NewRevocationStore(db, sqlstore.Postgres)
+//	streams, err := sqlstore.NewStreamStore(ctx, db, sqlstore.Postgres)
+//	replay, err := sqlstore.NewReplayStore(ctx, db, sqlstore.Postgres)
+//	revocations, err := sqlstore.NewRevocationStore(ctx, db, sqlstore.Postgres)
 //
 // # Schema
 //
-// CreateSchema creates five tables, all prefixed ssf_, if they do not
-// exist: ssf_streams, ssf_subject_rules, ssf_events, ssf_replay and
-// ssf_revocations. Times
+// The stores use five tables, all prefixed ssf_: ssf_streams,
+// ssf_subject_rules, ssf_events, ssf_replay and ssf_revocations. Times
 // are stored as Unix nanoseconds, NULL for a zero time; lists and
-// delivery settings as JSON text. The schema is part of this module's
-// compatibility promise: a release that changes it says how to migrate.
+// delivery settings as JSON text.
+//
+// The schema is versioned, and ssf_schema records the version a database
+// has. CreateSchema creates the schema, or migrates an older one to
+// SchemaVersion, in one transaction — on PostgreSQL, instances starting
+// together take turns — so call it on every start, before building the
+// stores. The stores refuse, at construction, a database whose version is
+// not SchemaVersion: one never migrated, or one a newer release of this
+// module has migrated. A release that changes the schema adds a migration;
+// it never edits one already released.
 //
 // # Concurrency
 //

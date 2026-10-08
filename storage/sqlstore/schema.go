@@ -3,12 +3,20 @@ package sqlstore
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"strings"
 )
 
-// schema is the DDL for both dialects; {serial} is replaced by
+// migrations are the schema's versions, oldest first: applying
+// migrations[n] takes a database from version n to n+1, and the schema's
+// version is len(migrations). A release that changes the schema adds a
+// migration; it never edits one already released. {serial} is replaced by
 // Dialect.serial.
-var schema = []string{
+//
+// Version 1 keeps IF NOT EXISTS, so it also adopts a database created
+// before versions were recorded, leaving its data as it was.
+var migrations = [][]string{{
 	`CREATE TABLE IF NOT EXISTS ssf_streams (
 		seq {serial},
 		id TEXT NOT NULL UNIQUE,
@@ -59,10 +67,23 @@ var schema = []string{
 		PRIMARY KEY (kind, issuer, value)
 	)`,
 	`CREATE INDEX IF NOT EXISTS ssf_revocations_expires ON ssf_revocations (expires_at)`,
-}
+}}
 
-// CreateSchema creates the tables and indexes the stores use, skipping any
-// that already exist. It is safe to call on every start.
+// schemaTable records the database's schema version, in one row.
+const schemaTable = `CREATE TABLE IF NOT EXISTS ssf_schema (
+	id INTEGER PRIMARY KEY CHECK (id = 1),
+	version INTEGER NOT NULL
+)`
+
+// SchemaVersion is the version of the database schema this module's stores
+// use.
+func SchemaVersion() int { return len(migrations) }
+
+// CreateSchema creates the tables and indexes the stores use, or migrates
+// a database whose schema is older to SchemaVersion, in one transaction;
+// on PostgreSQL, instances starting together take turns. It is safe to
+// call on every start. A database whose schema is newer than this module
+// knows is refused: upgrade storage/sqlstore instead.
 func CreateSchema(ctx context.Context, db *sql.DB, d Dialect) error {
 	if err := d.check(db); err != nil {
 		return err
@@ -70,16 +91,57 @@ func CreateSchema(ctx context.Context, db *sql.DB, d Dialect) error {
 	return d.inTx(ctx, db, func(q querier) error {
 		if d == Postgres {
 			// Two instances starting together could otherwise both try
-			// to create the same table: IF NOT EXISTS is not atomic.
+			// to migrate: IF NOT EXISTS is not atomic.
 			if _, err := q.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1, 0)", advisoryLockClass); err != nil {
 				return err
 			}
 		}
-		for _, stmt := range schema {
-			if _, err := q.ExecContext(ctx, strings.ReplaceAll(stmt, "{serial}", d.serial())); err != nil {
-				return err
+		if _, err := q.ExecContext(ctx, schemaTable); err != nil {
+			return err
+		}
+		version, err := readVersion(ctx, q)
+		if err != nil {
+			return err
+		}
+		if version > len(migrations) {
+			return fmt.Errorf("sqlstore: the database schema is version %d, newer than this storage/sqlstore's %d: upgrade storage/sqlstore", version, len(migrations))
+		}
+		for _, m := range migrations[version:] {
+			for _, stmt := range m {
+				if _, err := q.ExecContext(ctx, strings.ReplaceAll(stmt, "{serial}", d.serial())); err != nil {
+					return fmt.Errorf("sqlstore: migrate the schema from version %d: %w", version, err)
+				}
 			}
 		}
-		return nil
+		_, err = q.ExecContext(ctx, d.rebind(`INSERT INTO ssf_schema (id, version) VALUES (1, ?)
+			ON CONFLICT (id) DO UPDATE SET version = excluded.version`), len(migrations))
+		return err
 	})
+}
+
+// readVersion returns the schema version recorded in the database, or 0
+// for one with none.
+func readVersion(ctx context.Context, q querier) (int, error) {
+	var version int
+	err := q.QueryRowContext(ctx, "SELECT version FROM ssf_schema WHERE id = 1").Scan(&version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return version, err
+}
+
+// checkSchema reports whether the database's schema is the version this
+// module's stores use, so a store refuses at construction, rather than at
+// its first query, a database CreateSchema has not created or migrated.
+func checkSchema(ctx context.Context, db *sql.DB) error {
+	version, err := readVersion(ctx, db)
+	switch {
+	case err != nil:
+		return fmt.Errorf("sqlstore: read the schema version (has CreateSchema run?): %w", err)
+	case version < len(migrations):
+		return fmt.Errorf("sqlstore: the database schema is version %d, older than this storage/sqlstore's %d: run CreateSchema to migrate it", version, len(migrations))
+	case version > len(migrations):
+		return fmt.Errorf("sqlstore: the database schema is version %d, newer than this storage/sqlstore's %d: upgrade storage/sqlstore", version, len(migrations))
+	}
+	return nil
 }

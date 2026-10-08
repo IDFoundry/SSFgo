@@ -24,7 +24,7 @@ func BenchmarkStreamStore(b *testing.B) {
 	for _, d := range dialects {
 		b.Run(d.name, func(b *testing.B) {
 			db := d.open(b)
-			st, err := sqlstore.NewStreamStore(db, d.dialect)
+			st, err := sqlstore.NewStreamStore(ctx, db, d.dialect)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -81,7 +81,7 @@ func BenchmarkStreamStore(b *testing.B) {
 				}
 			})
 
-			replay, err := sqlstore.NewReplayStore(db, d.dialect)
+			replay, err := sqlstore.NewReplayStore(ctx, db, d.dialect)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -109,7 +109,7 @@ func BenchmarkEmit(b *testing.B) {
 	}
 	for _, d := range dialects {
 		b.Run(d.name, func(b *testing.B) {
-			store, err := sqlstore.NewStreamStore(d.open(b), d.dialect)
+			store, err := sqlstore.NewStreamStore(ctx, d.open(b), d.dialect)
 			if err != nil {
 				b.Fatal(err)
 			}

@@ -102,9 +102,9 @@ database (`HorizontallyScaled`, which needs PostgreSQL), use
 // go get github.com/idfoundry/ssfgo/storage/sqlstore
 db, err := sql.Open("pgx", dsn) // any database/sql driver for PostgreSQL or SQLite
 err = sqlstore.CreateSchema(ctx, db, sqlstore.Postgres)
-store, err := sqlstore.NewStreamStore(db, sqlstore.Postgres)   // transmitter.Config.Store
-replay, err := sqlstore.NewReplayStore(db, sqlstore.Postgres)  // receiver.Config.ReplayStore
-revocations, err := sqlstore.NewRevocationStore(db, sqlstore.Postgres) // revocation.New
+store, err := sqlstore.NewStreamStore(ctx, db, sqlstore.Postgres)   // transmitter.Config.Store
+replay, err := sqlstore.NewReplayStore(ctx, db, sqlstore.Postgres)  // receiver.Config.ReplayStore
+revocations, err := sqlstore.NewRevocationStore(ctx, db, sqlstore.Postgres) // revocation.New
 ```
 
 [`examples/session-revocation`](examples/session-revocation) runs both

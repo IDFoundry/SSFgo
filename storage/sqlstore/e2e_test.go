@@ -40,7 +40,7 @@ func testEndToEnd(t *testing.T, db *sql.DB, d sqlstore.Dialect) {
 
 	// start builds a Transmitter instance on db and serves it.
 	start := func() *transmitter.Transmitter {
-		store, err := sqlstore.NewStreamStore(db, d)
+		store, err := sqlstore.NewStreamStore(ctx, db, d)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -72,7 +72,7 @@ func testEndToEnd(t *testing.T, db *sql.DB, d sqlstore.Dialect) {
 	if err := caep.Register(registry); err != nil {
 		t.Fatal(err)
 	}
-	replay, err := sqlstore.NewReplayStore(db, d)
+	replay, err := sqlstore.NewReplayStore(ctx, db, d)
 	if err != nil {
 		t.Fatal(err)
 	}

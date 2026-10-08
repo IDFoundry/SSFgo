@@ -26,8 +26,8 @@ Not covered: `internal/...` (not importable), `cmd/...` and
 `github.com/idfoundry/ssfgo/storage/sqlstore` is a separate module with
 its own version tags (`storage/sqlstore/vX.Y.Z`), so the core module stays
 free of dependencies. It follows the same rules from its own v1, and its
-database schema is part of its API: a release that changes the schema says
-how to migrate.
+database schema is part of its API: a release that changes the schema adds
+a migration `CreateSchema` applies, and says so.
 
 ## Storage interfaces
 

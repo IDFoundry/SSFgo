@@ -49,7 +49,7 @@ if err != nil {
 if err := sqlstore.CreateSchema(ctx, db, sqlstore.Postgres); err != nil {
 	return err
 }
-streams, err := sqlstore.NewStreamStore(db, sqlstore.Postgres)
+streams, err := sqlstore.NewStreamStore(ctx, db, sqlstore.Postgres)
 if err != nil {
 	return err
 }
@@ -194,7 +194,7 @@ without being handled twice, and a captured one cannot be replayed. In
 production use `storage/sqlstore`:
 
 ```go
-replay, err := sqlstore.NewReplayStore(db, sqlstore.Postgres)
+replay, err := sqlstore.NewReplayStore(ctx, db, sqlstore.Postgres)
 if err != nil {
 	return err
 }
