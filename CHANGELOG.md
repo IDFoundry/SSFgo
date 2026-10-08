@@ -56,7 +56,8 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
   most `MaxRetention`; and `MaxClockSkew`. Events map to users and
   sessions through iss_sub and complex subjects, to email addresses only
   with `MatchEmail` (scoped to the token issuer, ignoring ASCII case
-  only), and to anything else through `KeysFor`; `OnRevoke` lets the
+  only), to all of a user's sessions for a placeholder session such as
+  `ALL` only with `AllSessions`, and to anything else through `KeysFor`; `OnRevoke` lets the
   application end its own sessions. New
   `storage.RevocationStore` contract, with `memstore.NewRevocationStore`
   and `storagetest.RevocationStore`, and `sqlstore.NewRevocationStore`
