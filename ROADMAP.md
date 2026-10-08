@@ -92,16 +92,15 @@ Transmitter-initiated verification, `inactivity_timeout` with the
 Receiver's `KeepAlive`, `storage/sqlstore` for PostgreSQL and SQLite, an
 adversarial security review
 ([docs/security-review-2026-10.md](docs/security-review-2026-10.md), then
-[of the additions](docs/security-review-2026-10-additions.md)), and
-SCIM events (RFC 9967).
+[of the additions](docs/security-review-2026-10-additions.md)),
+SCIM events (RFC 9967), and interop with Keycloak's Transmitter — its
+per-stream audiences and all-sessions revocation — tested weekly
+([interop/README.md](interop/README.md)).
 
 ## Under consideration
 
 Ideas recorded for later; none is committed to.
 
-- **Interoperability.** Testing against deployed Transmitters, such as
-  Keycloak's, and handling their conventions — a `session` of `ALL`
-  meaning every session, audiences of the form `<client>/<stream>`.
 - **Local development.** An opt-in, clearly labelled mode allowing `http`
   on loopback addresses.
 - **Conformance kit.** Starting the OIDF suite from Go tests, rather than

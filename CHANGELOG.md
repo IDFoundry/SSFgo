@@ -136,6 +136,13 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 
 ### Testing
 
+- Interop with Keycloak's SSF Transmitter (26.8, experimental):
+  `interop/keycloak` sets Keycloak up, creates and verifies a poll
+  stream, and checks session-revoked for one session and for all of a
+  user's sessions (through the `revocation` package), credential-change
+  and account-disabled, with no SET rejected. `interop.yml` runs it
+  weekly and on demand; `interop/README.md` records what Keycloak does
+  that isn't obvious.
 - CI builds `storage/sqlstore` against the core version its `go.mod`
   requires, not only the core in the same checkout, so its users never
   get a core too old for it; the requirement is raised to the current
