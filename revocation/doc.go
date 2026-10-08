@@ -22,7 +22,8 @@
 // subject maps to what it revokes: an iss_sub subject, or a complex
 // subject's iss_sub "user", naming that issuer, to that user's tokens; a
 // complex subject's "session" to that session's tokens — for
-// session-revoked, only the session if the subject names one. Email
+// session-revoked, only the session if the subject names one, unless it
+// is Options.AllSessions, which stands for all of them. Email
 // subjects map only with Options.MatchEmail. Subjects with no default
 // mapping — SCIM resources, whose identifiers are not token subjects —
 // need Options.KeysFor.

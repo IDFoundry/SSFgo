@@ -29,6 +29,9 @@ var (
 	after    = now.Add(time.Minute)
 	reason   = caep.Common{ReasonAdmin: ssf.LocalizedText{"en": "test"}}
 	sessionA = ssf.ComplexSubject{User: alice, Session: ssf.OpaqueSubject{ID: "sid-a"}}
+	// allSessions names every session of alice the way some Transmitters
+	// do: with a placeholder session.
+	allSessions = ssf.ComplexSubject{User: alice, Session: ssf.OpaqueSubject{ID: "ALL"}}
 )
 
 // newRevoker returns a Revoker for the identity provider idp, filling in
@@ -90,6 +93,18 @@ func TestEventsRevoke(t *testing.T) {
 		"unless configured": {set: set(alice, caep.CredentialChange{
 			Common: reason, CredentialType: caep.CredentialPassword, ChangeType: caep.ChangeUpdate,
 		}), opts: revocation.Options{Events: []ssf.EventType{caep.CredentialChangeEventType}}, a: true, b: true},
+		"a session named ALL is only that session by default": {set: set(allSessions, caep.SessionRevoked{Common: reason})},
+		"AllSessions revokes every session of the user": {set: set(allSessions, caep.SessionRevoked{Common: reason}),
+			opts: revocation.Options{AllSessions: "ALL"}, a: true, b: true},
+		"AllSessions with an iss_sub session": {set: set(ssf.ComplexSubject{User: alice, Session: ssf.IssSubSubject{Issuer: idp, Subject: "ALL"}},
+			caep.SessionRevoked{Common: reason}), opts: revocation.Options{AllSessions: "ALL"}, a: true, b: true},
+		"AllSessions compares exactly": {set: set(ssf.ComplexSubject{User: alice, Session: ssf.OpaqueSubject{ID: "all"}},
+			caep.SessionRevoked{Common: reason}), opts: revocation.Options{AllSessions: "ALL"}},
+		"AllSessions without a user revokes nothing": {set: set(ssf.ComplexSubject{Session: ssf.OpaqueSubject{ID: "ALL"}},
+			caep.SessionRevoked{Common: reason}), opts: revocation.Options{AllSessions: "ALL"}},
+		"AllSessions with another issuer's user revokes nothing": {set: set(ssf.ComplexSubject{
+			User: ssf.IssSubSubject{Issuer: "https://other.example", Subject: "alice"}, Session: ssf.OpaqueSubject{ID: "ALL"},
+		}, caep.SessionRevoked{Common: reason}), opts: revocation.Options{AllSessions: "ALL"}},
 		"email without MatchEmail": {set: set(ssf.EmailSubject{Email: "alice@example.com"}, risc.AccountDisabled{})},
 		"SCIM needs KeysFor":       {set: set(ssf.SCIMSubject{URI: "/Users/1"}, scim.Deactivate{})},
 		"SCIM with KeysFor": {set: set(ssf.SCIMSubject{URI: "/Users/1"}, scim.Deactivate{}), opts: revocation.Options{

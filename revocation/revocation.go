@@ -56,6 +56,15 @@ type Options struct {
 	// default, since an address can change hands. Addresses are scoped to
 	// the token issuer and compared ignoring ASCII case only.
 	MatchEmail bool
+	// AllSessions, if set, is a session identifier that means every
+	// session of the subject's user, for Transmitters that revoke all of a
+	// user's sessions by naming a placeholder session — "ALL", say. A
+	// session-revoked event whose complex subject's "session" is exactly
+	// AllSessions revokes the user's tokens instead of a session of that
+	// name, and revokes nothing if the subject names no user. Off by
+	// default: no specification defines such a value, and a session could
+	// genuinely carry it.
+	AllSessions string
 	// KeysFor, if set, maps a SET to what it revokes instead of the
 	// default mapping — for subjects that mapping does not cover, such as
 	// SCIM resources. Returning no keys revokes nothing. Issuers is not
@@ -238,14 +247,23 @@ func (r *Revoker) mapSubject(s ssf.Subject, issuer string) (users, sessions []st
 		}
 		switch id := s.Session.(type) {
 		case ssf.OpaqueSubject:
-			sessions = append(sessions, storage.RevocationKey{Kind: storage.RevokeSession, Issuer: issuer, Value: id.ID})
+			sessions = r.appendSession(sessions, issuer, id.ID)
 		case ssf.IssSubSubject:
 			if id.Issuer == issuer {
-				sessions = append(sessions, storage.RevocationKey{Kind: storage.RevokeSession, Issuer: issuer, Value: id.Subject})
+				sessions = r.appendSession(sessions, issuer, id.Subject)
 			}
 		}
 	}
 	return users, sessions
+}
+
+// appendSession appends the key for session id, unless id is
+// Options.AllSessions: then the event concerns the user, not one session.
+func (r *Revoker) appendSession(sessions []storage.RevocationKey, issuer, id string) []storage.RevocationKey {
+	if r.opts.AllSessions != "" && id == r.opts.AllSessions {
+		return sessions
+	}
+	return append(sessions, storage.RevocationKey{Kind: storage.RevokeSession, Issuer: issuer, Value: id})
 }
 
 // foldASCII lowercases ASCII letters only. strings.ToLower also folds

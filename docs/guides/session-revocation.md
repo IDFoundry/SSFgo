@@ -17,6 +17,7 @@ the `Revoker` only whether a token it accepted has since been revoked.
 | iss_sub `{iss, sub}` | every token of that user |
 | complex subject with a `user` | every token of that user |
 | complex subject with a `session` (session-revoked) | only that session's tokens |
+| complex subject whose `session` is `AllSessions` (session-revoked) | every token of the `user` |
 | email (with `MatchEmail`) | every token of that address |
 | aliases | the union of its identifiers |
 | SCIM resource | what `KeysFor` says |
@@ -63,6 +64,12 @@ rev.Register(rx) // handles Events on the Receiver
 - **`Assurance`.** Production needs a durable store: an in-memory one
   forgets its revocations on restart, and revoked tokens are accepted
   again.
+- **`AllSessions`.** Some Transmitters revoke all of a user's sessions
+  with session-revoked naming a placeholder session, such as `ALL`. No
+  specification defines one, so it is off by default and such an event
+  revokes only a session of that name. Set `AllSessions: "ALL"` for a
+  Transmitter that does this, and the event revokes every token of the
+  subject's `user` instead.
 - **`OnRevoke`.** Runs after the revocation is recorded. An error makes
   the Transmitter deliver the SET again.
 
