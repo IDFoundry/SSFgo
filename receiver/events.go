@@ -98,6 +98,9 @@ func (r *Receiver) process(ctx context.Context, token string) (processed, error)
 		return processed{}, err
 	}
 	p := processed{jti: set.JWTID, eventType: set.Event.EventType()}
+	if err := r.checkSETAudience(ctx, set); err != nil {
+		return p, err
+	}
 	if err := r.checkCriticalMembers(set.Subject); err != nil {
 		return p, err
 	}
@@ -214,6 +217,10 @@ func (r *Receiver) decode(ctx context.Context, token string) (ssf.SET, error) {
 
 		LegacyEventSubject: r.cfg.AcceptLegacySubjects,
 		LegacySubjectType:  r.cfg.AcceptLegacySubjects,
+	}
+	if r.cfg.AudiencePerStream {
+		// checkSETAudience then requires the stream to be this Receiver's.
+		opts.AudienceMatch = func(aud string) bool { _, ok := r.streamIDOf(aud); return ok }
 	}
 	set, err := setcodec.Decode(token, opts)
 	if de, ok := setcodec.IsDecodeError(err); ok && de.Code == setcodec.CodeInvalidKey && r.maybeRefreshKeys(ctx) {

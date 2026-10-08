@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
@@ -34,6 +35,17 @@ type Config struct {
 	// creates must list it in "aud", and every SET must be addressed to
 	// it.
 	Audience string
+
+	// AudiencePerStream also accepts the audience "<Audience>/<stream_id>"
+	// that some Transmitters give each stream they create, with the
+	// Receiver's OAuth client ID as Audience — SSF 1.0 §8.1.1 leaves "aud"
+	// to the Transmitter. A stream is accepted if its "aud" names its own
+	// stream ID that way, and a SET if it is addressed to such a stream of
+	// this Receiver's. A SET naming a stream the Receiver has not seen —
+	// one another instance created, say — makes it read that stream from
+	// the Transmitter, at most once a minute for a stream not found. Off
+	// by default; with it, Audience must not end in "/".
+	AudiencePerStream bool
 
 	// Registry holds the event types the Receiver understands. Streams
 	// request them by default, and a SET of any other type is rejected.
@@ -187,6 +199,9 @@ func (c *Config) validate() error {
 	}
 	if c.Audience == "" {
 		errs = append(errs, errors.New("an Audience is required"))
+	}
+	if c.AudiencePerStream && strings.HasSuffix(c.Audience, "/") {
+		errs = append(errs, errors.New(`with AudiencePerStream, Audience must not end in "/"`))
 	}
 	if c.Registry == nil {
 		errs = append(errs, errors.New("a Registry is required"))

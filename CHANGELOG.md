@@ -33,6 +33,13 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 
 ### Added since v0.5
 
+- `receiver.Config.AudiencePerStream`: for Transmitters that give each
+  stream the audience `<client_id>/<stream_id>`, accepts such a stream,
+  and SETs addressed to a stream the Transmitter confirms is this
+  Receiver's — never on the form alone, since another Receiver's audience
+  can share the prefix. A stream another instance created is read from
+  the Transmitter once; one not found is not asked about again for a
+  minute, and a failed read has the SET delivered again. Off by default.
 - Observability: `receiver.Config.Hooks` reports every SET's outcome
   (handled, duplicate, rejected with its code, failed), every poll and
   every JWKS refetch; `transmitter.Config.Hooks` every emit (streams

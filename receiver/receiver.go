@@ -46,6 +46,8 @@ type Receiver struct {
 
 	inflightMu sync.Mutex
 	inflight   map[setKey]*handling // SETs being handled right now
+
+	streamAud streamAudiences // for Config.AudiencePerStream
 }
 
 // maxResponseBytes bounds every response read from the Transmitter.
@@ -65,11 +67,12 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 	cfg.Algorithms = slices.Clone(cfg.Algorithms)
 	cfg.SubjectMembers = slices.Clone(cfg.SubjectMembers)
 	r := &Receiver{
-		cfg:      cfg,
-		handlers: map[ssf.EventType]HandlerFunc{},
-		states:   map[string][]string{},
-		acks:     map[string]*pendingAcks{},
-		inflight: map[setKey]*handling{},
+		cfg:       cfg,
+		handlers:  map[ssf.EventType]HandlerFunc{},
+		states:    map[string][]string{},
+		acks:      map[string]*pendingAcks{},
+		inflight:  map[setKey]*handling{},
+		streamAud: streamAudiences{lookups: map[string]*streamLookup{}},
 	}
 	locations, err := metadataLocations(cfg)
 	if err != nil {

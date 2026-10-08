@@ -80,7 +80,7 @@ func (r *Receiver) checkStream(c ssf.StreamConfiguration) error {
 	if c.StreamID == "" {
 		return errors.New("receiver: stream configuration has no stream_id")
 	}
-	if !slices.Contains(c.Audience, r.cfg.Audience) {
+	if !slices.Contains(c.Audience, r.cfg.Audience) && !r.acceptStreamAudience(c) {
 		return fmt.Errorf("%w: stream %s has aud %v", ErrAudienceMismatch, c.StreamID, []string(c.Audience))
 	}
 	return nil
@@ -207,6 +207,7 @@ func (r *Receiver) DeleteStream(ctx context.Context, streamID string) error {
 	r.pollMu.Lock()
 	delete(r.acks, streamID)
 	r.pollMu.Unlock()
+	r.forgetStreamAudience(streamID)
 	return nil
 }
 
