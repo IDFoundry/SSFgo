@@ -21,10 +21,15 @@ type StreamStore struct {
 
 var _ storage.StreamStore = (*StreamStore)(nil)
 
-// NewStreamStore returns a StreamStore on db, whose schema CreateSchema
-// has created.
-func NewStreamStore(db *sql.DB, d Dialect) (*StreamStore, error) {
+// NewStreamStore returns a StreamStore on db, whose schema CreateSchema has
+// created or migrated. It fails if the database's schema version is not
+// SchemaVersion, so a database left unmigrated is found at startup rather
+// than at the first query that needs what changed.
+func NewStreamStore(ctx context.Context, db *sql.DB, d Dialect) (*StreamStore, error) {
 	if err := d.check(db); err != nil {
+		return nil, err
+	}
+	if err := checkSchema(ctx, db); err != nil {
 		return nil, err
 	}
 	return &StreamStore{db: db, d: d}, nil

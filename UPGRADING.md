@@ -33,7 +33,7 @@ share them, which needs PostgreSQL:
 ```go
 cfg := transmitter.Config{
 	// ...
-	Store:              streams,                  // sqlstore.NewStreamStore(db, sqlstore.Postgres)
+	Store:              streams,                  // sqlstore.NewStreamStore(ctx, db, sqlstore.Postgres)
 	Assurance:          ssf.AssuranceProduction,  // ssf.AssuranceDevelopment with memstore
 	HorizontallyScaled: true,
 }

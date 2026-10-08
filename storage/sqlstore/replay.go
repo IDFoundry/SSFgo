@@ -20,10 +20,15 @@ type ReplayStore struct {
 
 var _ storage.ReplayStore = (*ReplayStore)(nil)
 
-// NewReplayStore returns a ReplayStore on db, whose schema CreateSchema
-// has created.
-func NewReplayStore(db *sql.DB, d Dialect) (*ReplayStore, error) {
+// NewReplayStore returns a ReplayStore on db, whose schema CreateSchema has
+// created or migrated. It fails if the database's schema version is not
+// SchemaVersion, so a database left unmigrated is found at startup rather
+// than at the first query that needs what changed.
+func NewReplayStore(ctx context.Context, db *sql.DB, d Dialect) (*ReplayStore, error) {
 	if err := d.check(db); err != nil {
+		return nil, err
+	}
+	if err := checkSchema(ctx, db); err != nil {
 		return nil, err
 	}
 	return &ReplayStore{db: db, d: d, now: time.Now}, nil

@@ -25,24 +25,26 @@ if err != nil {
 	return err
 }
 if err := sqlstore.CreateSchema(ctx, db, sqlstore.Postgres); err != nil {
-	return err // creates what is missing; safe on every start
+	return err // creates or migrates the schema; safe on every start
 }
-streams, err := sqlstore.NewStreamStore(db, sqlstore.Postgres) // transmitter.Config.Store
+streams, err := sqlstore.NewStreamStore(ctx, db, sqlstore.Postgres) // transmitter.Config.Store
 if err != nil {
 	return err
 }
-replay, err := sqlstore.NewReplayStore(db, sqlstore.Postgres) // receiver.Config.ReplayStore
+replay, err := sqlstore.NewReplayStore(ctx, db, sqlstore.Postgres) // receiver.Config.ReplayStore
 if err != nil {
 	return err
 }
-revocations, err := sqlstore.NewRevocationStore(db, sqlstore.Postgres) // revocation.New
+revocations, err := sqlstore.NewRevocationStore(ctx, db, sqlstore.Postgres) // revocation.New
 if err != nil {
 	return err
 }
 ```
 
 Expired replay records and revocations are deleted as new ones are
-added.
+added. The schema is versioned: the stores refuse a database
+`CreateSchema` has not migrated to `sqlstore.SchemaVersion()`, so call it
+on every start, before building them.
 
 ## Several instances
 

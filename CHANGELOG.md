@@ -109,7 +109,10 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
   `ReplayStore` implementations on `database/sql` for PostgreSQL and
   SQLite, passing the `storagetest` contract on both. The core module
   still has no dependencies. The daily conformance run also exercises it:
-  the Transmitter matrix runs on SQLite as well as in memory.
+  the Transmitter matrix runs on SQLite as well as in memory. Its schema
+  is versioned: `CreateSchema` creates it or migrates an older one, in
+  one transaction, and the stores — whose constructors take a context —
+  refuse a database at any other version (`SchemaVersion`).
 - Receiver-side CAEP Interoperability Profile preset:
   `interop.ApplyReceiver` checks the Receiver's configuration (RS256
   accepted, a profile event type registered) and installs

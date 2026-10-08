@@ -40,7 +40,7 @@ func main() {
 	if err := sqlstore.CreateSchema(context.Background(), db, dialect); err != nil {
 		log.Fatal(err)
 	}
-	store, err := sqlstore.NewStreamStore(db, dialect)
+	store, err := sqlstore.NewStreamStore(context.Background(), db, dialect)
 	if err != nil {
 		log.Fatal(err)
 	}
