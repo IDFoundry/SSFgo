@@ -219,6 +219,11 @@ each finding was reproduced by a failing test before it was fixed.
 
 ### Fixed since v0.5
 
+- RISC account-disabled with a `reason` RISC 1.0 §2.3 does not list —
+  `disabled-by-admin`, as Keycloak sends — was rejected, losing the
+  account-disabled event. §2.3 lists two possible values without
+  excluding others; any reason is now accepted, as the Transmitter's
+  untrusted text.
 - Found by the new fuzz targets: an empty `ssf.Audience` encoded as
   `null`, which `Audience` itself refused to decode (it now encodes `[]`);
   `ssf.NumericDate` accepted values below one second that encoded as `0`

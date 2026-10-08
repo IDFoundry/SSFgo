@@ -82,6 +82,8 @@ func TestDecode(t *testing.T) {
 	}{
 		{risc.AccountDisabledEventType, `{"reason":"hijacking"}`, risc.AccountDisabled{Reason: risc.DisabledHijacking}},
 		{risc.AccountDisabledEventType, `{"reason":"bulk-account"}`, risc.AccountDisabled{Reason: risc.DisabledBulkAccount}},
+		// A reason RISC does not list, as Transmitters send.
+		{risc.AccountDisabledEventType, `{"reason":"disabled-by-admin"}`, risc.AccountDisabled{Reason: "disabled-by-admin"}},
 		{risc.IdentifierChangedEventType, `{"new-value":"john.roe@example.com"}`, risc.IdentifierChanged{NewValue: "john.roe@example.com"}},
 		{risc.CredentialCompromiseEventType, `{"credential_type":"password"}`, risc.CredentialCompromise{CredentialType: caep.CredentialPassword}},
 		{risc.CredentialCompromiseEventType,
@@ -110,11 +112,11 @@ func TestDecodeRejects(t *testing.T) {
 		typ  ssf.EventType
 		json string
 	}{
-		"disabled reason unknown":     {risc.AccountDisabledEventType, `{"reason":"spam"}`},
-		"compromise no type":          {risc.CredentialCompromiseEventType, `{}`},
-		"compromise reason string":    {risc.CredentialCompromiseEventType, `{"credential_type":"password","reason_admin":"leaked"}`},
-		"compromise empty reason":     {risc.CredentialCompromiseEventType, `{"credential_type":"password","reason_user":{}}`},
-		"identifier new-value number": {risc.IdentifierChangedEventType, `{"new-value":5}`},
+		"disabled reason not a string": {risc.AccountDisabledEventType, `{"reason":5}`},
+		"compromise no type":           {risc.CredentialCompromiseEventType, `{}`},
+		"compromise reason string":     {risc.CredentialCompromiseEventType, `{"credential_type":"password","reason_admin":"leaked"}`},
+		"compromise empty reason":      {risc.CredentialCompromiseEventType, `{"credential_type":"password","reason_user":{}}`},
+		"identifier new-value number":  {risc.IdentifierChangedEventType, `{"new-value":5}`},
 	} {
 		if _, err := r.Decode(c.typ, json.RawMessage(c.json)); !errors.Is(err, ssf.ErrInvalidEvent) {
 			t.Errorf("%s: error = %v, want ErrInvalidEvent", name, err)
