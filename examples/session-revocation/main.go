@@ -32,6 +32,8 @@ import (
 	"github.com/idfoundry/ssfgo/caep/interop"
 	"github.com/idfoundry/ssfgo/receiver"
 	"github.com/idfoundry/ssfgo/revocation"
+	"github.com/idfoundry/ssfgo/risc"
+	"github.com/idfoundry/ssfgo/scim"
 	"github.com/idfoundry/ssfgo/storage"
 	"github.com/idfoundry/ssfgo/storage/memstore"
 	"github.com/idfoundry/ssfgo/transmitter"
@@ -141,8 +143,10 @@ func run(ctx context.Context, w io.Writer) error {
 	// --- Relying party: an SSF Receiver. ---
 	store := &sessions{byUser: map[string][]string{}}
 	registry := ssf.NewRegistry()
-	if err := caep.Register(registry); err != nil {
-		return err
+	for _, register := range []func(*ssf.Registry) error{caep.Register, risc.Register, scim.Register} {
+		if err := register(registry); err != nil {
+			return err
+		}
 	}
 	rx, err := receiver.New(ctx, receiver.Config{
 		Assurance:   ssf.AssuranceDevelopment,
@@ -193,7 +197,9 @@ func run(ctx context.Context, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	rev.Register(rx)
+	if err := rev.Register(rx); err != nil {
+		return err
+	}
 	receiver.On(rx, func(_ context.Context, _ ssf.SET, v ssf.Verification) error {
 		say("RP:  stream verified")
 		return nil

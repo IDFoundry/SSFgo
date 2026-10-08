@@ -11,7 +11,9 @@
 //		Retention: 24 * time.Hour, // at least the longest token lifetime
 //		Assurance: ssf.AssuranceDevelopment, // production needs a durable store
 //	})
-//	rev.Register(rx) // handle the events of Options.Events
+//	if err := rev.Register(rx); err != nil { // handle the events of Options.Events
+//		return err // rx's Registry lacks one of them
+//	}
 //	api := rev.Middleware(func(r *http.Request) (revocation.Token, bool) {
 //		claims, ok := validatedClaims(r) // the application's own token check
 //		return revocation.Token{Issuer: claims.Iss, Subject: claims.Sub, SessionID: claims.Sid, IssuedAt: claims.Iat}, ok
@@ -22,11 +24,12 @@
 // subject maps to what it revokes: an iss_sub subject, or a complex
 // subject's iss_sub "user", naming that issuer, to that user's tokens; a
 // complex subject's "session" to that session's tokens — for
-// session-revoked, only the session if the subject names one, unless it
-// is Options.AllSessions, which stands for all of them. Email
+// session-revoked, only the session if the subject names one — nothing
+// if it is another issuer's, or of a format other than opaque and iss_sub
+// — unless it is Options.AllSessions, which stands for all of them. Email
 // subjects map only with Options.MatchEmail. Subjects with no default
 // mapping — SCIM resources, whose identifiers are not token subjects —
-// need Options.KeysFor.
+// need Options.KeysFor, which is held to the same issuer.
 //
 // Tokens issued at or before the event are revoked; tokens issued later —
 // the user signing in again — are not.

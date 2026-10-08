@@ -3,6 +3,7 @@ package revocation_test
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -108,7 +109,7 @@ func TestEventsRevoke(t *testing.T) {
 		"email without MatchEmail": {set: set(ssf.EmailSubject{Email: "alice@example.com"}, risc.AccountDisabled{})},
 		"SCIM needs KeysFor":       {set: set(ssf.SCIMSubject{URI: "/Users/1"}, scim.Deactivate{})},
 		"SCIM with KeysFor": {set: set(ssf.SCIMSubject{URI: "/Users/1"}, scim.Deactivate{}), opts: revocation.Options{
-			KeysFor: func(ssf.SET) []storage.RevocationKey {
+			KeysFor: func(ssf.SET, string) []storage.RevocationKey {
 				return []storage.RevocationKey{{Kind: storage.RevokeUser, Issuer: idp, Value: "bob"}}
 			},
 		}, bobRev: true},
@@ -242,17 +243,132 @@ func TestProductionRefusesMemstore(t *testing.T) {
 // New refuses incomplete or out-of-range options, reporting every problem
 // at once.
 func TestNewValidates(t *testing.T) {
-	_, err := revocation.New(nil, revocation.Options{Retention: revocation.MaxRetention + 1, MaxClockSkew: -1})
+	_, err := revocation.New(nil, revocation.Options{Retention: revocation.MaxRetention + 1, MaxClockSkew: -1, AllSessions: " ALL"})
 	if err == nil {
 		t.Fatal("New accepted invalid options")
 	}
-	for _, want := range []string{"store is required", "Options.Issuers is required", "Options.Events is required", "Options.Retention must be", "Options.MaxClockSkew must not be negative", "Assurance level must be"} {
+	for _, want := range []string{"store is required", "Options.Issuers is required", "Options.Events is required", "Options.Retention must be", "Options.MaxClockSkew must not be negative", "Options.AllSessions must not begin or end with white space", "Assurance level must be"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q lacks %q", err, want)
 		}
 	}
-	if _, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{Issuers: revocation.SameIssuer, Events: revocation.RecommendedEvents(), Retention: revocation.MaxRetention, Assurance: ssf.AssuranceDevelopment}); err != nil {
+	if _, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{Issuers: revocation.SameIssuer, Events: revocation.RecommendedEvents(), Retention: revocation.MaxRetention, MaxClockSkew: revocation.MaxClockSkewBound, Assurance: ssf.AssuranceDevelopment}); err != nil {
 		t.Errorf("New refused valid options: %v", err)
+	}
+	// A skew large enough to overflow Retention + MaxClockSkew would expire
+	// every revocation at once.
+	_, err = revocation.New(memstore.NewRevocationStore(), revocation.Options{Issuers: revocation.SameIssuer, Events: revocation.RecommendedEvents(), Retention: revocation.MaxRetention, MaxClockSkew: math.MaxInt64 - time.Hour, Assurance: ssf.AssuranceDevelopment})
+	if err == nil || !strings.Contains(err.Error(), "Options.MaxClockSkew") {
+		t.Errorf("New = %v; want MaxClockSkew refused", err)
+	}
+}
+
+// KeysFor runs only for a Transmitter Issuers trusts, with its token
+// issuer, and keys naming any other issuer are dropped: KeysFor cannot
+// reopen a path for one Transmitter to revoke another identity
+// provider's users.
+func TestKeysForIssuerScoped(t *testing.T) {
+	const other = "https://other-idp.example"
+	var gotIssuer string
+	r := newRevoker(t, revocation.Options{
+		Issuers: revocation.StaticTokenIssuers{idp: idp},
+		KeysFor: func(set ssf.SET, tokenIssuer string) []storage.RevocationKey {
+			gotIssuer = tokenIssuer
+			return []storage.RevocationKey{
+				{Kind: storage.RevokeUser, Issuer: tokenIssuer, Value: "alice"},
+				{Kind: storage.RevokeUser, Issuer: other, Value: "bob"},
+			}
+		},
+	})
+	ctx := context.Background()
+	scimSET := func(iss string) ssf.SET {
+		return ssf.SET{Issuer: iss, IssuedAt: now, Subject: ssf.SCIMSubject{URI: "/Users/1"}, Event: scim.Deactivate{}}
+	}
+	if err := r.Handle(ctx, scimSET("https://untrusted.example")); err != nil {
+		t.Fatal(err)
+	}
+	if gotIssuer != "" || revoked(t, r, revocation.Token{Issuer: idp, Subject: "alice", IssuedAt: before}) {
+		t.Fatal("a Transmitter Issuers does not name reached KeysFor")
+	}
+	if err := r.Handle(ctx, scimSET(idp)); err != nil {
+		t.Fatal(err)
+	}
+	if gotIssuer != idp {
+		t.Errorf("KeysFor got token issuer %q, want %q", gotIssuer, idp)
+	}
+	if !revoked(t, r, revocation.Token{Issuer: idp, Subject: "alice", IssuedAt: before}) {
+		t.Error("KeysFor's key for the Transmitter's own issuer was not recorded")
+	}
+	if revoked(t, r, revocation.Token{Issuer: other, Subject: "bob", IssuedAt: before}) {
+		t.Error("KeysFor's key naming another issuer was recorded")
+	}
+}
+
+// A session-revoked event naming a session the default mapping cannot
+// place among the issuer's tokens revokes nothing, rather than every
+// session of the user.
+func TestUnplacedSessionRevokesNothing(t *testing.T) {
+	aliceB := revocation.Token{Issuer: idp, Subject: "alice", SessionID: "sid-b", IssuedAt: before}
+	for name, session := range map[string]ssf.Subject{
+		"another issuer's session":     ssf.IssSubSubject{Issuer: "https://other.example", Subject: "sid-a"},
+		"another issuer's AllSessions": ssf.IssSubSubject{Issuer: "https://other.example", Subject: "ALL"},
+		"an aliases session":           ssf.AliasesSubject{Identifiers: []ssf.Subject{ssf.OpaqueSubject{ID: "sid-a"}}},
+		"an email session":             ssf.EmailSubject{Email: "alice@example.com"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := newRevoker(t, revocation.Options{AllSessions: "ALL"})
+			if err := r.Handle(context.Background(), set(ssf.ComplexSubject{User: alice, Session: session}, caep.SessionRevoked{Common: reason})); err != nil {
+				t.Fatal(err)
+			}
+			if revoked(t, r, aliceB) {
+				t.Error("an unplaced session revoked the user's other sessions")
+			}
+		})
+	}
+}
+
+// Errors are logged, so they carry what kind of revocation failed, never
+// the user, session or address.
+func TestErrorsOmitIdentifiers(t *testing.T) {
+	r, err := revocation.New(failingStore{}, revocation.Options{Issuers: revocation.SameIssuer, Events: revocation.RecommendedEvents(), Retention: time.Hour, Assurance: ssf.AssuranceDevelopment, MatchEmail: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	herr := r.Handle(ctx, set(sessionA, caep.SessionRevoked{Common: reason}))
+	_, cerr := r.IsRevoked(ctx, revocation.Token{Issuer: idp, Subject: "alice", SessionID: "sid-a", Email: "alice@example.com"})
+	for _, err := range []error{herr, cerr} {
+		if err == nil {
+			t.Fatal("no error from a failing store")
+		}
+		for _, id := range []string{"alice", "sid-a"} {
+			if strings.Contains(err.Error(), id) {
+				t.Errorf("error %q contains %q", err, id)
+			}
+		}
+	}
+}
+
+// Register refuses, installing nothing, when the Receiver's Registry lacks
+// one of Options.Events: those events would never arrive.
+func TestRegisterChecksRegistry(t *testing.T) {
+	tx := ssftest.NewTransmitter(t)
+	registry := ssf.NewRegistry()
+	if err := caep.Register(registry); err != nil {
+		t.Fatal(err)
+	}
+	rx, err := receiver.New(context.Background(), tx.ReceiverConfig(registry))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := newRevoker(t, revocation.Options{})
+	err = r.Register(rx)
+	if err == nil || !strings.Contains(err.Error(), string(risc.AccountDisabledEventType)) || strings.Contains(err.Error(), string(caep.SessionRevokedEventType)) {
+		t.Errorf("Register = %v; want the RISC and SCIM events named, and not CAEP's", err)
+	}
+	r = newRevoker(t, revocation.Options{Events: []ssf.EventType{caep.SessionRevokedEventType}})
+	if err := r.Register(rx); err != nil {
+		t.Errorf("Register with events the Registry holds: %v", err)
 	}
 }
 
@@ -344,8 +460,10 @@ func TestEndToEnd(t *testing.T) {
 	ctx := context.Background()
 	tx := ssftest.NewTransmitter(t)
 	registry := ssf.NewRegistry()
-	if err := caep.Register(registry); err != nil {
-		t.Fatal(err)
+	for _, register := range []func(*ssf.Registry) error{caep.Register, risc.Register, scim.Register} {
+		if err := register(registry); err != nil {
+			t.Fatal(err)
+		}
 	}
 	rx, err := receiver.New(ctx, tx.ReceiverConfig(registry))
 	if err != nil {
@@ -360,7 +478,9 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rev.Register(rx)
+	if err := rev.Register(rx); err != nil {
+		t.Fatal(err)
+	}
 	stream, err := rx.EnsureStream(ctx, receiver.StreamRequest{})
 	if err != nil {
 		t.Fatal(err)
@@ -379,4 +499,8 @@ func TestEndToEnd(t *testing.T) {
 	if revoked(t, rev, revocation.Token{Issuer: idp, Subject: "alice", SessionID: "sid-b", IssuedAt: issued}) {
 		t.Error("another session of the user was revoked too")
 	}
+}
+
+func (failingStore) Revoke(context.Context, storage.RevocationKey, time.Time, time.Time) error {
+	return errors.New("down")
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
@@ -20,6 +21,11 @@ import (
 // MaxRetention bounds Options.Retention: long enough for any token, short
 // enough that a revocation's expiry is always representable by every store.
 const MaxRetention = 10 * 365 * 24 * time.Hour
+
+// MaxClockSkewBound bounds Options.MaxClockSkew. Clocks an hour apart are
+// broken, not skewed; a larger allowance would also revoke the tokens of a
+// user who signs in again long after the revocation.
+const MaxClockSkewBound = time.Hour
 
 // Options configures a Revoker. Issuers, Events and Retention are
 // required: there are no implicit defaults, and RecommendedEvents is the
@@ -49,7 +55,7 @@ type Options struct {
 	// MaxClockSkew is how far a token's "iat" may run ahead of the
 	// revocation time and still count as issued before it, for identity
 	// providers whose clocks run ahead of the Transmitter's. Zero allows
-	// none; it may not be negative.
+	// none; it may not be negative or more than MaxClockSkewBound.
 	MaxClockSkew time.Duration
 	// MatchEmail also maps email subjects, so a Token's Email is checked:
 	// for an application whose users are known by email address. Off by
@@ -63,13 +69,16 @@ type Options struct {
 	// AllSessions revokes the user's tokens instead of a session of that
 	// name, and revokes nothing if the subject names no user. Off by
 	// default: no specification defines such a value, and a session could
-	// genuinely carry it.
+	// genuinely carry it. It may not begin or end with white space.
 	AllSessions string
 	// KeysFor, if set, maps a SET to what it revokes instead of the
 	// default mapping — for subjects that mapping does not cover, such as
-	// SCIM resources. Returning no keys revokes nothing. Issuers is not
-	// applied to the keys it returns.
-	KeysFor func(ssf.SET) []storage.RevocationKey
+	// SCIM resources. It is called only for SETs from a Transmitter
+	// Issuers trusts, with the token issuer Issuers gives for it, and only
+	// keys naming that issuer are recorded: a Transmitter revokes the
+	// tokens of its own identity provider and no other. Returning no keys
+	// revokes nothing.
+	KeysFor func(set ssf.SET, tokenIssuer string) []storage.RevocationKey
 	// OnRevoke, if set, is called after a SET's revocations are recorded —
 	// to end the application's own sessions, say. It runs on the
 	// Receiver's goroutine for the SET and must not block for long. An
@@ -149,8 +158,11 @@ func New(store storage.RevocationStore, opts Options) (*Revoker, error) {
 	errs = append(errs, assurance.Check(opts.Assurance, opts.HorizontallyScaled, assurance.Deps{
 		Stores: []assurance.Store{{Field: "the store", Store: store}},
 	})...)
-	if opts.MaxClockSkew < 0 {
-		errs = append(errs, errors.New("Options.MaxClockSkew must not be negative"))
+	if opts.MaxClockSkew < 0 || opts.MaxClockSkew > MaxClockSkewBound {
+		errs = append(errs, fmt.Errorf("Options.MaxClockSkew must not be negative or more than %v", MaxClockSkewBound))
+	}
+	if strings.TrimSpace(opts.AllSessions) != opts.AllSessions {
+		errs = append(errs, errors.New("Options.AllSessions must not begin or end with white space"))
 	}
 	if err := errors.Join(errs...); err != nil {
 		return nil, fmt.Errorf("revocation: invalid options: %w", err)
@@ -165,10 +177,25 @@ func New(store storage.RevocationStore, opts Options) (*Revoker, error) {
 // Register installs Handle on rx for each of Options.Events, replacing any
 // handler already registered for them. An application with its own
 // handlers for those events calls Handle from them instead.
-func (r *Revoker) Register(rx *receiver.Receiver) {
+//
+// It fails, installing nothing, if rx's Registry lacks any of the events:
+// the Receiver would neither request nor accept them, so they would never
+// revoke anything. Register their packages' events — risc.Register,
+// scim.Register — or leave them out of Options.Events.
+func (r *Revoker) Register(rx *receiver.Receiver) error {
+	var missing []string
+	for _, typ := range r.opts.Events {
+		if !rx.Supports(typ) {
+			missing = append(missing, string(typ))
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("revocation: the Receiver's Registry does not hold %s, of Options.Events", strings.Join(missing, ", "))
+	}
 	for _, typ := range r.opts.Events {
 		rx.Handle(typ, r.Handle)
 	}
+	return nil
 }
 
 // Handle records the revocation set means, if its event type is one of
@@ -177,10 +204,14 @@ func (r *Revoker) Handle(ctx context.Context, set ssf.SET) error {
 	if set.Event == nil || !slices.Contains(r.opts.Events, set.Event.EventType()) {
 		return nil
 	}
+	issuer, ok := r.opts.Issuers.TokenIssuer(set.Issuer)
+	if !ok {
+		return nil
+	}
 	var keys []storage.RevocationKey
 	if r.opts.KeysFor != nil {
-		keys = r.opts.KeysFor(set)
-	} else if issuer, ok := r.opts.Issuers.TokenIssuer(set.Issuer); ok {
+		keys = slices.DeleteFunc(r.opts.KeysFor(set, issuer), func(k storage.RevocationKey) bool { return k.Issuer != issuer })
+	} else {
 		keys = r.keysFor(set, issuer)
 	}
 	if len(keys) == 0 {
@@ -191,7 +222,9 @@ func (r *Revoker) Handle(ctx context.Context, set ssf.SET) error {
 	expires := now.Add(r.opts.Retention + r.opts.MaxClockSkew)
 	for _, k := range keys {
 		if err := r.store.Revoke(ctx, k, at, expires); err != nil {
-			return fmt.Errorf("revocation: record %s %s: %w", k.Kind, k.Value, err)
+			// The key's value — a user, session or address — is
+			// personal data, and this error is logged.
+			return fmt.Errorf("revocation: record a %s revocation: %w", k.Kind, err)
 		}
 	}
 	if r.opts.OnRevoke != nil {
@@ -215,17 +248,39 @@ func revokedAt(set ssf.SET, now time.Time) time.Time {
 
 // keysFor is the default mapping from a SET's subject to what it revokes,
 // for the Transmitter that speaks for tokens of issuer. session-revoked
-// revokes only the session when the subject names one.
+// naming a session revokes only that session — nothing if the session
+// cannot be placed among issuer's tokens — or every session of the user
+// for Options.AllSessions.
 func (r *Revoker) keysFor(set ssf.SET, issuer string) []storage.RevocationKey {
 	users, sessions := r.mapSubject(set.Subject, issuer)
-	if _, ok := set.Event.(caep.SessionRevoked); ok && len(sessions) > 0 {
+	complexSubject, isComplex := set.Subject.(ssf.ComplexSubject)
+	if _, ok := set.Event.(caep.SessionRevoked); ok && isComplex && complexSubject.Session != nil {
+		if r.isAllSessions(complexSubject.Session, issuer) {
+			return users
+		}
 		return sessions
 	}
 	return users
 }
 
+// isAllSessions reports whether session is Options.AllSessions among the
+// tokens of issuer.
+func (r *Revoker) isAllSessions(session ssf.Subject, issuer string) bool {
+	if r.opts.AllSessions == "" {
+		return false
+	}
+	switch id := session.(type) {
+	case ssf.OpaqueSubject:
+		return id.ID == r.opts.AllSessions
+	case ssf.IssSubSubject:
+		return id.Issuer == issuer && id.Subject == r.opts.AllSessions
+	}
+	return false
+}
+
 // mapSubject maps s to the user and session keys it names among the
-// tokens of issuer. An identifier naming another issuer maps to nothing.
+// tokens of issuer. An identifier naming another issuer maps to nothing,
+// and so does a session of a format other than opaque and iss_sub.
 func (r *Revoker) mapSubject(s ssf.Subject, issuer string) (users, sessions []storage.RevocationKey) {
 	switch s := s.(type) {
 	case ssf.IssSubSubject:
@@ -247,23 +302,14 @@ func (r *Revoker) mapSubject(s ssf.Subject, issuer string) (users, sessions []st
 		}
 		switch id := s.Session.(type) {
 		case ssf.OpaqueSubject:
-			sessions = r.appendSession(sessions, issuer, id.ID)
+			sessions = append(sessions, storage.RevocationKey{Kind: storage.RevokeSession, Issuer: issuer, Value: id.ID})
 		case ssf.IssSubSubject:
 			if id.Issuer == issuer {
-				sessions = r.appendSession(sessions, issuer, id.Subject)
+				sessions = append(sessions, storage.RevocationKey{Kind: storage.RevokeSession, Issuer: issuer, Value: id.Subject})
 			}
 		}
 	}
 	return users, sessions
-}
-
-// appendSession appends the key for session id, unless id is
-// Options.AllSessions: then the event concerns the user, not one session.
-func (r *Revoker) appendSession(sessions []storage.RevocationKey, issuer, id string) []storage.RevocationKey {
-	if r.opts.AllSessions != "" && id == r.opts.AllSessions {
-		return sessions
-	}
-	return append(sessions, storage.RevocationKey{Kind: storage.RevokeSession, Issuer: issuer, Value: id})
 }
 
 // foldASCII lowercases ASCII letters only. strings.ToLower also folds
@@ -313,7 +359,7 @@ func (r *Revoker) IsRevoked(ctx context.Context, tok Token) (bool, error) {
 	for _, k := range keys {
 		at, ok, err := r.store.RevokedAt(ctx, k, now)
 		if err != nil {
-			return false, fmt.Errorf("revocation: check %s %s: %w", k.Kind, k.Value, err)
+			return false, fmt.Errorf("revocation: check for a %s revocation: %w", k.Kind, err)
 		}
 		if ok && (tok.IssuedAt.IsZero() || !tok.IssuedAt.After(at.Add(r.opts.MaxClockSkew))) {
 			return true, nil

@@ -16,7 +16,7 @@ the `Revoker` only whether a token it accepted has since been revoked.
 |---|---|
 | iss_sub `{iss, sub}` | every token of that user |
 | complex subject with a `user` | every token of that user |
-| complex subject with a `session` (session-revoked) | only that session's tokens |
+| complex subject with a `session` (session-revoked) | only that session's tokens — nothing if the session is another issuer's, or not opaque or iss_sub |
 | complex subject whose `session` is `AllSessions` (session-revoked) | every token of the `user` |
 | email (with `MatchEmail`) | every token of that address |
 | aliases | the union of its identifiers |
@@ -50,7 +50,9 @@ rev, err := revocation.New(store, revocation.Options{
 if err != nil {
 	return err
 }
-rev.Register(rx) // handles Events on the Receiver
+if err := rev.Register(rx); err != nil { // handles Events on the Receiver
+	return err // rx's Registry lacks one of Events: register risc and scim too
+}
 ```
 
 - **`Issuers`.** An identity provider that is its own Transmitter, with
@@ -111,7 +113,7 @@ A SCIM subject names a resource, not a token's subject, so the default
 mapping cannot place it. `KeysFor` maps it instead:
 
 ```go
-opts.KeysFor = func(set ssf.SET) []storage.RevocationKey {
+opts.KeysFor = func(set ssf.SET, tokenIssuer string) []storage.RevocationKey {
 	resource, ok := set.Subject.(ssf.SCIMSubject)
 	if !ok {
 		return nil
@@ -120,12 +122,15 @@ opts.KeysFor = func(set ssf.SET) []storage.RevocationKey {
 	if !ok {
 		return nil
 	}
-	return []storage.RevocationKey{{Kind: storage.RevokeUser, Issuer: "https://idp.example.com", Value: sub}}
+	return []storage.RevocationKey{{Kind: storage.RevokeUser, Issuer: tokenIssuer, Value: sub}}
 }
 ```
 
 `KeysFor` replaces the default mapping for every event, so handle the
-other subjects there too if you need them.
+other subjects there too if you need them. It runs only for SETs from a
+Transmitter `Issuers` trusts, with the token issuer `Issuers` gives it;
+keys naming any other issuer are dropped, so one Transmitter still cannot
+revoke another identity provider's users.
 
 ## See also
 
