@@ -84,7 +84,11 @@ func (AccountPurged) EventType() ssf.EventType { return AccountPurgedEventType }
 // Validate implements ssf.Event.
 func (AccountPurged) Validate() error { return nil }
 
-// DisabledReason is why an account was disabled (RISC 1.0 §2.3).
+// DisabledReason is why an account was disabled (RISC 1.0 §2.3). RISC
+// lists two possible values without excluding others, and Transmitters
+// send their own — "disabled-by-admin", say — so any other value is
+// accepted too, as the Transmitter's text: untrusted, and not to be
+// relied on.
 type DisabledReason string
 
 // Account-disabled reasons RISC 1.0 §2.3 lists.
@@ -95,22 +99,17 @@ const (
 
 // AccountDisabled signals that the account was disabled (RISC 1.0 §2.3).
 type AccountDisabled struct {
-	// Reason is optional.
+	// Reason is optional, and may be a value RISC does not list.
 	Reason DisabledReason `json:"reason,omitempty"`
 }
 
 // EventType implements ssf.Event.
 func (AccountDisabled) EventType() ssf.EventType { return AccountDisabledEventType }
 
-// Validate implements ssf.Event.
-func (e AccountDisabled) Validate() error {
-	switch e.Reason {
-	case "", DisabledHijacking, DisabledBulkAccount:
-		return nil
-	default:
-		return invalid(AccountDisabledEventType, "reason %q is not hijacking or bulk-account", e.Reason)
-	}
-}
+// Validate implements ssf.Event. Any reason is valid: rejecting the SET
+// for one RISC does not list would lose the account-disabled event
+// itself.
+func (AccountDisabled) Validate() error { return nil }
 
 // AccountEnabled signals that the account was enabled (RISC 1.0 §2.4).
 type AccountEnabled struct{}
