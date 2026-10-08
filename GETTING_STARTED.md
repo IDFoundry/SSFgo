@@ -175,8 +175,10 @@ others. It calls the Transmitter with an access token from a
 
 ```go
 registry := ssf.NewRegistry()
-if err := caep.Register(registry); err != nil { // risc.Register, scim.Register likewise
-	return err
+for _, register := range []func(*ssf.Registry) error{caep.Register, risc.Register, scim.Register} {
+	if err := register(registry); err != nil {
+		return err
+	}
 }
 tokens := &receiver.ClientCredentials{
 	TokenURL:     "https://idp.example.com/oauth2/token",
@@ -238,7 +240,10 @@ receiver.On(rx, func(ctx context.Context, set ssf.SET, e caep.SessionRevoked) er
 
 To stop accepting the access tokens of revoked sessions as well, the
 [`revocation`](revocation) package records what such events mean and
-checks tokens against it, or answers 401 as `net/http` middleware.
+checks tokens against it, or answers 401 as `net/http` middleware — see
+[Session revocation](docs/guides/session-revocation.md). Its recommended
+events include RISC's and SCIM's, so the registry above holds all three
+families.
 
 ### 5. A stream: push or poll
 

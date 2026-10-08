@@ -15,6 +15,11 @@ import (
 // leaves the SET unacknowledged, so the Transmitter delivers it again.
 type HandlerFunc func(ctx context.Context, set ssf.SET) error
 
+// Supports reports whether the Receiver accepts SETs of typ: whether its
+// Registry holds the type. Streams request only those types, and a SET of
+// any other is rejected, so a handler for an unsupported type never runs.
+func (r *Receiver) Supports(typ ssf.EventType) bool { return r.cfg.Registry.Supports(typ) }
+
 // Handle registers h for one event type, replacing any earlier handler for
 // it. SETs of a registered type with no handler are acknowledged and
 // otherwise ignored.

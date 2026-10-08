@@ -60,12 +60,16 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
   or `SameIssuer` for an identity provider that is its own Transmitter),
   so no Transmitter can revoke another identity provider's users;
   `Events` (`RecommendedEvents` is the usual choice); `Retention`, at
-  most `MaxRetention`; and `MaxClockSkew`. Events map to users and
-  sessions through iss_sub and complex subjects, to email addresses only
-  with `MatchEmail` (scoped to the token issuer, ignoring ASCII case
-  only), to all of a user's sessions for a placeholder session such as
-  `ALL` only with `AllSessions`, and to anything else through `KeysFor`; `OnRevoke` lets the
-  application end its own sessions. New
+  most `MaxRetention`; and `MaxClockSkew`, at most `MaxClockSkewBound`.
+  Events map to users and sessions through iss_sub and complex subjects
+  — a session another issuer's, or of another format, to nothing — to
+  email addresses only with `MatchEmail` (scoped to the token issuer,
+  ignoring ASCII case only), to all of a user's sessions for a
+  placeholder session such as `ALL` only with `AllSessions`, and to
+  anything else through `KeysFor`, which is given the token issuer and
+  held to it; `OnRevoke` lets the application end its own sessions.
+  `Register` fails if the Receiver's Registry lacks one of `Events`,
+  which would otherwise never arrive. New
   `storage.RevocationStore` contract, with `memstore.NewRevocationStore`
   and `storagetest.RevocationStore`, and `sqlstore.NewRevocationStore`
   for revocations that survive restarts and are shared by Receiver
@@ -147,11 +151,14 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
   requires, not only the core in the same checkout, so its users never
   get a core too old for it; the requirement is raised to the current
   core.
-- Continuous fuzzing: `.github/workflows/fuzz.yml` runs all ten fuzz
-  targets daily for ten minutes each, carrying each target's corpus
+- Continuous fuzzing: `.github/workflows/fuzz.yml` runs every fuzz
+  target daily for ten minutes each, carrying each target's corpus
   between runs. New targets cover the Receiver's push endpoint and poll
   responses, the Transmitter's management API, JWK parsing and the wire
   types' JSON decoders. CI fails if a fuzz target is not scheduled.
+  `FuzzIssuerScope` holds the `revocation` package to its trust boundary:
+  for any subject, a trusted Transmitter's SET revokes only its own token
+  issuer's tokens, and another Transmitter's revokes nothing.
 
 ### Security
 
@@ -159,8 +166,10 @@ A trust-boundary review of the whole repository
 ([docs/security-review-2026-09.md](docs/security-review-2026-09.md)),
 then an adversarial one
 ([docs/security-review-2026-10.md](docs/security-review-2026-10.md)),
-and an adversarial review of what was added after it
-([docs/security-review-2026-10-additions.md](docs/security-review-2026-10-additions.md));
+an adversarial review of what was added after it
+([docs/security-review-2026-10-additions.md](docs/security-review-2026-10-additions.md)),
+and a security and developer-experience review of the changes since
+([docs/security-review-2026-10-delta.md](docs/security-review-2026-10-delta.md));
 each finding was reproduced by a failing test before it was fixed.
 
 - New `transmitter.Config.PermitEvent`: the Transmitter decides which

@@ -26,6 +26,7 @@ import (
 	"github.com/idfoundry/ssfgo/receiver"
 	"github.com/idfoundry/ssfgo/revocation"
 	"github.com/idfoundry/ssfgo/risc"
+	"github.com/idfoundry/ssfgo/scim"
 	"github.com/idfoundry/ssfgo/storage/memstore"
 )
 
@@ -57,7 +58,7 @@ func TestKeycloak(t *testing.T) {
 	outcomes := map[ssf.EventType]int{}
 	var rejections []string
 	registry := ssf.NewRegistry()
-	for _, register := range []func(*ssf.Registry) error{caep.Register, risc.Register} {
+	for _, register := range []func(*ssf.Registry) error{caep.Register, risc.Register, scim.Register} {
 		if err := register(registry); err != nil {
 			t.Fatal(err)
 		}
@@ -108,7 +109,9 @@ func TestKeycloak(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rev.Register(rx)
+	if err := rev.Register(rx); err != nil {
+		t.Fatal(err)
+	}
 	receiver.On(rx, func(context.Context, ssf.SET, caep.CredentialChange) error { return nil })
 
 	stream, err := rx.CreateStream(ctx, receiver.StreamRequest{

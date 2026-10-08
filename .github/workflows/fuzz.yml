@@ -48,6 +48,7 @@ jobs:
           - { pkg: ./internal/jose, name: FuzzParseJWK }
           - { pkg: ., name: FuzzParseSubject }
           - { pkg: ., name: FuzzWireTypes }
+          - { pkg: ./revocation, name: FuzzIssuerScope }
     steps:
       - uses: actions/checkout@v7
 

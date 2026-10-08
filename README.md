@@ -122,7 +122,9 @@ rev, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{
 	Retention: 24 * time.Hour,                  // at least the longest token lifetime
 	Assurance: ssf.AssuranceDevelopment,        // production needs a durable store, e.g. sqlstore
 })
-rev.Register(rx)
+if err := rev.Register(rx); err != nil { // fails if rx's Registry lacks one of Events
+	return err
+}
 api = rev.Middleware(tokenOf, api)   // 401 for a token issued before its revocation
 ```
 
