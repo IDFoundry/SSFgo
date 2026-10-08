@@ -220,7 +220,9 @@ if err != nil {
 
 `New` fetches the Transmitter's metadata and keys. The access token goes
 only to the issuer's origin; list any other origin the metadata points
-at in `TrustedOrigins`. `interop.ApplyReceiver` holds the Transmitter to
+at in `TrustedOrigins`. A Transmitter that gives each stream its own
+audience, `<client_id>/<stream_id>`, needs your client ID as `Audience`
+and `AudiencePerStream`. `interop.ApplyReceiver` holds the Transmitter to
 the CAEP Interoperability Profile.
 
 ### 4. Handle events

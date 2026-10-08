@@ -99,8 +99,12 @@ func reject(code string, format string, args ...any) error {
 type VerifyOptions struct {
 	// Issuer must equal the SET's "iss" exactly (SSF 1.0 §4.1.6).
 	Issuer string
-	// Audience must be one of the SET's "aud" values.
+	// Audience must be one of the SET's "aud" values, unless
+	// AudienceMatch accepts another.
 	Audience string
+	// AudienceMatch, if set, also accepts a SET with an "aud" value for
+	// which it returns true. Optional.
+	AudienceMatch func(aud string) bool
 	// Algorithms lists the signature algorithms accepted.
 	Algorithms []ssf.SignatureAlgorithm
 	// Keys are the Transmitter's signing keys, from its JWKS.
@@ -222,7 +226,8 @@ func decodeIdentity(raw map[string]json.RawMessage, opts VerifyOptions, set *ssf
 	if set.Audience, err = audienceClaim(raw["aud"]); err != nil {
 		return err
 	}
-	if !slices.Contains(set.Audience, opts.Audience) {
+	if !slices.Contains(set.Audience, opts.Audience) &&
+		(opts.AudienceMatch == nil || !slices.ContainsFunc(set.Audience, opts.AudienceMatch)) {
 		return reject(CodeInvalidAudience, "aud does not contain %q", opts.Audience)
 	}
 	if set.JWTID, err = stringClaim(raw, "jti", true); err != nil {
