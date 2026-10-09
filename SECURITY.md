@@ -53,8 +53,11 @@ What SSFgo enforces on its own, so reviewers know where to look:
   does not help, and NAT64/6to4/Teredo addresses cannot smuggle an
   internal IPv4 address), follows no redirects, and uses no proxy; push
   URLs may not carry credentials. `Config.AllowPushEndpoint` can restrict
-  further. A custom `Config.HTTPClient` keeps the address check by using
-  `transmitter.PublicAddressControl` as its dialer's `Control`.
+  further. `Config.PushTransport` wraps the client's transport — for
+  tracing, say — and `Config.AllowedPrivatePushHosts` lets named hosts
+  reach private addresses; both keep every other check. A
+  `Config.HTTPClient` replaces the client and its checks, so under
+  `AssuranceProduction` it requires `UnrestrictedPushClient`.
 - **What each Receiver may see.** `transmitter.Config.PermitEvent` decides,
   per stream, whether its Receiver may receive an event about a subject
   (SSF §9.2). It is required: `transmitter.PermitAll` makes "every Receiver

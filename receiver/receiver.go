@@ -66,6 +66,9 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 	}
 	cfg.Algorithms = slices.Clone(cfg.Algorithms)
 	cfg.SubjectMembers = slices.Clone(cfg.SubjectMembers)
+	if t, ok := cfg.TokenSource.(StaticToken); ok {
+		cfg.TokenSource = secretToken{ssf.NewSecret(string(t))}
+	}
 	r := &Receiver{
 		cfg:       cfg,
 		handlers:  map[ssf.EventType]HandlerFunc{},

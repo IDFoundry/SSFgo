@@ -15,6 +15,7 @@ import (
 	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/internal/assurance"
 	"github.com/idfoundry/ssfgo/internal/clientassertion"
 	"github.com/idfoundry/ssfgo/internal/jose"
 )
@@ -54,9 +55,19 @@ type tokenInvalidator interface {
 }
 
 // StaticToken is a TokenSource that always returns the same token, for
-// access tokens issued out of band. Printed or logged, it is withheld,
-// like an ssf.Secret.
+// access tokens issued out of band. Printed with any fmt verb or logged,
+// it is withheld, like an ssf.Secret; a Receiver holds it as one.
 type StaticToken string
+
+// Format implements fmt.Formatter, so every verb prints the placeholder,
+// and %#v the GoString.
+func (t StaticToken) Format(f fmt.State, verb rune) {
+	if verb == 'v' && f.Flag('#') {
+		_, _ = io.WriteString(f, t.GoString())
+		return
+	}
+	_, _ = io.WriteString(f, t.String())
+}
 
 // String returns a fixed placeholder, never the token.
 func (t StaticToken) String() string { return "[REDACTED]" }
@@ -74,6 +85,15 @@ func (t StaticToken) Token(context.Context) (string, error) {
 		return "", errors.New("receiver: static access token is empty")
 	}
 	return string(t), nil
+}
+
+// secretToken is a StaticToken as a Receiver holds it: fmt prints the
+// Receiver's unexported fields by reflection, which would print a
+// StaticToken's string.
+type secretToken struct{ token ssf.Secret }
+
+func (t secretToken) Token(ctx context.Context) (string, error) {
+	return StaticToken(t.token.Reveal()).Token(ctx)
 }
 
 // ClientAuthMethod is how ClientCredentials authenticates to the token
@@ -164,7 +184,7 @@ func (c *ClientCredentials) errors(prefix string) []error {
 		}
 	case PrivateKeyJWT:
 		switch {
-		case c.SigningKey == nil:
+		case assurance.IsNil(c.SigningKey):
 			errs = append(errs, fmt.Errorf("%sSigningKey is required with %s", prefix, c.AuthMethod))
 		case c.SigningAlgorithm == 0:
 			errs = append(errs, fmt.Errorf("%sSigningAlgorithm is required with %s", prefix, c.AuthMethod))

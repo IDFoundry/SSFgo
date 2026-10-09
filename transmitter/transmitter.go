@@ -78,7 +78,7 @@ func New(cfg Config) (*Transmitter, error) {
 	}
 	t.client = cfg.HTTPClient
 	if t.client == nil {
-		t.client = NewPushClient(10 * time.Second)
+		t.client = newPushClient(10*time.Second, cfg.AllowedPrivatePushHosts, cfg.PushTransport)
 	}
 	t.notify = newNotifier()
 	t.polling = &longPolls{active: map[string]bool{}}

@@ -221,13 +221,13 @@ An unsafe choice needs more code and a name that says what it does.
 | 1 | `revocation` trusted the issuer written in each subject | #45 |
 | 2 | The Receiver and Transmitter silently defaulted `ReplayWindow`, `KeyMaxAge`, `MaxClockSkew` (zero became 1 minute), the Transmitter's limits, `LongPollTimeout` and `PushRetry`; there were no `Recommended*()` presets; `ClientCredentials` was checked only at the first token request, one problem at a time | #50, #65 |
 | 3 | `revocation.Retention` was unbounded, and `sqlstore` wrapped far-future times | #45 |
-| 4 | `ClientCredentials.ClientSecret`, `Delivery.AuthorizationHeader` and `PushOptions.AuthorizationHeader` were plain strings, and `StaticToken` printed itself | #51 |
+| 4 | `ClientCredentials.ClientSecret`, `Delivery.AuthorizationHeader` and `PushOptions.AuthorizationHeader` were plain strings, and `StaticToken` printed itself; a `Secret` still printed with some verbs and from unexported fields, and a JSON log of a `Delivery` showed its header | #51, #66 |
 | 5 | `APIError.Error()` quotes response bodies; SET rejection descriptions carry up to 40 KB of attacker text into logs, responses and hooks; a failed token request quoted the authorization server's body | #47, #65 |
 | 6 | SCIM full/notice exclusivity is case-sensitive; SCIM `uri` accepts `\`; proprietary format names accept invisible Unicode; `revocation` folded email with `strings.ToLower` | #45, #47 |
 | 7 | `Hooks.KeysRefreshed` runs on the detached key-refresh goroutine; event handlers, and a stream lookup's `TokenSource`, ran unrecovered | #47, #65 |
 | 8 | `EnsureStream` retries TLS alerts; push failures are counted per stream | #47 |
 | 9 | `EnsureStream` replaces the only stream on 409 | #47 |
-| 10 | There were no assurance levels or store capabilities; a wrapped `ClientCredentials` escaped the production checks | #52, #65 |
+| 10 | There were no assurance levels or store capabilities; a wrapped `ClientCredentials`, a supplied push `HTTPClient` and loopback addresses spelled `127.1` or `0.0.0.0` escaped the production checks | #52, #65, #66 |
 | 14 | Examples shared the root module (#54); there was no `GETTING_STARTED.md` (#55) or guides (#56) | Closed |
 | 15 | There was no `UPGRADING.md` or `AGENTS.md`; release-please is not set up | #53; release-please when v1 is cut |
 | 17 | Key custody was not declared or checked: a key generated at startup passed production assurance | #57 |

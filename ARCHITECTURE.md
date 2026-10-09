@@ -206,8 +206,9 @@ RS256 with a 2048-bit key:
 - **Push SSRF.** `transmitter.NewPushClient`, the default push client,
   checks the address actually dialled is public unicast (so DNS
   rebinding cannot reach internal hosts), follows no redirects and uses no
-  proxy. Deployments with Receivers on a private network pass their own
-  `HTTPClient`.
+  proxy. Deployments with Receivers on a private network name them in
+  `AllowedPrivatePushHosts`; `PushTransport` wraps the transport without
+  losing the checks.
 - **Retries.** `Config.PushRetry` sets the backoff bounds and an optional
   attempt cap after which a SET is dropped and logged; each SET gets the
   full cap. An RFC 8935 error that may clear on its own — `invalid_key`

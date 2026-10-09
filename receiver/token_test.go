@@ -32,6 +32,25 @@ func TestClientCredentialsCheckedByNew(t *testing.T) {
 	}
 }
 
+// A typed-nil SigningKey or ReplayStore is reported as missing; its
+// methods would panic.
+func TestTypedNilsCheckedByNew(t *testing.T) {
+	cfg := newEnv(t).cfg
+	cfg.Assurance = ssf.AssuranceProduction
+	cfg.ReplayStore = (*memstore.ReplayStore)(nil)
+	cfg.TokenSource = &receiver.ClientCredentials{TokenURL: "https://as.example/token", ClientID: "rp",
+		AuthMethod: receiver.PrivateKeyJWT, SigningKey: (*ecdsa.PrivateKey)(nil), SigningAlgorithm: ssf.ES256}
+	_, err := receiver.New(context.Background(), cfg)
+	if err == nil {
+		t.Fatal("New accepted typed nils")
+	}
+	for _, want := range []string{"TokenSource.SigningKey is required", "ReplayStore is required"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q lacks %q", err, want)
+		}
+	}
+}
+
 type wrappedTokens struct{ inner receiver.TokenSource }
 
 func (w wrappedTokens) Token(ctx context.Context) (string, error) { return w.inner.Token(ctx) }

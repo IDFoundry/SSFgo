@@ -16,23 +16,35 @@ func TestSecretWithheld(t *testing.T) {
 	const value = "Bearer s3cret"
 	s := NewSecret(value)
 	d := Delivery{Method: DeliveryPush, EndpointURL: "https://rx.example/events", AuthorizationHeader: s}
-	for _, format := range []string{"%s", "%v", "%+v", "%#v", "%q"} {
-		for _, v := range []any{s, d, &d} {
+	cfg := StreamConfiguration{StreamID: "a", Delivery: d}
+	held := struct {
+		name     string
+		delivery Delivery // unexported: fmt prints it by reflection
+		secret   Secret
+	}{"x", d, s}
+	for _, format := range []string{"%s", "%v", "%+v", "%#v", "%q", "%x", "%X", "%d", "%t", "%o", "%b", "%c", "%U", "%e"} {
+		for _, v := range []any{s, &s, d, &d, cfg, held, &held} {
 			if out := fmt.Sprintf(format, v); strings.Contains(out, "s3cret") {
 				t.Errorf("%s of %T revealed the secret: %s", format, v, out)
 			}
 		}
 	}
 	var buf bytes.Buffer
-	slog.New(slog.NewJSONHandler(&buf, nil)).Info("x", "secret", s)
-	slog.New(slog.NewTextHandler(&buf, nil)).Info("x", "secret", s)
+	for _, h := range []slog.Handler{slog.NewJSONHandler(&buf, nil), slog.NewTextHandler(&buf, nil)} {
+		slog.New(h).Info("x", "secret", s, "delivery", d, "config", cfg, "held", held)
+	}
 	if strings.Contains(buf.String(), "s3cret") {
 		t.Errorf("slog revealed the secret: %s", buf.String())
 	}
 	if _, err := json.Marshal(struct{ S Secret }{s}); !errors.Is(err, ErrSecretSerialization) {
 		t.Errorf("json.Marshal of a struct holding a Secret = %v, want ErrSecretSerialization", err)
 	}
-	if s.Reveal() != value || s.IsZero() || !(Secret{}).IsZero() || s != NewSecret(value) {
+	var decoded Secret
+	if err := decoded.UnmarshalText([]byte(value)); err != nil {
+		t.Fatal(err)
+	}
+	if s.Reveal() != value || s.IsZero() || !(Secret{}).IsZero() || s != NewSecret(value) ||
+		decoded != s || NewSecret("") != (Secret{}) || (Secret{}).Reveal() != "" || s == NewSecret("other") {
 		t.Error("Reveal, IsZero or == misbehave")
 	}
 }

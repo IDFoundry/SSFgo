@@ -25,6 +25,10 @@ import (
 // (SSF 1.0 §4.1.1, RFC 8417 §2.3).
 const TypeHeader = "secevent+jwt"
 
+// MaxSETBytes bounds an encoded SET: a Receiver reads no more of a push,
+// and a Transmitter signs no larger.
+const MaxSETBytes = 64 * 1024
+
 // Signer signs SETs with one key.
 type Signer struct {
 	Key       crypto.Signer

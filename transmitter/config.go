@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
@@ -103,12 +104,31 @@ type Config struct {
 	// here. An error is reported to the Receiver as 400. Optional.
 	AllowPushEndpoint func(rx Receiver, endpoint *url.URL) error
 
-	// HTTPClient sends push deliveries. Defaults to NewPushClient(10s),
-	// which refuses non-public addresses and redirects; supply a client to
-	// push to Receivers on a private network. A client supplied for other
-	// reasons keeps the address check only if its dialer uses
-	// PublicAddressControl.
+	// PushTransport, if set, wraps the transport push deliveries are sent
+	// through — to add tracing or metrics, say. The client keeps refusing
+	// non-public addresses and redirects: they are checked beneath the
+	// wrapper and by the client around it. Optional.
+	PushTransport func(http.RoundTripper) http.RoundTripper
+
+	// AllowedPrivatePushHosts names hosts, exactly and ignoring case, that
+	// push deliveries may reach at a private address (RFC 1918, or IPv6
+	// unique local) — Receivers on the deployment's own network. Every
+	// other non-public address stays refused for them, loopback and
+	// link-local included. Fixed operator configuration, never what a
+	// Receiver supplies. Optional.
+	AllowedPrivatePushHosts []string
+
+	// HTTPClient, if set, replaces the client push deliveries are sent
+	// with — and with it the refusal of non-public addresses and
+	// redirects, unless the client provides its own. For what
+	// PushTransport and AllowedPrivatePushHosts cannot do. Under
+	// AssuranceProduction it requires UnrestrictedPushClient. Optional.
 	HTTPClient *http.Client
+
+	// UnrestrictedPushClient acknowledges that HTTPClient may push to any
+	// address a Receiver registers — this host's, or the internal
+	// network's. Required with HTTPClient under AssuranceProduction.
+	UnrestrictedPushClient bool
 
 	// PushRetry controls how failed push deliveries are retried.
 	// Required when DeliveryMethods includes push: RecommendedPushRetry
@@ -258,6 +278,7 @@ func (c *Config) validate() error {
 		Keys:   keys,
 	})...)
 	errs = append(errs, c.signingKeyErrors()...)
+	errs = append(errs, c.pushClientErrors()...)
 	errs = append(errs, c.tuningErrors()...)
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("transmitter: invalid config: %w", err)
@@ -275,7 +296,7 @@ func (c *Config) signingKeyErrors() []error {
 	kids := map[string]bool{}
 	for i, k := range c.SigningKeys {
 		switch {
-		case k.Signer == nil:
+		case assurance.IsNil(k.Signer):
 			errs = append(errs, fmt.Errorf("SigningKeys[%d]: Signer is required", i))
 		case k.KeyID == "":
 			errs = append(errs, fmt.Errorf("SigningKeys[%d]: KeyID is required", i))
@@ -311,7 +332,7 @@ func (c *Config) requiredErrors() []error {
 	if c.DefaultSubjects != ssf.DefaultSubjectsAll && c.DefaultSubjects != ssf.DefaultSubjectsNone {
 		errs = append(errs, errors.New(`DefaultSubjects must be "ALL" or "NONE"`))
 	}
-	if c.Store == nil {
+	if assurance.IsNil(c.Store) {
 		errs = append(errs, errors.New("a Store is required"))
 	}
 	if c.Authorize == nil {
@@ -319,6 +340,29 @@ func (c *Config) requiredErrors() []error {
 	}
 	if c.PermitEvent == nil {
 		errs = append(errs, errors.New("a PermitEvent function is required; PermitAll permits every event"))
+	}
+	return errs
+}
+
+// pushClientErrors checks how push deliveries are sent: either the
+// protected client, adjusted by PushTransport and AllowedPrivatePushHosts,
+// or HTTPClient, acknowledged in production.
+func (c *Config) pushClientErrors() []error {
+	var errs []error
+	if c.HTTPClient != nil {
+		if c.PushTransport != nil || len(c.AllowedPrivatePushHosts) > 0 {
+			errs = append(errs, errors.New("PushTransport and AllowedPrivatePushHosts adjust the default push client, so cannot be set with HTTPClient"))
+		}
+		if c.Assurance == ssf.AssuranceProduction && !c.UnrestrictedPushClient {
+			errs = append(errs, errors.New("under AssuranceProduction, HTTPClient requires UnrestrictedPushClient: it replaces the refusal of non-public addresses (PushTransport and AllowedPrivatePushHosts keep it)"))
+		}
+	} else if c.UnrestrictedPushClient {
+		errs = append(errs, errors.New("UnrestrictedPushClient is set without an HTTPClient"))
+	}
+	for i, h := range c.AllowedPrivatePushHosts {
+		if h == "" || strings.ContainsAny(h, "*/:@[] ") {
+			errs = append(errs, fmt.Errorf("AllowedPrivatePushHosts[%d] must be a host name, without wildcards, port or scheme", i))
+		}
 	}
 	return errs
 }
