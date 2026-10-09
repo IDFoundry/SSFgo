@@ -82,12 +82,21 @@ const (
 // revoked or deleted (CAEP 1.0 §3.3).
 type CredentialChange struct {
 	Common
+	// CredentialType is the kind of credential that changed. Required.
 	CredentialType CredentialType `json:"credential_type"`
-	ChangeType     ChangeType     `json:"change_type"`
-	FriendlyName   string         `json:"friendly_name,omitempty"`
-	X509Issuer     string         `json:"x509_issuer,omitempty"`
-	X509Serial     string         `json:"x509_serial,omitempty"`
-	FIDO2AAGUID    string         `json:"fido2_aaguid,omitempty"`
+	// ChangeType is what happened to the credential. Required.
+	ChangeType ChangeType `json:"change_type"`
+	// FriendlyName is the credential's user-facing name; empty if none.
+	FriendlyName string `json:"friendly_name,omitempty"`
+	// X509Issuer is the issuer of an X.509 certificate credential (RFC
+	// 5280); empty if not applicable.
+	X509Issuer string `json:"x509_issuer,omitempty"`
+	// X509Serial is the serial number of an X.509 certificate credential;
+	// empty if not applicable.
+	X509Serial string `json:"x509_serial,omitempty"`
+	// FIDO2AAGUID is the Authenticator Attestation GUID of a FIDO2
+	// credential; empty if not applicable.
+	FIDO2AAGUID string `json:"fido2_aaguid,omitempty"`
 }
 
 // EventType implements ssf.Event.
@@ -142,7 +151,8 @@ type AssuranceLevelChange struct {
 	// CurrentLevel is the new assurance level. Required.
 	CurrentLevel string `json:"current_level"`
 	// PreviousLevel is empty when the Transmitter does not know it.
-	PreviousLevel   string          `json:"previous_level,omitempty"`
+	PreviousLevel string `json:"previous_level,omitempty"`
+	// ChangeDirection is Increase or Decrease; empty if not given.
 	ChangeDirection ChangeDirection `json:"change_direction,omitempty"`
 }
 
@@ -177,8 +187,10 @@ func (s ComplianceStatus) valid() bool { return s == Compliant || s == NotCompli
 // (CAEP 1.0 §3.5).
 type DeviceComplianceChange struct {
 	Common
+	// PreviousStatus is the device's status before the change. Required.
 	PreviousStatus ComplianceStatus `json:"previous_status"`
-	CurrentStatus  ComplianceStatus `json:"current_status"`
+	// CurrentStatus is the device's status after the change. Required.
+	CurrentStatus ComplianceStatus `json:"current_status"`
 }
 
 // EventType implements ssf.Event.

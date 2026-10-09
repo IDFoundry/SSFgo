@@ -24,9 +24,13 @@ const (
 
 // RevocationKey identifies whose tokens a revocation covers.
 type RevocationKey struct {
-	Kind   RevocationKind
+	// Kind is what the key names: a user, a session or an email address.
+	Kind RevocationKind
+	// Issuer is the identity provider the Value belongs to.
 	Issuer string
-	Value  string
+	// Value identifies the user, session or address at Issuer, as Kind
+	// describes.
+	Value string
 }
 
 // RevocationStore records that the tokens a key covers, issued at or

@@ -79,5 +79,49 @@ func TestSessionRevokedDelivered(t *testing.T) {
 algorithm and in-memory storage where the configuration leaves them
 unset. `WaitFor` fails the test after `ssftest.WaitTimeout`.
 
+### Your Transmitter on a test server
+
+A Transmitter's issuer must be known before `transmitter.New`, but a
+test server's URL exists only once it starts. Start it with no handler,
+build the Transmitter on its URL, then give it the handler. For a
+Transmitter built with SSFgo, `startTransmitter` above can be:
+
+```go
+func startTransmitter(t *testing.T, push *http.Client) (*transmitter.Transmitter, string, *http.Client) {
+	srv := httptest.NewUnstartedServer(nil)
+	srv.StartTLS() // srv.URL is the issuer from here on
+	t.Cleanup(srv.Close)
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := transmitter.New(transmitter.Config{
+		Issuer:          srv.URL,
+		SigningKeys:     []transmitter.SigningKey{{Signer: key, Algorithm: ssf.RS256, KeyID: "test"}},
+		EventsSupported: []ssf.EventType{caep.SessionRevokedEventType},
+		DeliveryMethods: []ssf.DeliveryMethod{ssf.DeliveryPush},
+		DefaultSubjects: ssf.DefaultSubjectsAll,
+		Store:           memstore.NewStreamStore(),
+		Assurance:       ssf.AssuranceDevelopment,
+		Limits:          transmitter.RecommendedLimits(),
+		PushRetry:       transmitter.RecommendedPushRetry(),
+		HTTPClient:      push, // the Receiver's test server is loopback, which the default client refuses
+		Authorize: func(_ context.Context, token string) (transmitter.Receiver, error) {
+			if token != "test-receiver-token" {
+				return transmitter.Receiver{}, transmitter.ErrInvalidToken
+			}
+			return transmitter.Receiver{ID: "rx", Audience: []string{ssftest.ReceiverAudience}, Access: transmitter.AccessManage}, nil
+		},
+		PermitEvent: transmitter.PermitAll,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv.Config.Handler = tx.Handler()
+	go func() { _ = tx.Run(t.Context()) }() // stops as the test ends
+	return tx, srv.URL, srv.Client()
+}
+```
+
 ssftest is for tests only: it trusts nothing but its own test servers,
 and holds no secrets worth keeping.

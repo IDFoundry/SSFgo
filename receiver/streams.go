@@ -27,7 +27,8 @@ type StreamRequest struct {
 	// except SSF's own verification and stream-updated events, which are
 	// sent regardless.
 	EventsRequested []ssf.EventType
-	Description     string
+	// Description is free text describing the stream; empty for none.
+	Description string
 	// ReplaceOnConflict lets EnsureStream replace the Receiver's only
 	// stream when the Transmitter allows one stream per Receiver and that
 	// stream's delivery differs from Delivery. That stream may belong to
@@ -150,15 +151,19 @@ func (r *Receiver) Streams(ctx context.Context) ([]ssf.StreamConfiguration, erro
 // its checks. errors.Is matches it against ErrIssuerMismatch and
 // ErrAudienceMismatch when any stream failed that way.
 type StreamsError struct {
+	// Rejected lists the streams left out, one or more.
 	Rejected []RejectedStream
 }
 
 // RejectedStream is one stream Streams left out, and why.
 type RejectedStream struct {
+	// Stream is the stream's configuration as the Transmitter returned it.
 	Stream ssf.StreamConfiguration
-	Err    error
+	// Err is the check it failed, such as ErrIssuerMismatch.
+	Err error
 }
 
+// Error lists each rejected stream's error.
 func (e *StreamsError) Error() string {
 	msgs := make([]string, len(e.Rejected))
 	for i, r := range e.Rejected {
@@ -179,9 +184,12 @@ func (e *StreamsError) Unwrap() []error {
 // StreamUpdate changes some of a stream's Receiver-supplied properties;
 // nil fields are left unchanged (SSF 1.0 §8.1.1.3).
 type StreamUpdate struct {
+	// EventsRequested, if not nil, replaces the event types requested.
 	EventsRequested *[]ssf.EventType
-	Delivery        *ssf.Delivery
-	Description     *string
+	// Delivery, if not nil, replaces the stream's delivery.
+	Delivery *ssf.Delivery
+	// Description, if not nil, replaces the stream's description.
+	Description *string
 }
 
 // UpdateStream applies update with PATCH (SSF 1.0 §8.1.1.3). A 202 from

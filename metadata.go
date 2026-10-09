@@ -29,6 +29,8 @@ const (
 // AuthorizationScheme names a scheme protecting the stream management API
 // (SSF 1.0 §7.1.1).
 type AuthorizationScheme struct {
+	// SpecURN is the URN of the specification defining the scheme, such
+	// as OAuth2SpecURN.
 	SpecURN string `json:"spec_urn"`
 }
 
@@ -41,18 +43,42 @@ const OAuth2SpecURN = "urn:ietf:rfc:6749" // NOSONAR: a public RFC identifier, n
 // (SSF 1.0 §7.1). Array members with no elements are omitted, as §7.2.3
 // requires.
 type TransmitterMetadata struct {
-	SpecVersion              string                `json:"spec_version,omitempty"`
-	Issuer                   string                `json:"issuer"`
-	JWKSURI                  string                `json:"jwks_uri,omitempty"`
-	DeliveryMethodsSupported []DeliveryMethod      `json:"delivery_methods_supported,omitempty"`
-	ConfigurationEndpoint    string                `json:"configuration_endpoint,omitempty"`
-	StatusEndpoint           string                `json:"status_endpoint,omitempty"`
-	AddSubjectEndpoint       string                `json:"add_subject_endpoint,omitempty"`
-	RemoveSubjectEndpoint    string                `json:"remove_subject_endpoint,omitempty"`
-	VerificationEndpoint     string                `json:"verification_endpoint,omitempty"`
-	CriticalSubjectMembers   []string              `json:"critical_subject_members,omitempty"`
-	AuthorizationSchemes     []AuthorizationScheme `json:"authorization_schemes,omitempty"`
-	DefaultSubjects          DefaultSubjects       `json:"default_subjects,omitempty"`
+	// SpecVersion is the version of SSF implemented, such as SpecVersion.
+	SpecVersion string `json:"spec_version,omitempty"`
+	// Issuer is the Transmitter's issuer identifier, an https URL. A
+	// Receiver checks it against the issuer it expected.
+	Issuer string `json:"issuer"`
+	// JWKSURI is where the Transmitter publishes the keys that sign its
+	// SETs. It must be https.
+	JWKSURI string `json:"jwks_uri,omitempty"`
+	// DeliveryMethodsSupported are the delivery methods the Transmitter
+	// supports.
+	DeliveryMethodsSupported []DeliveryMethod `json:"delivery_methods_supported,omitempty"`
+	// ConfigurationEndpoint is the stream configuration endpoint
+	// (SSF 1.0 §8.1.1); empty if not supported.
+	ConfigurationEndpoint string `json:"configuration_endpoint,omitempty"`
+	// StatusEndpoint is the stream status endpoint (SSF 1.0 §8.1.2);
+	// empty if not supported.
+	StatusEndpoint string `json:"status_endpoint,omitempty"`
+	// AddSubjectEndpoint is the Add Subject endpoint (SSF 1.0 §8.1.3.2);
+	// empty if not supported.
+	AddSubjectEndpoint string `json:"add_subject_endpoint,omitempty"`
+	// RemoveSubjectEndpoint is the Remove Subject endpoint
+	// (SSF 1.0 §8.1.3.3); empty if not supported.
+	RemoveSubjectEndpoint string `json:"remove_subject_endpoint,omitempty"`
+	// VerificationEndpoint is the Verification endpoint
+	// (SSF 1.0 §8.1.4.2); empty if not supported.
+	VerificationEndpoint string `json:"verification_endpoint,omitempty"`
+	// CriticalSubjectMembers names complex-subject members a Receiver
+	// must understand: a Receiver rejects a SET whose subject carries
+	// one it does not process (SSF 1.0 §3.6).
+	CriticalSubjectMembers []string `json:"critical_subject_members,omitempty"`
+	// AuthorizationSchemes are the schemes protecting the stream
+	// management API.
+	AuthorizationSchemes []AuthorizationScheme `json:"authorization_schemes,omitempty"`
+	// DefaultSubjects says whether new streams include every subject or
+	// none; empty if the Transmitter does not say.
+	DefaultSubjects DefaultSubjects `json:"default_subjects,omitempty"`
 }
 
 // ValidateIssuer reports whether issuer is an https URL with no query or

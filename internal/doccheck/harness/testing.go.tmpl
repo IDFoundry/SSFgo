@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -10,6 +13,8 @@ import (
 	"github.com/idfoundry/ssfgo/caep"
 	"github.com/idfoundry/ssfgo/receiver"
 	"github.com/idfoundry/ssfgo/ssftest"
+	"github.com/idfoundry/ssfgo/storage/memstore"
+	"github.com/idfoundry/ssfgo/transmitter"
 )
 
 // What docs/guides/testing.md marks as the application's own.
@@ -17,9 +22,8 @@ type app struct{}
 
 func (*app) signedIn(ssf.Subject) bool { return false }
 
-func newApp(*receiver.Receiver) *app                                    { return &app{} }
-func startTransmitter(*testing.T, *http.Client) (any, string, *http.Client) { return nil, "", nil }
-func revokeSession(*testing.T, any, string)                             {}
+func newApp(*receiver.Receiver) *app                             { return &app{} }
+func revokeSession(*testing.T, *transmitter.Transmitter, string) {}
 
 // SNIPPETS docs/guides/testing.md "## Testing a Receiver"
 

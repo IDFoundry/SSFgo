@@ -1,0 +1,23 @@
+package main
+
+import (
+	"context"
+	"os"
+	"time"
+
+	ssf "github.com/idfoundry/ssfgo"
+	"github.com/idfoundry/ssfgo/receiver"
+	"github.com/idfoundry/ssfgo/revocation"
+	"github.com/idfoundry/ssfgo/storage"
+)
+
+func keycloak(ctx context.Context, registry *ssf.Registry, replay storage.ReplayStore, revocations storage.RevocationStore) error {
+	// SNIPPETS docs/guides/other-transmitters.md "## Keycloak"
+	_, _ = rx, rev
+	return nil
+}
+
+func main() {
+	_ = keycloak(context.Background(), nil, nil, nil)
+	_, _ = os.Getenv, time.Hour
+}

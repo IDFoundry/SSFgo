@@ -24,6 +24,7 @@ const (
 	SQLite
 )
 
+// String returns the dialect's name, such as "postgres".
 func (d Dialect) String() string {
 	switch d {
 	case Postgres:

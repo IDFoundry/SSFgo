@@ -35,8 +35,11 @@ func (Verification) ValidateSubject(s Subject) error {
 // stream's status (SSF 1.0 §8.1.5). Its SET's "sub_id" is an
 // OpaqueSubject whose ID is the stream ID.
 type StreamUpdated struct {
+	// Status is the stream's new status. Required.
 	Status StreamStatus `json:"status"`
-	Reason string       `json:"reason,omitempty"`
+	// Reason is free text explaining the change; empty if none given.
+	// Untrusted on receipt: it is the Transmitter's text.
+	Reason string `json:"reason,omitempty"`
 }
 
 // EventType implements Event.

@@ -35,6 +35,7 @@ type Hooks struct {
 
 // EmitInfo describes one Emit.
 type EmitInfo struct {
+	// EventType is the emitted event's type.
 	EventType ssf.EventType
 	// Streams is how many streams were considered, Queued on how many the
 	// SET was queued; the others do not deliver its event type, exclude
@@ -76,8 +77,10 @@ func (o PushOutcome) String() string {
 
 // PushInfo describes one push delivery attempt.
 type PushInfo struct {
+	// StreamID and JTI identify the stream and the SET.
 	StreamID, JTI string
-	Outcome       PushOutcome
+	// Outcome is the attempt's result.
+	Outcome PushOutcome
 	// Attempt counts the attempts to deliver this SET, from 1.
 	Attempt int
 	// Duration is how long the attempt took; zero for a SET dropped
@@ -91,6 +94,7 @@ type PushInfo struct {
 
 // PollInfo describes one poll request served.
 type PollInfo struct {
+	// StreamID is the stream polled.
 	StreamID string
 	// Returned is how many SETs the response carried; Acknowledged and
 	// Reported how many the Receiver acknowledged or reported errors for.
@@ -103,9 +107,13 @@ type PollInfo struct {
 type StreamChange int
 
 const (
+	// StreamCreated: a Receiver created the stream.
 	StreamCreated StreamChange = iota + 1
+	// StreamUpdated: the stream's configuration changed.
 	StreamUpdated
+	// StreamStatusChanged: the stream's status changed.
 	StreamStatusChanged
+	// StreamDeleted: the stream was deleted.
 	StreamDeleted
 )
 
@@ -127,8 +135,11 @@ func (c StreamChange) String() string {
 
 // StreamInfo describes a change to a stream.
 type StreamInfo struct {
+	// StreamID identifies the stream, and ReceiverID the Receiver that
+	// owns it.
 	StreamID, ReceiverID string
-	Change               StreamChange
+	// Change is what happened.
+	Change StreamChange
 	// Status is the stream's status after the change.
 	Status ssf.StreamStatus
 	// ByTransmitter reports a change the Transmitter made — with

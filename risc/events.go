@@ -175,7 +175,8 @@ type CredentialCompromise struct {
 	// RISC 1.0 §2.7 does not define their type; SSFgo follows CAEP so the
 	// two families encode reasons the same way.
 	ReasonAdmin ssf.LocalizedText `json:"reason_admin,omitempty"`
-	ReasonUser  ssf.LocalizedText `json:"reason_user,omitempty"`
+	// ReasonUser is the reason meant for the end user; see ReasonAdmin.
+	ReasonUser ssf.LocalizedText `json:"reason_user,omitempty"`
 }
 
 // EventType implements ssf.Event.

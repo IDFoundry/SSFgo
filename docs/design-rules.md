@@ -190,12 +190,15 @@ An unsafe choice needs more code and a name that says what it does.
 
 ### 14. Documentation is part of the API
 
-- Every exported symbol has a doc comment. It states the field's unit,
-  what zero means, its bounds and its security consequence.
+- Every exported symbol has a doc comment — `internal/doclint` checks,
+  struct fields included. It states the field's unit, what zero means,
+  its bounds and its security consequence.
 - The README shows a working configuration for each role.
 - Runnable examples in `examples/` are each their own module, built
   against the checkout, tested in CI, and checked to use only the public
   API.
+- Each role package has `Example` functions, shown on pkg.go.dev and
+  run by `go test` where they have output.
 - `GETTING_STARTED.md` walks through each role, and `docs/guides/` has
   one guide per feature. Their code is built against the library in CI
   (`internal/doccheck`).
@@ -222,15 +225,16 @@ An unsafe choice needs more code and a name that says what it does.
 | Rule | Gap | Closes in |
 |---|---|---|
 | 1 | `revocation` trusted the issuer written in each subject | #45 |
-| 2 | The Receiver and Transmitter silently defaulted `ReplayWindow`, `KeyMaxAge`, `MaxClockSkew` (zero became 1 minute), the Transmitter's limits, `LongPollTimeout` and `PushRetry`; there were no `Recommended*()` presets; `ClientCredentials` was checked only at the first token request, one problem at a time | #50, #65 |
+| 2 | The Receiver and Transmitter silently defaulted `ReplayWindow`, `KeyMaxAge`, `MaxClockSkew` (zero became 1 minute), the Transmitter's limits, `LongPollTimeout` and `PushRetry`; there were no `Recommended*()` presets; `ClientCredentials` was checked only at the first token request, one problem at a time; several errors did not name the Go field | #50, #65, #69 |
 | 3 | `revocation.Retention` was unbounded, and `sqlstore` wrapped far-future times | #45 |
 | 4 | `ClientCredentials.ClientSecret`, `Delivery.AuthorizationHeader` and `PushOptions.AuthorizationHeader` were plain strings, and `StaticToken` printed itself; a `Secret` still printed with some verbs and from unexported fields, and a JSON log of a `Delivery` showed its header | #51, #66 |
-| 5 | `APIError.Error()` quotes response bodies; SET rejection descriptions carry up to 40 KB of attacker text into logs, responses and hooks; a failed token request quoted the authorization server's body | #47, #65 |
+| 5 | `APIError.Error()` quotes response bodies; SET rejection descriptions carry up to 40 KB of attacker text into logs, responses and hooks; a failed token request quoted the authorization server's body; revocation errors named the user, session or address they concerned | #47, #64, #65 |
 | 6 | SCIM full/notice exclusivity is case-sensitive; SCIM `uri` accepts `\`; proprietary format names accept invisible Unicode; `revocation` folded email with `strings.ToLower` | #45, #47 |
 | 7 | `Hooks.KeysRefreshed` runs on the detached key-refresh goroutine; event handlers, and a stream lookup's `TokenSource`, ran unrecovered | #47, #65 |
 | 8 | `EnsureStream` retries TLS alerts; push failures are counted per stream | #47 |
 | 9 | `EnsureStream` replaces the only stream on 409 | #47 |
 | 10 | There were no assurance levels or store capabilities; a wrapped `ClientCredentials`, a supplied push `HTTPClient`, loopback addresses spelled `127.1` or `0.0.0.0`, and a SQLite in-memory database escaped the production checks | #52, #65, #66, #67 |
-| 14 | Examples shared the root module (#54); there was no `GETTING_STARTED.md` (#55) or guides (#56) | Closed |
-| 15 | There was no `UPGRADING.md` or `AGENTS.md`; release-please is not set up | #53; release-please when v1 is cut |
+| 12 | `revocation.New` took its store apart from its `Options` | #69 |
+| 14 | Examples shared the root module; there was no `GETTING_STARTED.md` or guides; 112 exported identifiers had no doc comment, and no package had a runnable example | #54, #55, #56, #70 |
+| 15 | There was no `UPGRADING.md` or `AGENTS.md`; release-please is not set up, so the CHANGELOG lists breaking changes under "Changed since v0.5" rather than "⚠ BREAKING CHANGES" | #53; release-please when v1 is cut |
 | 17 | Key custody was not declared or checked: a key generated at startup passed production assurance | #57 |

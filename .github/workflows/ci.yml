@@ -281,6 +281,11 @@ jobs:
       - name: documentation code builds
         run: go run ./internal/doccheck
 
+      # Every exported identifier of the public packages, struct fields
+      # included, has a doc comment (design rule 14).
+      - name: exported identifiers are documented
+        run: go run ./internal/doclint
+
   lint:
     runs-on: ubuntu-latest
     steps:
