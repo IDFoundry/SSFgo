@@ -52,6 +52,8 @@ lives.
   harness in `internal/doccheck/harness`, with stubs for what the guide
   marks as the application's own; the check fails on any code block no
   harness covers.
+- `go run ./internal/doclint` fails on an exported identifier of a public
+  package — a struct field included — with no doc comment.
 - Each example under `examples/` is its own module, so root `go test`
   skips it; the `examples` job builds, tests and checks it uses only the
   public API. A new example adds itself to that job's matrix. Run them

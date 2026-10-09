@@ -117,8 +117,10 @@ func (tt *Transmitter) Client() *http.Client { return tt.srv.Client() }
 
 // ReceiverConfig returns a receiver.Config for this Transmitter: its
 // issuer, ReceiverAudience, the access token it accepts, a client that
-// trusts it, RS256, an in-memory replay store and a quiet logger. Set any
-// other field, or override these, before calling receiver.New.
+// trusts it, receiver.RecommendedAlgorithms, an in-memory replay store,
+// ssf.AssuranceDevelopment, receiver.RecommendedLimits and a quiet
+// logger. Set any other field, or override these, before calling
+// receiver.New.
 func (tt *Transmitter) ReceiverConfig(registry *ssf.Registry) receiver.Config {
 	return receiver.Config{
 		Assurance:   ssf.AssuranceDevelopment,

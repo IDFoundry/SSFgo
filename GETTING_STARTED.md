@@ -13,6 +13,38 @@ defaults, and the `Recommended*` functions give starting values
 ([design rules](docs/design-rules.md)). `New` reports every missing or
 invalid setting at once, naming the field.
 
+## Start in development
+
+Parts 1 and 2 show production settings. For a first run on your own
+machine, swap in what needs no infrastructure — a key made at start,
+in-memory stores, a loopback host — and say so with
+`ssf.AssuranceDevelopment`; production assurance refuses each of them:
+
+```go
+// A key made at start: SETs signed before a restart can't be verified
+// after it, which is fine in development.
+key, err := rsa.GenerateKey(rand.Reader, 2048)
+if err != nil {
+	return err
+}
+streams := memstore.NewStreamStore() // Part 1, step 2
+replay := memstore.NewReplayStore()  // Part 2, step 2
+issuer := "https://localhost:8443"   // served with a development certificate
+assurance := ssf.AssuranceDevelopment
+```
+
+| | Development | Production |
+|---|---|---|
+| Signing key | `rsa.GenerateKey`, no `Custody` | a KMS or HSM signer, declared in `Custody` |
+| Stores | `memstore` | `storage/sqlstore` |
+| `Assurance` | `ssf.AssuranceDevelopment` | `ssf.AssuranceProduction` |
+| Issuer | `https://localhost:…` | your public https host |
+
+The Receiver must trust the development certificate: give
+`receiver.Config.HTTPClient` a client whose TLS configuration has it
+as a root. To test either role against the other without a server at
+all, see [Testing](#testing).
+
 ## Part 1: a Transmitter
 
 ### 1. A signing key
@@ -38,11 +70,15 @@ EdDSA algorithms are available too (`ssf.SignatureAlgorithms()`).
 
 Streams, their subjects and queued SETs live in a `storage.StreamStore`.
 `memstore` is for tests and development; in production use
-`storage/sqlstore`, on PostgreSQL or SQLite:
+`storage/sqlstore`, on PostgreSQL or SQLite. It imports no driver: import
+the one you use. On SQLite, set a busy timeout so concurrent writers wait
+rather than fail — with `modernc.org/sqlite`,
+`file:ssf.db?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)`:
 
 ```go
-// go get github.com/idfoundry/ssfgo/storage/sqlstore
-db, err := sql.Open("pgx", dsn) // any database/sql driver
+// go get github.com/idfoundry/ssfgo/storage/sqlstore, and a driver:
+// import _ "github.com/jackc/pgx/v5/stdlib"
+db, err := sql.Open("pgx", dsn)
 if err != nil {
 	return err
 }
@@ -193,9 +229,19 @@ tokens := &receiver.ClientCredentials{
 
 Every SET handled is recorded, so a redelivered one is acknowledged
 without being handled twice, and a captured one cannot be replayed. In
-production use `storage/sqlstore`:
+production use `storage/sqlstore`, opened as in Part 1, step 2 —
+`CreateSchema` is safe to run from every service that shares the
+database:
 
 ```go
+// import _ "github.com/jackc/pgx/v5/stdlib"
+db, err := sql.Open("pgx", dsn)
+if err != nil {
+	return err
+}
+if err := sqlstore.CreateSchema(ctx, db, sqlstore.Postgres); err != nil {
+	return err
+}
 replay, err := sqlstore.NewReplayStore(ctx, db, sqlstore.Postgres)
 if err != nil {
 	return err
@@ -220,12 +266,15 @@ if err != nil {
 }
 ```
 
-`New` fetches the Transmitter's metadata and keys. The access token goes
-only to the issuer's origin; list any other origin the metadata points
-at in `TrustedOrigins`. A Transmitter that gives each stream its own
-audience, `<client_id>/<stream_id>`, needs your client ID as `Audience`
-and `AudiencePerStream`. `interop.ApplyReceiver` holds the Transmitter to
-the CAEP Interoperability Profile.
+`New` fetches the Transmitter's metadata and keys, so it fails at once
+if the Transmitter can't be reached: retry it with backoff, or report
+not ready and let your platform restart the service. The access token
+goes only to the issuer's origin; list any other origin the metadata
+points at in `TrustedOrigins`. `interop.ApplyReceiver` holds the
+Transmitter to the CAEP Interoperability Profile. For a Transmitter
+other than SSFgo's — Keycloak's, say — see
+[Other Transmitters](docs/guides/other-transmitters.md) for the settings
+some of them need.
 
 ### 4. Handle events
 
@@ -239,7 +288,7 @@ receiver.On(rx, func(ctx context.Context, set ssf.SET, e caep.SessionRevoked) er
 ```
 
 To stop accepting the access tokens of revoked sessions as well, the
-[`revocation`](revocation) package records what such events mean and
+`revocation` package records what such events mean and
 checks tokens against it, or answers 401 as `net/http` middleware — see
 [Session revocation](docs/guides/session-revocation.md). Its recommended
 events include RISC's and SCIM's, so the registry above holds all three

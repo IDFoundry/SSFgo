@@ -59,7 +59,10 @@ const contentTypeJSON = "application/json"
 
 // New validates cfg, fetches the Transmitter Configuration Metadata and
 // checks it names cfg.Issuer (SSF 1.0 §7.2.4), then fetches the
-// Transmitter's signing keys.
+// Transmitter's signing keys. It reports every problem with cfg at once.
+// It does not retry: if the Transmitter cannot be reached, New fails, and
+// the caller retries with backoff or reports itself not ready. EnsureStream,
+// once a Receiver exists, waits out a brief outage itself.
 func New(ctx context.Context, cfg Config) (*Receiver, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -334,8 +337,11 @@ func (r *Receiver) get(ctx context.Context, u string) ([]byte, error) {
 
 // APIError is a Transmitter response with an unexpected status code.
 type APIError struct {
-	Method     string
-	URL        string
+	// Method is the request's HTTP method.
+	Method string
+	// URL is the request's URL.
+	URL string
+	// StatusCode is the response's HTTP status code.
 	StatusCode int
 	// Body is the response body, cut to its first 1 KiB. It is the
 	// Transmitter's or authorization server's text, unfiltered: Error

@@ -1,5 +1,11 @@
 # SSFgo
 
+[![CI](https://github.com/IDFoundry/SSFgo/actions/workflows/ci.yml/badge.svg)](https://github.com/IDFoundry/SSFgo/actions/workflows/ci.yml)
+[![SSF Conformance](https://github.com/IDFoundry/SSFgo/actions/workflows/conformance.yml/badge.svg)](https://github.com/IDFoundry/SSFgo/actions/workflows/conformance.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/idfoundry/ssfgo.svg)](https://pkg.go.dev/github.com/idfoundry/ssfgo)
+[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=IDFoundry_SSFgo&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=IDFoundry_SSFgo)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 SSFgo is a lightweight Go implementation of the OpenID Shared Signals
 Framework, CAEP and RISC, providing embeddable Transmitter and Receiver
 capabilities with a focus on standards compliance and interoperability.
@@ -30,6 +36,15 @@ The module has no third-party dependencies. Durable storage for
 PostgreSQL and SQLite is a separate module,
 [`storage/sqlstore`](storage/sqlstore), which imports no database driver
 itself.
+
+## Install
+
+Requires Go 1.26.6 or later (per `go.mod`'s `go` directive).
+
+```sh
+go get github.com/idfoundry/ssfgo
+go get github.com/idfoundry/ssfgo/storage/sqlstore # durable storage, optional
+```
 
 ## Usage
 

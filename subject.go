@@ -82,6 +82,7 @@ func invalid(format SubjectFormat, msg string) error {
 
 // AccountSubject identifies a subject by an "acct" URI (RFC 9493 §3.2.1).
 type AccountSubject struct {
+	// URI is the "acct" URI, such as "acct:alice@example.com". Required.
 	URI string
 }
 
@@ -89,13 +90,16 @@ type AccountSubject struct {
 // Addresses are compared exactly; a Receiver that needs provider-specific
 // canonicalization (RFC 9493 §3.2.2.1) applies it itself.
 type EmailSubject struct {
+	// Email is the email address. Required.
 	Email string
 }
 
 // IssSubSubject identifies a subject by issuer and subject
 // (RFC 9493 §3.2.3).
 type IssSubSubject struct {
-	Issuer  string
+	// Issuer is the "iss" of the subject's issuer. Required.
+	Issuer string
+	// Subject is the "sub", unique within Issuer. Required.
 	Subject string
 }
 
@@ -103,23 +107,28 @@ type IssSubSubject struct {
 // (RFC 9493 §3.2.4). SSF's verification and stream-updated events use it
 // to carry a stream ID.
 type OpaqueSubject struct {
+	// ID is the opaque identifier. Required.
 	ID string
 }
 
 // PhoneNumberSubject identifies a subject by telephone number
 // (RFC 9493 §3.2.5).
 type PhoneNumberSubject struct {
+	// PhoneNumber is the number in E.164 form, with its "+" prefix, such
+	// as "+12065550100". Required.
 	PhoneNumber string
 }
 
 // DIDSubject identifies a subject by a Decentralized Identifier URL
 // (RFC 9493 §3.2.6).
 type DIDSubject struct {
+	// URL is the DID URL, such as "did:example:123456". Required.
 	URL string
 }
 
 // URISubject identifies a subject by URI (RFC 9493 §3.2.7).
 type URISubject struct {
+	// URI is the subject's URI. Required.
 	URI string
 }
 
@@ -127,25 +136,31 @@ type URISubject struct {
 // (RFC 9493 §3.2.8). Its identifiers may not themselves be aliases or
 // complex subjects.
 type AliasesSubject struct {
+	// Identifiers are the subject's identifiers, one or more.
 	Identifiers []Subject
 }
 
 // JWTIDSubject identifies a JWT by its issuer and "jti" (SSF 1.0 §3.5.1).
 type JWTIDSubject struct {
+	// Issuer is the JWT's "iss". Required.
 	Issuer string
-	JWTID  string
+	// JWTID is the JWT's "jti". Required.
+	JWTID string
 }
 
 // SAMLAssertionIDSubject identifies a SAML 2.0 assertion
 // (SSF 1.0 §3.5.2).
 type SAMLAssertionIDSubject struct {
-	Issuer      string
+	// Issuer is the assertion's Issuer. Required.
+	Issuer string
+	// AssertionID is the assertion's ID. Required.
 	AssertionID string
 }
 
 // IPAddressesSubject identifies a subject by the IP addresses the
 // Transmitter observed for it (SSF 1.0 §3.5.3).
 type IPAddressesSubject struct {
+	// Addresses are the observed IPv4 or IPv6 addresses, one or more.
 	Addresses []netip.Addr
 }
 
@@ -156,14 +171,22 @@ type IPAddressesSubject struct {
 // Additional carries member names beyond those SSF 1.0 §3.3 lists; its
 // keys must not repeat a named member or "format".
 type ComplexSubject struct {
-	User        Subject
-	Device      Subject
-	Session     Subject
+	// User is the "user" member; nil if absent.
+	User Subject
+	// Device is the "device" member; nil if absent.
+	Device Subject
+	// Session is the "session" member; nil if absent.
+	Session Subject
+	// Application is the "application" member; nil if absent.
 	Application Subject
-	Tenant      Subject
-	OrgUnit     Subject
-	Group       Subject
-	Additional  map[string]Subject
+	// Tenant is the "tenant" member; nil if absent.
+	Tenant Subject
+	// OrgUnit is the "org_unit" member; nil if absent.
+	OrgUnit Subject
+	// Group is the "group" member; nil if absent.
+	Group Subject
+	// Additional maps further member names to their subjects.
+	Additional map[string]Subject
 }
 
 // SCIMSubject identifies a SCIM resource (RFC 9967 §2.1).
@@ -187,8 +210,10 @@ type SCIMSubject struct {
 // between Transmitter and Receiver out of band (SSF 1.0 §3.4). Members
 // holds every member except "format", as raw JSON.
 type ProprietarySubject struct {
+	// FormatName is the "format" member. Required.
 	FormatName SubjectFormat
-	Members    map[string]json.RawMessage
+	// Members maps each other member's name to its raw JSON value.
+	Members map[string]json.RawMessage
 }
 
 func (AccountSubject) isSubject()         {}

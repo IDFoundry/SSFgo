@@ -21,7 +21,10 @@ import (
 // SigningKey is a key the Transmitter signs SETs with and publishes in its
 // JWKS.
 type SigningKey struct {
-	Signer    crypto.Signer
+	// Signer holds the private key. Required.
+	Signer crypto.Signer
+	// Algorithm is the JWS algorithm SETs are signed with. It must suit
+	// Signer's key.
 	Algorithm ssf.SignatureAlgorithm
 	// KeyID is the key's "kid". It is required, so Receivers can select
 	// the right key during rotation.
@@ -63,7 +66,9 @@ type Config struct {
 
 	// Assurance is the deployment the Transmitter is for. Required.
 	// Under ssf.AssuranceProduction, Store must declare itself durable
-	// (storage.Capabilities) and Issuer must not be a loopback host.
+	// (storage.Capabilities), every signing key must be declared durable
+	// (SigningKey.Custody), a supplied HTTPClient must be acknowledged
+	// (UnrestrictedPushClient), and Issuer must not be a loopback host.
 	Assurance ssf.Assurance
 
 	// HorizontallyScaled declares that several Transmitter instances share

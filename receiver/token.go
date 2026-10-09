@@ -137,9 +137,11 @@ type ClientCredentials struct {
 	// SigningKey, SigningAlgorithm and KeyID sign PrivateKeyJWT
 	// assertions; KeyID should match the key's entry in the JWKS
 	// registered with the authorization server.
-	SigningKey       crypto.Signer
+	SigningKey crypto.Signer
+	// SigningAlgorithm must suit SigningKey; required with PrivateKeyJWT.
 	SigningAlgorithm ssf.SignatureAlgorithm
-	KeyID            string
+	// KeyID is the "kid" of client assertions; empty to send none.
+	KeyID string
 	// SigningKeyCustody declares how SigningKey is held, for a key that
 	// does not declare it itself (ssf.KeyCustodyAssurance). It is your own
 	// assertion: under ssf.AssuranceProduction a PrivateKeyJWT key must be

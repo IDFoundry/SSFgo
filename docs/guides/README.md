@@ -12,6 +12,7 @@ code in these guides is built against the library in CI.
 | [The CAEP Interoperability Profile in Go](caep-interop.md) | Holding a Transmitter or Receiver to the profile with `caep/interop` |
 | [SCIM events in Go](scim-events.md) | Provisioning events (RFC 9967): full and notice modes, transactions, and handling them |
 | [Storage and scaling in Go](storage-and-scaling.md) | memstore and sqlstore, production assurance, running several instances, and writing your own store |
+| [Other Transmitters](other-transmitters.md) | The Receiver settings a Transmitter other than SSFgo's may need — metadata location, per-stream audiences, an all-sessions placeholder — what each costs, and Keycloak's |
 | [Testing with ssftest](testing.md) | Testing a Receiver or a Transmitter against a real in-process counterpart |
 | [Observability in Go](observability.md) | Hooks for metrics and traces, and readiness probes |
 | [Keys in a KMS or HSM](keys.md) | Signing keys that never enter your process: adapting a signing service, declaring custody, and rotation |

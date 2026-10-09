@@ -45,6 +45,7 @@ const (
 
 // Delivery is a stream's "delivery" member (SSF 1.0 §6.1).
 type Delivery struct {
+	// Method is the "method" member: DeliveryPush or DeliveryPoll.
 	Method DeliveryMethod `json:"method"`
 	// EndpointURL is where the Transmitter pushes SETs (push, set by the
 	// Receiver) or where the Receiver polls for them (poll, set by the
@@ -119,18 +120,27 @@ func (a *Audience) UnmarshalJSON(data []byte) error {
 // StreamConfiguration is an event stream's configuration (SSF 1.0 §8.1.1),
 // as the Transmitter returns it.
 type StreamConfiguration struct {
-	StreamID        string      `json:"stream_id"`
-	Issuer          string      `json:"iss"`
-	Audience        Audience    `json:"aud"`
+	// StreamID is the "stream_id" the Transmitter assigned.
+	StreamID string `json:"stream_id"`
+	// Issuer is the Transmitter's issuer identifier, the "iss" of the
+	// stream's SETs.
+	Issuer string `json:"iss"`
+	// Audience is the "aud" of the stream's SETs.
+	Audience Audience `json:"aud"`
+	// EventsSupported are the event types the Transmitter supports.
 	EventsSupported []EventType `json:"events_supported,omitempty"`
+	// EventsRequested are the event types the Receiver asked for.
 	EventsRequested []EventType `json:"events_requested,omitempty"`
 	// EventsDelivered is always encoded, as an empty array when no
 	// event types are delivered.
 	EventsDelivered []EventType `json:"events_delivered"`
-	Delivery        Delivery    `json:"delivery"`
+	// Delivery is how the stream's SETs are delivered.
+	Delivery Delivery `json:"delivery"`
 	// MinVerificationInterval is in seconds; zero means none.
-	MinVerificationInterval int    `json:"min_verification_interval,omitempty"`
-	Description             string `json:"description,omitempty"`
+	MinVerificationInterval int `json:"min_verification_interval,omitempty"`
+	// Description is the Receiver's free-text description of the stream;
+	// empty if none.
+	Description string `json:"description,omitempty"`
 	// InactivityTimeout is in seconds; zero means none.
 	InactivityTimeout int `json:"inactivity_timeout,omitempty"`
 }
@@ -165,16 +175,21 @@ func (c StreamConfiguration) LogValue() slog.Value {
 // StreamState is a stream's status as read from, or written to, the
 // Status Endpoint (SSF 1.0 §8.1.2).
 type StreamState struct {
-	StreamID string       `json:"stream_id"`
-	Status   StreamStatus `json:"status"`
-	Reason   string       `json:"reason,omitempty"`
+	// StreamID is the stream's "stream_id".
+	StreamID string `json:"stream_id"`
+	// Status is the stream's status: enabled, paused or disabled.
+	Status StreamStatus `json:"status"`
+	// Reason is free text explaining the status; empty if none given.
+	Reason string `json:"reason,omitempty"`
 }
 
 // AddSubjectRequest is the body of an Add Subject request
 // (SSF 1.0 §8.1.3.2).
 type AddSubjectRequest struct {
+	// StreamID is the stream to add the subject to. Required.
 	StreamID string
-	Subject  Subject
+	// Subject is the subject to add. Required.
+	Subject Subject
 	// Verified is nil when the Receiver did not say; the Transmitter
 	// should then assume the subject was verified.
 	Verified *bool
@@ -183,8 +198,10 @@ type AddSubjectRequest struct {
 // RemoveSubjectRequest is the body of a Remove Subject request
 // (SSF 1.0 §8.1.3.3).
 type RemoveSubjectRequest struct {
+	// StreamID is the stream to remove the subject from. Required.
 	StreamID string
-	Subject  Subject
+	// Subject is the subject to remove. Required.
+	Subject Subject
 }
 
 type subjectRequestWire struct {
@@ -255,6 +272,9 @@ func unmarshalSubjectRequest(data []byte) (string, Subject, *bool, error) {
 // VerificationRequest is the body of a request to the Verification
 // Endpoint (SSF 1.0 §8.1.4.2).
 type VerificationRequest struct {
+	// StreamID is the stream to verify.
 	StreamID string `json:"stream_id"`
-	State    string `json:"state,omitempty"`
+	// State is an opaque value the Transmitter echoes in the verification
+	// event; empty if none.
+	State string `json:"state,omitempty"`
 }

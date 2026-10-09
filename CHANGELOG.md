@@ -33,6 +33,12 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 
 ### Added since v0.5
 
+- Documentation: a guide to [other Transmitters](docs/guides/other-transmitters.md)
+  — the Receiver settings some need, what each costs, and Keycloak's; a
+  development path in GETTING_STARTED; the pattern for testing a
+  Transmitter on a test server; runnable `Example` functions in `ssf`,
+  `receiver`, `transmitter` and `revocation`; and a doc comment on every
+  exported identifier, which `internal/doclint` checks in CI.
 - `receiver.RecommendedAlgorithms()`: RS256, which the CAEP
   Interoperability Profile requires, and PS256 and ES256.
 - `receiver.Config.AudiencePerStream`: for Transmitters that give each

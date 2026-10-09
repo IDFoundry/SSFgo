@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
 	"database/sql"
 	"log"
 	"log/slog"
@@ -15,6 +17,7 @@ import (
 	"github.com/idfoundry/ssfgo/receiver"
 	"github.com/idfoundry/ssfgo/risc"
 	"github.com/idfoundry/ssfgo/scim"
+	"github.com/idfoundry/ssfgo/storage/memstore"
 	"github.com/idfoundry/ssfgo/storage/sqlstore"
 	"github.com/idfoundry/ssfgo/transmitter"
 )
@@ -36,18 +39,25 @@ var (
 	newKey                 crypto.Signer
 )
 
+func development() error {
+	// SNIPPETS GETTING_STARTED.md "## Start in development"
+	_, _, _, _, _ = key, streams, replay, issuer, assurance
+	return nil
+}
+
 func transmitterPart(ctx context.Context) error {
 	// SNIPPETS GETTING_STARTED.md "## Part 1: a Transmitter"
 	return err
 }
 
-func receiverPart(ctx context.Context, db *sql.DB) error {
+func receiverPart(ctx context.Context) error {
 	// SNIPPETS GETTING_STARTED.md "## Part 2: a Receiver"
 	return nil
 }
 
 func main() {
 	_ = transmitterPart(context.Background())
-	_ = receiverPart(context.Background(), nil)
+	_ = receiverPart(context.Background())
+	_ = development()
 	_, _, _, _ = slog.Default, os.Getenv, log.Fatal, time.Now
 }

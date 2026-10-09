@@ -67,9 +67,11 @@ type SETInfo struct {
 	// ssf.DeliveryPoll.
 	Delivery ssf.DeliveryMethod
 	// JTI and EventType are empty for a SET that could not be decoded.
-	JTI       string
+	JTI string
+	// EventType is the SET's event type.
 	EventType ssf.EventType
-	Outcome   SETOutcome
+	// Outcome is what became of the SET.
+	Outcome SETOutcome
 	// ErrorCode is the RFC 8935 error code of a rejected SET: one of a
 	// few fixed values, fit for a metric label.
 	ErrorCode string
@@ -83,6 +85,7 @@ type SETInfo struct {
 
 // PollInfo describes one poll request.
 type PollInfo struct {
+	// StreamID is the stream polled.
 	StreamID string
 	// Received is how many SETs the Transmitter returned.
 	Received int
