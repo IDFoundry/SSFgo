@@ -88,39 +88,42 @@ func CreateSchema(ctx context.Context, db *sql.DB, d Dialect) error {
 	if err := d.check(db); err != nil {
 		return err
 	}
-	err := d.inTx(ctx, db, func(q querier) error {
-		if d == Postgres {
-			// Two instances starting together could otherwise both try
-			// to migrate: IF NOT EXISTS is not atomic.
-			if _, err := q.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1, 0)", advisoryLockClass); err != nil {
-				return err
-			}
-		}
-		if _, err := q.ExecContext(ctx, schemaTable); err != nil {
-			return err
-		}
-		version, err := readVersion(ctx, q)
-		if err != nil {
-			return err
-		}
-		if version > len(migrations) {
-			return fmt.Errorf("sqlstore: the database schema is version %d, newer than this storage/sqlstore's %d: upgrade storage/sqlstore", version, len(migrations))
-		}
-		for _, m := range migrations[version:] {
-			for _, stmt := range m {
-				if _, err := q.ExecContext(ctx, strings.ReplaceAll(stmt, "{serial}", d.serial())); err != nil {
-					return fmt.Errorf("sqlstore: migrate the schema from version %d: %w", version, err)
-				}
-			}
-		}
-		_, err = q.ExecContext(ctx, d.rebind(`INSERT INTO ssf_schema (id, version) VALUES (1, ?)
-			ON CONFLICT (id) DO UPDATE SET version = excluded.version`), len(migrations))
-		return err
-	})
+	err := d.inTx(ctx, db, func(q querier) error { return d.migrate(ctx, q) })
 	if err != nil && !strings.HasPrefix(err.Error(), "sqlstore:") {
 		// The driver's own error: often the database is not of dialect d.
 		err = fmt.Errorf("sqlstore: create the schema as %v (is that the database's dialect?): %w", d, err)
 	}
+	return err
+}
+
+// migrate brings the schema in q's transaction to SchemaVersion.
+func (d Dialect) migrate(ctx context.Context, q querier) error {
+	if d == Postgres {
+		// Two instances starting together could otherwise both try
+		// to migrate: IF NOT EXISTS is not atomic.
+		if _, err := q.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1, 0)", advisoryLockClass); err != nil {
+			return err
+		}
+	}
+	if _, err := q.ExecContext(ctx, schemaTable); err != nil {
+		return err
+	}
+	version, err := readVersion(ctx, q)
+	if err != nil {
+		return err
+	}
+	if version > len(migrations) {
+		return fmt.Errorf("sqlstore: the database schema is version %d, newer than this storage/sqlstore's %d: upgrade storage/sqlstore", version, len(migrations))
+	}
+	for _, m := range migrations[version:] {
+		for _, stmt := range m {
+			if _, err := q.ExecContext(ctx, strings.ReplaceAll(stmt, "{serial}", d.serial())); err != nil {
+				return fmt.Errorf("sqlstore: migrate the schema from version %d: %w", version, err)
+			}
+		}
+	}
+	_, err = q.ExecContext(ctx, d.rebind(`INSERT INTO ssf_schema (id, version) VALUES (1, ?)
+		ON CONFLICT (id) DO UPDATE SET version = excluded.version`), len(migrations))
 	return err
 }
 
