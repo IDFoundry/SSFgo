@@ -107,7 +107,11 @@ type querier interface {
 // error is returned unchanged.
 func (d Dialect) inTx(ctx context.Context, db *sql.DB, fn func(querier) error) error {
 	if d == Postgres {
-		tx, err := db.BeginTx(ctx, nil)
+		// The stores rely on READ COMMITTED: a statement after an
+		// advisory lock must see what the lock's previous holder
+		// committed, which a snapshot taken before it — under REPEATABLE
+		// READ or SERIALIZABLE set as the database's default — would not.
+		tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 		if err != nil {
 			return err
 		}
@@ -153,18 +157,54 @@ func discard(conn *sql.Conn) {
 	_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 }
 
-// capabilities is what a store on dialect d declares: durable, and on
+// open checks that a store can use db: a known dialect, and a schema
+// CreateSchema has created or migrated. It returns what the store
+// declares: durable, unless db is a SQLite in-memory database, and on
 // PostgreSQL consistent across instances. A SQLite file is durable, but
 // not shared by Transmitter or Receiver instances on other hosts.
-func (d Dialect) capabilities() storage.Capabilities {
-	return storage.Capabilities{Durable: true, CrossInstanceConsistent: d == Postgres}
+func (d Dialect) open(ctx context.Context, db *sql.DB) (storage.Capabilities, error) {
+	if err := d.check(db); err != nil {
+		return storage.Capabilities{}, err
+	}
+	if err := checkSchema(ctx, db); err != nil {
+		return storage.Capabilities{}, err
+	}
+	if d == Postgres {
+		return storage.Capabilities{Durable: true, CrossInstanceConsistent: true}, nil
+	}
+	file, err := sqliteFile(ctx, db)
+	if err != nil {
+		return storage.Capabilities{}, err
+	}
+	return storage.Capabilities{Durable: file != ""}, nil
+}
+
+// sqliteFile returns the file of db's main database, or "" for an
+// in-memory or temporary one.
+func sqliteFile(ctx context.Context, db *sql.DB) (string, error) {
+	rows, err := db.QueryContext(ctx, "PRAGMA database_list")
+	if err != nil {
+		return "", fmt.Errorf("sqlstore: list the SQLite databases: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var seq int
+		var name, file string
+		if err := rows.Scan(&seq, &name, &file); err != nil {
+			return "", fmt.Errorf("sqlstore: list the SQLite databases: %w", err)
+		}
+		if name == "main" {
+			return file, nil
+		}
+	}
+	return "", rows.Err()
 }
 
 // Capabilities implements storage.StoreAssurance.
-func (s *StreamStore) Capabilities() storage.Capabilities { return s.d.capabilities() }
+func (s *StreamStore) Capabilities() storage.Capabilities { return s.caps }
 
 // Capabilities implements storage.StoreAssurance.
-func (s *ReplayStore) Capabilities() storage.Capabilities { return s.d.capabilities() }
+func (s *ReplayStore) Capabilities() storage.Capabilities { return s.caps }
 
 // Capabilities implements storage.StoreAssurance.
-func (s *RevocationStore) Capabilities() storage.Capabilities { return s.d.capabilities() }
+func (s *RevocationStore) Capabilities() storage.Capabilities { return s.caps }

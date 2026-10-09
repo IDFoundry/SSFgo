@@ -68,7 +68,19 @@ func rawSQLiteAt(t testing.TB, path string) *sql.DB {
 // the tables created in it, and drops the schema when the test ends.
 func openPostgres(t testing.TB) *sql.DB {
 	t.Helper()
-	db := rawPostgres(t)
+	return createPostgres(t, rawPostgres(t))
+}
+
+// openSerializablePostgres is openPostgres on connections whose default
+// isolation level is SERIALIZABLE, as a database's may be: the stores
+// must still work.
+func openSerializablePostgres(t testing.TB) *sql.DB {
+	t.Helper()
+	return createPostgres(t, postgresWith(t, map[string]string{"default_transaction_isolation": "serializable"}))
+}
+
+func createPostgres(t testing.TB, db *sql.DB) *sql.DB {
+	t.Helper()
 	if err := sqlstore.CreateSchema(ctx, db, sqlstore.Postgres); err != nil {
 		t.Fatal(err)
 	}
@@ -78,6 +90,13 @@ func openPostgres(t testing.TB) *sql.DB {
 // rawPostgres opens a connection to a new, empty PostgreSQL schema with no
 // tables, and drops the schema when the test ends.
 func rawPostgres(t testing.TB) *sql.DB {
+	t.Helper()
+	return postgresWith(t, nil)
+}
+
+// postgresWith is rawPostgres with the connections' run-time settings
+// set.
+func postgresWith(t testing.TB, settings map[string]string) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv(postgresEnv)
 	if dsn == "" {
@@ -102,6 +121,9 @@ func rawPostgres(t testing.TB) *sql.DB {
 	}
 	q := u.Query()
 	q.Set("search_path", schema) // pgx sends unknown parameters as run-time settings
+	for k, v := range settings {
+		q.Set(k, v)
+	}
 	u.RawQuery = q.Encode()
 	db, err := sql.Open("pgx", u.String())
 	if err != nil {
@@ -119,6 +141,7 @@ var dialects = []struct {
 }{
 	{"SQLite", sqlstore.SQLite, openSQLite, rawSQLite},
 	{"Postgres", sqlstore.Postgres, openPostgres, rawPostgres},
+	{"Postgres serializable by default", sqlstore.Postgres, openSerializablePostgres, rawPostgres},
 }
 
 func TestContract(t *testing.T) {

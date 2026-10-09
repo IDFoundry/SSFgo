@@ -260,6 +260,15 @@ each finding was reproduced by a failing test before it was fixed.
   `SigningKey` panicked `New`; it is now reported as missing. `Emit`
   refuses, with `transmitter.ErrSETTooLarge`, an event whose SET would
   exceed `transmitter.MaxSETBytes`, the 64 KiB a Receiver reads.
+- `storage/sqlstore` declared a SQLite in-memory database durable, so
+  `AssuranceProduction` accepted a store that forgets everything on
+  restart; it no longer does. A negative schema version panicked
+  `CreateSchema`, and an `ssf_schema` table of another shape — several
+  rows, another id — was adopted; both are refused. PostgreSQL
+  transactions run at READ COMMITTED, as the stores' locks require: under
+  a database default of REPEATABLE READ or SERIALIZABLE, a statement after
+  an advisory lock read a snapshot from before it, and concurrent updates
+  failed.
 
 ### Fixed since v0.5
 
