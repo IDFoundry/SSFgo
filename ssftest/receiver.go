@@ -75,7 +75,7 @@ func (rr *Receiver) Connect(cfg receiver.Config) {
 	if cfg.Algorithms == nil {
 		cfg.Algorithms = ssf.SignatureAlgorithms()
 	}
-	if cfg.Assurance == "" {
+	if cfg.Assurance == 0 {
 		cfg.Assurance = ssf.AssuranceDevelopment
 	}
 	if cfg.Limits == (receiver.Limits{}) {

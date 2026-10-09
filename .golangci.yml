@@ -17,6 +17,12 @@ linters:
           - gosec
           - errcheck
           - bodyclose
+      # Configuration errors begin with the Go field they name, which is
+      # capitalised: "Audience is required" (design rule 2).
+      - path: (receiver/config|transmitter/config|revocation/revocation|internal/assurance/assurance)\.go
+        linters:
+          - staticcheck
+        text: ST1005
 
 formatters:
   enable:

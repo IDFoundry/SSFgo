@@ -44,7 +44,7 @@ docker run --rm -d --name keycloak -p 8443:8443 \
 
 SSFGO_INTEROP_KEYCLOAK=https://localhost:8443 \
 SSFGO_INTEROP_KEYCLOAK_CA=/tmp/kc-certs/tls.crt \
-  go test -count=1 -v -run TestKeycloak ./interop/keycloak
+  go test -count=1 -v -run TestKeycloak ./interoptest/keycloak
 ```
 
 `SSFGO_INTEROP_KEYCLOAK_ADMIN` and `SSFGO_INTEROP_KEYCLOAK_ADMIN_PASSWORD`

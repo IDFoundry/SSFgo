@@ -209,7 +209,7 @@ rx, err := receiver.New(ctx, receiver.Config{
 	Issuer:      "https://idp.example.com",
 	Audience:    "https://rp.example.com", // must be in every SET's "aud"
 	Registry:    registry,
-	Algorithms:  []ssf.SignatureAlgorithm{ssf.RS256},
+	Algorithms:  receiver.RecommendedAlgorithms(),
 	TokenSource: tokens,
 	ReplayStore: replay,
 	Assurance:   ssf.AssuranceProduction,

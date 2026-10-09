@@ -33,6 +33,8 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 
 ### Added since v0.5
 
+- `receiver.RecommendedAlgorithms()`: RS256, which the CAEP
+  Interoperability Profile requires, and PS256 and ES256.
 - `receiver.Config.AudiencePerStream`: for Transmitters that give each
   stream the audience `<client_id>/<stream_id>`, accepts such a stream,
   and SETs addressed to a stream the Transmitter confirms is this
@@ -59,8 +61,9 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
   account-purged, sessions-revoked and SCIM deactivate and delete events
   mean — a user's or one session's tokens, issued before the event, are
   revoked — and checks tokens the application validated against it, with
-  `IsRevoked` or as `net/http` middleware answering 401. `New` takes
-  explicit options and reports every problem with them: `Issuers` says
+  `IsRevoked` or as `net/http` middleware answering 401 — and 503, logged
+  to `Logger`, when the store fails. `New` takes explicit options and
+  reports every problem with them: its `Store`; `Issuers` says
   which token issuer each Transmitter speaks for (`StaticTokenIssuers`,
   or `SameIssuer` for an identity provider that is its own Transmitter),
   so no Transmitter can revoke another identity provider's users;
@@ -146,11 +149,11 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
 ### Testing
 
 - Interop with Keycloak's SSF Transmitter (26.8, experimental):
-  `interop/keycloak` sets Keycloak up, creates and verifies a poll
+  `interoptest/keycloak` sets Keycloak up, creates and verifies a poll
   stream, and checks session-revoked for one session and for all of a
   user's sessions (through the `revocation` package), credential-change
   and account-disabled, with no SET rejected. `interop.yml` runs it
-  weekly and on demand; `interop/README.md` records what Keycloak does
+  weekly and on demand; `interoptest/README.md` records what Keycloak does
   that isn't obvious.
 - CI builds `storage/sqlstore` against the core version its `go.mod`
   requires, not only the core in the same checkout, so its users never
@@ -272,6 +275,15 @@ each finding was reproduced by a failing test before it was fixed.
 
 ### Fixed since v0.5
 
+- Configuration errors name the Go field they concern, in one style
+  across the roles — `Algorithms is required (RecommendedAlgorithms is
+  the usual choice)`, `SigningKeys[1].KeyID is required`,
+  `TrustedOrigins[0] must be an https origin` — and a signing key's
+  missing `KeyID` no longer hides its algorithm mismatch.
+- A Transmitter stopping logged an error for a SET pushed as it stopped,
+  and pushed it again at the next start; it is now removed from its
+  queue. `sqlstore.CreateSchema` given the wrong `Dialect` returned the
+  driver's error alone; it now says which dialect it assumed.
 - A panicking event handler escaped the Receiver — under `RunPoller`,
   ending the process. It now fails the SET's handling, so the SET is
   delivered again, and is logged with its stack.
@@ -384,7 +396,8 @@ or logged.
 Production refuses development shortcuts (rule 10): `transmitter.Config`,
 `receiver.Config` and `revocation.Options` take a required
 `ssf.Assurance` — `ssf.AssuranceDevelopment` or
-`ssf.AssuranceProduction` — and `HorizontallyScaled`. Stores declare
+`ssf.AssuranceProduction`, an enumeration whose zero value is invalid,
+so a level left unset is refused — and `HorizontallyScaled`. Stores declare
 what they guarantee through the new `storage.StoreAssurance`
 (`storage.Capabilities`: `Durable`, `CrossInstanceConsistent`). Under
 production every store must be durable — memstore is refused, sqlstore

@@ -218,7 +218,7 @@ func TestDiscovery(t *testing.T) {
 		"no replay":    func(c *receiver.Config) { c.ReplayStore = nil },
 		// No implicit defaults for what decides how much is trusted.
 		"no limits":    func(c *receiver.Config) { c.Limits = receiver.Limits{} },
-		"no assurance": func(c *receiver.Config) { c.Assurance = "" },
+		"no assurance": func(c *receiver.Config) { c.Assurance = 0 },
 		// An in-memory replay store forgets on restart, so handled SETs
 		// would be accepted again.
 		"production memstore": func(c *receiver.Config) { c.Assurance = ssf.AssuranceProduction },

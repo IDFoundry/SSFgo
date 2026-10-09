@@ -47,13 +47,26 @@ type Deps struct {
 // — and a URL whose host is Loopback.
 func Check(level ssf.Assurance, scaled bool, deps Deps) []error {
 	if !level.IsValid() {
-		return []error{errors.New("the Assurance level must be ssf.AssuranceDevelopment or ssf.AssuranceProduction")}
+		return []error{errors.New("Assurance is required (ssf.AssuranceDevelopment or ssf.AssuranceProduction)")}
 	}
 	if level != ssf.AssuranceProduction {
 		return nil
 	}
+	errs := storeErrors(scaled, deps.Stores)
+	errs = append(errs, keyErrors(scaled, deps.Keys)...)
+	for _, u := range deps.URLs {
+		if u.Value != "" && Loopback(u.Value) {
+			errs = append(errs, fmt.Errorf("under AssuranceProduction, %s must not be a loopback host", u.Field))
+		}
+	}
+	return errs
+}
+
+// storeErrors checks that each store declares itself durable and, when
+// scaled, consistent across instances.
+func storeErrors(scaled bool, stores []Store) []error {
 	var errs []error
-	for _, s := range deps.Stores {
+	for _, s := range stores {
 		if IsNil(s.Store) {
 			continue // reported as missing by the role's own checks
 		}
@@ -65,17 +78,19 @@ func Check(level ssf.Assurance, scaled bool, deps Deps) []error {
 			errs = append(errs, fmt.Errorf("with HorizontallyScaled under AssuranceProduction, %s must declare itself consistent across instances", s.Field))
 		}
 	}
-	for _, k := range deps.Keys {
+	return errs
+}
+
+// keyErrors checks that each key is declared durable and, when scaled,
+// shared by every instance.
+func keyErrors(scaled bool, keys []Key) []error {
+	var errs []error
+	for _, k := range keys {
 		if !k.Custody.Durable {
 			errs = append(errs, fmt.Errorf("under AssuranceProduction, %s must be declared durable (ssf.KeyCustody): a key made at each start strands what was signed before a restart", k.Field))
 		}
 		if scaled && !k.Custody.CrossInstanceConsistent {
 			errs = append(errs, fmt.Errorf("with HorizontallyScaled under AssuranceProduction, %s must be declared shared by every instance (ssf.KeyCustody)", k.Field))
-		}
-	}
-	for _, u := range deps.URLs {
-		if u.Value != "" && Loopback(u.Value) {
-			errs = append(errs, fmt.Errorf("under AssuranceProduction, %s must not be a loopback host", u.Field))
 		}
 	}
 	return errs

@@ -95,7 +95,7 @@ adversarial security review
 [of the additions](docs/security-review-2026-10-additions.md)),
 SCIM events (RFC 9967), and interop with Keycloak's Transmitter — its
 per-stream audiences and all-sessions revocation — tested weekly
-([interop/README.md](interop/README.md)).
+([interoptest/README.md](interoptest/README.md)).
 
 ## Under consideration
 

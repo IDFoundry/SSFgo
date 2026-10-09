@@ -5,7 +5,8 @@
 // already validated has since been revoked — as a call, or as net/http
 // middleware.
 //
-//	rev, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{
+//	rev, err := revocation.New(revocation.Options{
+//		Store:     memstore.NewRevocationStore(),
 //		Issuers:   revocation.SameIssuer, // the identity provider is its own Transmitter
 //		Events:    revocation.RecommendedEvents(),
 //		Retention: 24 * time.Hour, // at least the longest token lifetime

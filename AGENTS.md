@@ -64,7 +64,7 @@ run each against the OpenID Foundation suite, the results, and what the
 suite expects that isn't obvious from the specifications.
 [`conformance/scripts/run-all.sh`](conformance/scripts/run-all.sh) runs
 the full matrix; its header lists the environment it reads.
-[interop/README.md](interop/README.md) covers testing against deployed
+[interoptest/README.md](interoptest/README.md) covers testing against deployed
 Transmitters — Keycloak's — and what they do that isn't obvious. The
 Transmitter listens on `PORT` (default 9443) — choose another if that
 port is taken, rather than stopping whatever holds it.

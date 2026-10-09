@@ -1,7 +1,7 @@
 // Package keycloak_test runs an SSFgo Receiver against Keycloak's SSF
 // Transmitter. It needs a running Keycloak with the ssf feature enabled,
 // and is skipped unless SSFGO_INTEROP_KEYCLOAK names it; see
-// interop/README.md.
+// interoptest/README.md.
 package keycloak_test
 
 import (
@@ -99,7 +99,8 @@ func TestKeycloak(t *testing.T) {
 
 	// Keycloak sends session-revoked for every session of a user with the
 	// placeholder session "ALL".
-	rev, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{
+	rev, err := revocation.New(revocation.Options{
+		Store:       memstore.NewRevocationStore(),
 		Issuers:     revocation.SameIssuer,
 		Events:      revocation.RecommendedEvents(),
 		Retention:   time.Hour,

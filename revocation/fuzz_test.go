@@ -45,7 +45,8 @@ func FuzzIssuerScope(f *testing.F) {
 			set.Issuer = trusted
 		}
 		var recorded []storage.RevocationKey
-		r, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{
+		r, err := revocation.New(revocation.Options{
+			Store:       memstore.NewRevocationStore(),
 			Issuers:     revocation.StaticTokenIssuers{trusted: tokenIssuer},
 			Events:      revocation.RecommendedEvents(),
 			Retention:   time.Hour,

@@ -88,7 +88,7 @@ func CreateSchema(ctx context.Context, db *sql.DB, d Dialect) error {
 	if err := d.check(db); err != nil {
 		return err
 	}
-	return d.inTx(ctx, db, func(q querier) error {
+	err := d.inTx(ctx, db, func(q querier) error {
 		if d == Postgres {
 			// Two instances starting together could otherwise both try
 			// to migrate: IF NOT EXISTS is not atomic.
@@ -117,6 +117,11 @@ func CreateSchema(ctx context.Context, db *sql.DB, d Dialect) error {
 			ON CONFLICT (id) DO UPDATE SET version = excluded.version`), len(migrations))
 		return err
 	})
+	if err != nil && !strings.HasPrefix(err.Error(), "sqlstore:") {
+		// The driver's own error: often the database is not of dialect d.
+		err = fmt.Errorf("sqlstore: create the schema as %v (is that the database's dialect?): %w", d, err)
+	}
+	return err
 }
 
 // readVersion returns the schema version recorded in the database, or 0

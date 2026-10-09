@@ -55,7 +55,7 @@ rcfg := receiver.Config{
 	Issuer:      "https://idp.example.com",
 	Audience:    "https://rp.example.com",
 	Registry:    registry, // with caep.Register
-	Algorithms:  []ssf.SignatureAlgorithm{ssf.RS256},
+	Algorithms:  receiver.RecommendedAlgorithms(),
 	TokenSource: tokens,
 	ReplayStore: replay,
 	Assurance:   ssf.AssuranceProduction,
