@@ -240,6 +240,26 @@ each finding was reproduced by a failing test before it was fixed.
   `ErrReceiverHasStream`); `SetSubjectRule` and `Enqueue` take a limit
   and return `ErrTooManySubjectRules` / `ErrQueueFull`;
   `storage.Stream.StatusSetByTransmitter` is new.
+- `transmitter.Config.HTTPClient` swapped the push client's refusal of
+  non-public addresses and redirects for whatever the supplied client
+  did, also under `AssuranceProduction`. The new `PushTransport` wraps
+  the protected client's transport — for tracing, say — and
+  `AllowedPrivatePushHosts` lets named hosts reach private addresses,
+  each keeping every other check; under `AssuranceProduction` an
+  `HTTPClient` now requires `UnrestrictedPushClient`.
+- `ssf.Secret` and `receiver.StaticToken` printed their value with fmt
+  verbs such as `%d`, and a `Secret` in an unexported struct field — a
+  `Delivery` in an application's own state, say — printed with any verb,
+  as did a `Receiver`'s static token. Every verb now withholds them,
+  printing by reflection too. `Delivery` and `StreamConfiguration`
+  implement `slog.LogValuer`, so a JSON log handler no longer writes
+  `authorization_header`.
+- Production assurance's loopback check missed spellings a resolver
+  accepts — `127.1`, `2130706433`, `0x7f.1` — and the unspecified
+  addresses `0.0.0.0` and `[::]`. A typed-nil signer, store or
+  `SigningKey` panicked `New`; it is now reported as missing. `Emit`
+  refuses, with `transmitter.ErrSETTooLarge`, an event whose SET would
+  exceed `transmitter.MaxSETBytes`, the 64 KiB a Receiver reads.
 
 ### Fixed since v0.5
 

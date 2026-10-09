@@ -302,7 +302,8 @@ func TestEmitRejects(t *testing.T) {
 		}
 	})
 	ctx := context.Background()
-	pollStream(f, "alice")
+	stream := pollStream(f, "alice")
+	huge := caep.SessionRevoked{Common: caep.Common{ReasonAdmin: ssf.LocalizedText{"en": strings.Repeat("x", transmitter.MaxSETBytes)}}}
 	for name, c := range map[string]struct {
 		subject ssf.Subject
 		event   ssf.Event
@@ -315,6 +316,7 @@ func TestEmitRejects(t *testing.T) {
 		"unsupported type":   {alice, caep.RiskLevelChange{Principal: "USER", CurrentLevel: caep.RiskLow}, transmitter.ErrUnsupportedEvent},
 		"subject constraint": {alice, ssf.Verification{}, ssf.ErrInvalidEvent},
 		"validator":          {ssf.PhoneNumberSubject{PhoneNumber: "+15550100"}, revoked(), sentinel},
+		"too large":          {alice, huge, transmitter.ErrSETTooLarge},
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := f.tx.Emit(ctx, c.subject, c.event)
@@ -322,6 +324,9 @@ func TestEmitRejects(t *testing.T) {
 				t.Fatalf("Emit = %v, want %v", err, c.is)
 			}
 		})
+	}
+	if got := f.poll(stream, "alice", nil); len(got.Sets) != 0 {
+		t.Errorf("a refused event queued %d SETs", len(got.Sets))
 	}
 }
 

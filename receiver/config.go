@@ -190,7 +190,7 @@ func (c *Config) validate() error {
 	if cc := clientCredentialsOf(c.TokenSource); cc != nil {
 		errs = append(errs, cc.errors("TokenSource.")...)
 		urls = append(urls, assurance.URL{Field: "TokenSource.TokenURL", Value: cc.TokenURL})
-		if cc.AuthMethod == PrivateKeyJWT && cc.SigningKey != nil {
+		if cc.AuthMethod == PrivateKeyJWT && !assurance.IsNil(cc.SigningKey) {
 			keys = append(keys, assurance.Key{Field: "TokenSource.SigningKey", Custody: assurance.CustodyOf(cc.SigningKey, cc.SigningKeyCustody)})
 		}
 	}
@@ -222,7 +222,7 @@ func (c *Config) validate() error {
 	if c.TokenSource == nil {
 		errs = append(errs, errors.New("a TokenSource is required"))
 	}
-	if c.ReplayStore == nil {
+	if assurance.IsNil(c.ReplayStore) {
 		errs = append(errs, errors.New("a ReplayStore is required"))
 	}
 	if c.MetadataURL != "" {

@@ -218,11 +218,14 @@ func TestConfigValidation(t *testing.T) {
 		"duplicate kid": func(c *transmitter.Config) {
 			c.SigningKeys = append(c.SigningKeys, c.SigningKeys[0])
 		},
-		"no events":             func(c *transmitter.Config) { c.EventsSupported = nil },
-		"no delivery":           func(c *transmitter.Config) { c.DeliveryMethods = nil },
-		"unknown delivery":      func(c *transmitter.Config) { c.DeliveryMethods = []ssf.DeliveryMethod{"urn:x"} },
-		"no default subjects":   func(c *transmitter.Config) { c.DefaultSubjects = "" },
-		"no store":              func(c *transmitter.Config) { c.Store = nil },
+		"no events":           func(c *transmitter.Config) { c.EventsSupported = nil },
+		"no delivery":         func(c *transmitter.Config) { c.DeliveryMethods = nil },
+		"unknown delivery":    func(c *transmitter.Config) { c.DeliveryMethods = []ssf.DeliveryMethod{"urn:x"} },
+		"no default subjects": func(c *transmitter.Config) { c.DefaultSubjects = "" },
+		"no store":            func(c *transmitter.Config) { c.Store = nil },
+		// A typed nil would panic when its methods are called.
+		"typed-nil signer":      func(c *transmitter.Config) { c.SigningKeys[0].Signer = (*rsa.PrivateKey)(nil) },
+		"typed-nil store":       func(c *transmitter.Config) { c.Store = (*memstore.StreamStore)(nil) },
 		"no authorize":          func(c *transmitter.Config) { c.Authorize = nil },
 		"no PermitEvent":        func(c *transmitter.Config) { c.PermitEvent = nil },
 		"fractional interval":   func(c *transmitter.Config) { c.MinVerificationInterval = 1500 * time.Millisecond },
@@ -239,6 +242,18 @@ func TestConfigValidation(t *testing.T) {
 			c.DeliveryMethods = []ssf.DeliveryMethod{ssf.DeliveryPush}
 			c.PushRetry = transmitter.PushRetryPolicy{}
 		},
+		// The adjustments apply to the default client, not one supplied.
+		"HTTPClient with PushTransport": func(c *transmitter.Config) {
+			c.HTTPClient = http.DefaultClient
+			c.PushTransport = func(rt http.RoundTripper) http.RoundTripper { return rt }
+		},
+		"HTTPClient with private hosts": func(c *transmitter.Config) {
+			c.HTTPClient = http.DefaultClient
+			c.AllowedPrivatePushHosts = []string{"rx.internal"}
+		},
+		"unrestricted without HTTPClient": func(c *transmitter.Config) { c.UnrestrictedPushClient = true },
+		"wildcard private host":           func(c *transmitter.Config) { c.AllowedPrivatePushHosts = []string{"*.internal"} },
+		"private host with port":          func(c *transmitter.Config) { c.AllowedPrivatePushHosts = []string{"rx.internal:443"} },
 		"inverted backoff": func(c *transmitter.Config) {
 			c.DeliveryMethods = []ssf.DeliveryMethod{ssf.DeliveryPush}
 			c.PushRetry.MaxBackoff = c.PushRetry.MinBackoff / 2
@@ -251,6 +266,46 @@ func TestConfigValidation(t *testing.T) {
 				t.Fatal("New succeeded")
 			}
 		})
+	}
+}
+
+// Under AssuranceProduction a supplied HTTPClient, which replaces the
+// refusal of non-public push addresses, must be acknowledged; the
+// adjustments that keep it need no acknowledgement.
+func TestProductionPushClient(t *testing.T) {
+	production := func(mutate func(*transmitter.Config)) error {
+		c := transmitter.Config{
+			Assurance:       ssf.AssuranceProduction,
+			Limits:          transmitter.RecommendedLimits(),
+			PushRetry:       transmitter.RecommendedPushRetry(),
+			PermitEvent:     transmitter.PermitAll,
+			Issuer:          "https://tx.example",
+			SigningKeys:     []transmitter.SigningKey{{Signer: signingKey(t), Algorithm: ssf.RS256, KeyID: "k1", Custody: ssf.KeyCustody{Durable: true}}},
+			EventsSupported: interopEvents,
+			DeliveryMethods: []ssf.DeliveryMethod{ssf.DeliveryPush},
+			DefaultSubjects: ssf.DefaultSubjectsNone,
+			Store:           durableStore{memstore.NewStreamStore()},
+			Authorize:       func(context.Context, string) (transmitter.Receiver, error) { return transmitter.Receiver{}, nil },
+		}
+		mutate(&c)
+		_, err := transmitter.New(c)
+		return err
+	}
+	for name, c := range map[string]struct {
+		mutate func(*transmitter.Config)
+		ok     bool
+	}{
+		"default client": {func(*transmitter.Config) {}, true},
+		"adjusted": {func(c *transmitter.Config) {
+			c.PushTransport = func(rt http.RoundTripper) http.RoundTripper { return rt }
+			c.AllowedPrivatePushHosts = []string{"rx.internal"}
+		}, true},
+		"HTTPClient":              {func(c *transmitter.Config) { c.HTTPClient = http.DefaultClient }, false},
+		"HTTPClient acknowledged": {func(c *transmitter.Config) { c.HTTPClient, c.UnrestrictedPushClient = http.DefaultClient, true }, true},
+	} {
+		if err := production(c.mutate); (err == nil) != c.ok {
+			t.Errorf("%s: New = %v, want ok %v", name, err, c.ok)
+		}
 	}
 }
 

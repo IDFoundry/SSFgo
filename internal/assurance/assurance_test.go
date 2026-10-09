@@ -3,6 +3,7 @@ package assurance
 import (
 	"crypto"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -90,9 +91,59 @@ func TestCustodyOf(t *testing.T) {
 		{kmsKey{}, ssf.KeyCustody{}, ssf.KeyCustody{Durable: true}},
 		{kmsKey{}, shared, shared},
 		{nil, shared, shared},
+		{(*ptrKey)(nil), ssf.KeyCustody{}, ssf.KeyCustody{}}, // its KeyCustody would panic
 	} {
 		if got := CustodyOf(c.signer, c.declared); got != c.want {
 			t.Errorf("CustodyOf(%T, %+v) = %+v, want %+v", c.signer, c.declared, got, c.want)
+		}
+	}
+}
+
+// ptrKey declares its custody through a pointer, so a nil *ptrKey panics
+// if asked.
+type ptrKey struct{ custody ssf.KeyCustody }
+
+func (k *ptrKey) Public() crypto.PublicKey                                  { return nil }
+func (k *ptrKey) Sign(io.Reader, []byte, crypto.SignerOpts) ([]byte, error) { return nil, nil }
+func (k *ptrKey) KeyCustody() ssf.KeyCustody                                { return k.custody }
+
+// Every spelling of a host that reaches this machine is loopback.
+func TestLoopback(t *testing.T) {
+	for _, u := range []string{
+		"https://localhost/", "https://LOCALHOST./", "https://app.localhost/",
+		"https://127.0.0.1/", "https://127.1/", "https://127.0.1/", "https://2130706433/",
+		"https://0x7f000001/", "https://0x7f.1/", "https://0177.0.0.1/", "https://127.255.255.254/",
+		"https://0.0.0.0/", "https://0/", "https://[::]/", "https://[::1]/",
+		"https://[0:0:0:0:0:0:0:1]/", "https://[::ffff:127.0.0.1]/", "https://[::1%25lo0]/",
+	} {
+		if !Loopback(u) {
+			t.Errorf("Loopback(%s) = false", u)
+		}
+	}
+	for _, u := range []string{
+		"https://example.com/", "https://128.0.0.1/", "https://0x80.1/", "https://1.2.3.4/",
+		"https://127.example/", "https://localhost.example/", "https://[2001:db8::1]/",
+		"https://127.0.0.0.1/", "https://127.1_0/", "https://4294967296/", "https://127.256.0.1/",
+		"https://0x7f/", "not a url\x7f",
+	} {
+		if Loopback(u) {
+			t.Errorf("Loopback(%s) = true", u)
+		}
+	}
+}
+
+func TestIsNil(t *testing.T) {
+	var key *ptrKey
+	var signer crypto.Signer = key
+	var m map[string]string
+	for _, v := range []any{nil, key, signer, m, []int(nil), (func())(nil)} {
+		if !IsNil(v) {
+			t.Errorf("IsNil(%#v) = false", v)
+		}
+	}
+	for _, v := range []any{&ptrKey{}, kmsKey{}, 0, "", map[string]string{}} {
+		if IsNil(v) {
+			t.Errorf("IsNil(%#v) = true", v)
 		}
 	}
 }

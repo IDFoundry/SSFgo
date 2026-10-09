@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -393,9 +394,24 @@ func TestCredentialsWithheld(t *testing.T) {
 	opts := receiver.PushOptions{AuthorizationHeader: ssf.NewSecret("Bearer h3ader-value")}
 	var buf strings.Builder
 	slog.New(slog.NewTextHandler(&buf, nil)).Info("x", "token", cfg.TokenSource, "cc", cc, "opts", opts)
-	for _, out := range []string{fmt.Sprintf("%v %+v %#v", cfg, cc, opts), fmt.Sprintf("%#v %+v", cfg, cc), buf.String()} {
-		if strings.Contains(out, "-value") {
+	outs := []string{fmt.Sprintf("%v %+v %#v", cfg, cc, opts), fmt.Sprintf("%#v %+v", cfg, cc), buf.String()}
+	for _, verb := range []string{"%d", "%x", "%t", "%c", "%e"} {
+		outs = append(outs, fmt.Sprintf(verb, cfg.TokenSource), fmt.Sprintf(verb, cfg))
+	}
+	for _, out := range outs {
+		if strings.Contains(out, "-value") || strings.Contains(out, hex.EncodeToString([]byte("-value"))) {
 			t.Errorf("a credential was printed: %s", out)
+		}
+	}
+}
+
+// A Receiver printed whole — its unexported fields by reflection — does
+// not print its static access token.
+func TestReceiverPrintsNoStaticToken(t *testing.T) {
+	e := newEnv(t) // with a StaticToken
+	for _, verb := range []string{"%v", "%+v", "%#v"} {
+		if out := fmt.Sprintf(verb, e.rx); strings.Contains(out, "rx-token") {
+			t.Errorf("%s printed the access token", verb)
 		}
 	}
 }

@@ -57,8 +57,12 @@ if err != nil {
 go func() { _ = tx.Run(ctx) }()
 ```
 
-A client you supply for other reasons keeps the address check if its
-dialer uses `transmitter.PublicAddressControl`.
+To trace or meter pushes, wrap the client's transport with
+`cfg.PushTransport`; to push to Receivers on your own network, name their
+hosts in `cfg.AllowedPrivatePushHosts`. Both keep the other checks:
+loopback and link-local addresses, and redirects, stay refused. A
+`cfg.HTTPClient` replaces the client and its checks altogether, so a
+production Transmitter must also set `cfg.UnrestrictedPushClient`.
 
 ## Poll
 

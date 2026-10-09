@@ -3,6 +3,7 @@ package ssf
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 )
 
 // StreamStatus is the status of an event stream (SSF 1.0 §8.1.2).
@@ -69,6 +70,20 @@ func (d Delivery) MarshalJSON() ([]byte, error) {
 	return json.Marshal(deliveryWire{Method: d.Method, EndpointURL: d.EndpointURL, AuthorizationHeader: d.AuthorizationHeader.Reveal()})
 }
 
+// LogValue implements slog.LogValuer: a logged Delivery withholds its
+// Authorization header, which a JSON handler would otherwise take from
+// MarshalJSON.
+func (d Delivery) LogValue() slog.Value {
+	attrs := []slog.Attr{slog.String("method", string(d.Method))}
+	if d.EndpointURL != "" {
+		attrs = append(attrs, slog.String("endpoint_url", d.EndpointURL))
+	}
+	if !d.AuthorizationHeader.IsZero() {
+		attrs = append(attrs, slog.Any("authorization_header", d.AuthorizationHeader))
+	}
+	return slog.GroupValue(attrs...)
+}
+
 // Audience is a JWT "aud" value: one string or an array of strings
 // (RFC 7519 §4.1.3). It encodes a single value as a string, and no values
 // as an empty array rather than null, so every encoding decodes again.
@@ -128,6 +143,23 @@ func (c StreamConfiguration) MarshalJSON() ([]byte, error) {
 		c.EventsDelivered = []EventType{}
 	}
 	return json.Marshal(plain(c))
+}
+
+// LogValue implements slog.LogValuer: a logged StreamConfiguration
+// withholds its delivery's Authorization header.
+func (c StreamConfiguration) LogValue() slog.Value {
+	attrs := []slog.Attr{
+		slog.String("stream_id", c.StreamID),
+		slog.String("iss", c.Issuer),
+		slog.Any("aud", []string(c.Audience)),
+		slog.Any("events_requested", c.EventsRequested),
+		slog.Any("events_delivered", c.EventsDelivered),
+		slog.Any("delivery", c.Delivery.LogValue()),
+	}
+	if c.Description != "" {
+		attrs = append(attrs, slog.String("description", c.Description))
+	}
+	return slog.GroupValue(attrs...)
 }
 
 // StreamState is a stream's status as read from, or written to, the

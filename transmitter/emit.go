@@ -15,6 +15,16 @@ import (
 // Config.EventsSupported.
 var ErrUnsupportedEvent = errors.New("transmitter: event type is not in EventsSupported")
 
+// MaxSETBytes bounds a signed SET: the most a Receiver of this module
+// reads of a push. Emit refuses, with ErrSETTooLarge, an event and
+// subject that would sign larger, rather than queue a SET Receivers
+// cannot accept.
+const MaxSETBytes = setcodec.MaxSETBytes
+
+// ErrSETTooLarge is returned by Emit for an event whose SET would exceed
+// MaxSETBytes.
+var ErrSETTooLarge = fmt.Errorf("transmitter: SET exceeds %d bytes", MaxSETBytes)
+
 // Emit signs event about subject and queues it on every stream that should
 // receive it: streams that are not disabled, whose events_delivered
 // includes the event type, and whose subject rules include subject
@@ -213,6 +223,9 @@ func (t *Transmitter) enqueue(ctx context.Context, s storage.Stream, subject ssf
 	})
 	if err != nil {
 		return fmt.Errorf("sign %s: %w", event.EventType(), err)
+	}
+	if len(token) > MaxSETBytes {
+		return fmt.Errorf("%w: %s", ErrSETTooLarge, event.EventType())
 	}
 	limit := t.cfg.Limits.QueuedSETsPerStream
 	if control {

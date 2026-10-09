@@ -10,9 +10,6 @@ import (
 	"github.com/idfoundry/ssfgo/internal/setcodec"
 )
 
-// maxSETBytes bounds a pushed SET.
-const maxSETBytes = 64 * 1024
-
 // PushOptions configures PushHandler.
 type PushOptions struct {
 	// AuthorizationHeader, if set, is the exact Authorization header
@@ -39,7 +36,7 @@ func (r *Receiver) PushHandler(opts PushOptions) http.Handler {
 			pushError(w, http.StatusUnauthorized, errCodeAuthenticationFailed, "the Authorization header is missing or wrong")
 			return
 		}
-		body, err := io.ReadAll(http.MaxBytesReader(w, req.Body, maxSETBytes))
+		body, err := io.ReadAll(http.MaxBytesReader(w, req.Body, setcodec.MaxSETBytes))
 		if err != nil {
 			pushError(w, http.StatusBadRequest, setcodec.CodeInvalidRequest, "the request body could not be read")
 			return

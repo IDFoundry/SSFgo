@@ -152,6 +152,35 @@ cfg.PermitEvent = func(ctx context.Context, receiverID string, subject ssf.Subje
 For a single-tenant Transmitter whose every Receiver may see everything,
 `cfg.PermitEvent = transmitter.PermitAll` says so explicitly.
 
+### A push `HTTPClient` is acknowledged in production (transmitter, *production only*)
+
+**Affects:** a `transmitter.Config` with
+`Assurance: ssf.AssuranceProduction` and an `HTTPClient`.
+
+**Why:** push endpoints are chosen by Receivers. The client a
+Transmitter builds refuses loopback, private and link-local addresses and
+redirects; a supplied `HTTPClient` replaces it — and those checks — so a
+client set to add tracing let a Receiver register an endpoint on the
+Transmitter's own network
+([design rule 10](docs/design-rules.md#10-production-refuses-development-shortcuts)).
+
+**What to change:** to trace or meter pushes, or to reach Receivers on
+your own network, drop `HTTPClient` and adjust the client the Transmitter
+builds, which keeps every other check:
+
+```go
+// Before
+cfg.HTTPClient = &http.Client{Transport: otelhttp.NewTransport(transport)}
+
+// After
+cfg.PushTransport = func(rt http.RoundTripper) http.RoundTripper { return otelhttp.NewTransport(rt) }
+cfg.AllowedPrivatePushHosts = []string{"rx.internal.example"} // if any
+```
+
+For anything else — a private CA, client certificates — keep
+`HTTPClient` and set `UnrestrictedPushClient: true`, restricting
+endpoints with `AllowPushEndpoint`.
+
 ### Renamed and replaced identifiers
 
 **Affects:** code using any of these. The compiler finds every one.
@@ -215,3 +244,14 @@ These need no code change, but may change what an application sees:
   token request returns an `*APIError`.
 - A handler that panics fails the SET's handling, so the Transmitter
   delivers it again, instead of the panic reaching the caller.
+
+### Behaviour a Transmitter may notice
+
+- `Emit` refuses, with `transmitter.ErrSETTooLarge`, an event whose SET
+  would exceed `transmitter.MaxSETBytes` (64 KiB), which a Receiver
+  would not read.
+- Under `AssuranceProduction`, a configured URL — a Transmitter's
+  `Issuer`, a Receiver's too — may not be any spelling of a loopback
+  address, such as `127.1` or `0x7f.1`, nor `0.0.0.0` or `[::]`.
+- A typed-nil signer or store is reported as missing by `New`, in every
+  role, rather than panicking.

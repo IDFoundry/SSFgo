@@ -143,10 +143,10 @@ type Revoker struct {
 // every problem with opts at once.
 func New(store storage.RevocationStore, opts Options) (*Revoker, error) {
 	var errs []error
-	if store == nil {
+	if assurance.IsNil(store) {
 		errs = append(errs, errors.New("a store is required"))
 	}
-	if opts.Issuers == nil {
+	if assurance.IsNil(opts.Issuers) {
 		errs = append(errs, errors.New("Options.Issuers is required (StaticTokenIssuers, or SameIssuer)"))
 	}
 	if len(opts.Events) == 0 {

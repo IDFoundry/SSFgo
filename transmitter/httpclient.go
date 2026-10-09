@@ -1,11 +1,13 @@
 package transmitter
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -24,32 +26,50 @@ var ErrNonPublicAddress = errors.New("transmitter: refusing to connect to a non-
 //   - it does not follow redirects, which could otherwise lead anywhere;
 //   - it gives up after timeout.
 //
-// Deployments that push to Receivers on a private network supply their own
-// client through Config.HTTPClient. One that needs a different transport
-// but should keep the address check can set PublicAddressControl as its
-// net.Dialer's Control.
+// Config.PushTransport and Config.AllowedPrivatePushHosts adjust the
+// client a Transmitter builds without giving these up.
 func NewPushClient(timeout time.Duration) *http.Client {
-	dialer := &net.Dialer{
-		Timeout: 10 * time.Second,
-		Control: PublicAddressControl,
+	return newPushClient(timeout, nil, nil)
+}
+
+// newPushClient is NewPushClient letting the hosts in allowedPrivate reach
+// private addresses, and with its transport wrapped by wrap, if not nil.
+func newPushClient(timeout time.Duration, allowedPrivate []string, wrap func(http.RoundTripper) http.RoundTripper) *http.Client {
+	public := &net.Dialer{Timeout: 10 * time.Second, Control: PublicAddressControl}
+	private := &net.Dialer{Timeout: 10 * time.Second, Control: privateAddressControl}
+	allowed := map[string]bool{}
+	for _, h := range allowedPrivate {
+		allowed[normalHost(h)] = true
 	}
 	transport := &http.Transport{
-		Proxy:                 nil, // a proxy would hide the address actually reached
-		DialContext:           dialer.DialContext,
+		Proxy: nil, // a proxy would hide the address actually reached
+		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			host, _, err := net.SplitHostPort(address)
+			if err == nil && allowed[normalHost(host)] {
+				return private.DialContext(ctx, network, address)
+			}
+			return public.DialContext(ctx, network, address)
+		},
 		ForceAttemptHTTP2:     true,
 		TLSHandshakeTimeout:   10 * time.Second,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		ExpectContinueTimeout: time.Second,
 	}
+	var rt http.RoundTripper = transport
+	if wrap != nil {
+		rt = wrap(transport)
+	}
 	return &http.Client{
 		Timeout:   timeout,
-		Transport: transport,
+		Transport: rt,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
 }
+
+func normalHost(h string) string { return strings.TrimSuffix(strings.ToLower(h), ".") }
 
 // PublicAddressControl is a net.Dialer Control function that refuses, with
 // ErrNonPublicAddress, to connect to anything but a public unicast address.
@@ -68,6 +88,20 @@ func PublicAddressControl(_, address string, _ syscall.RawConn) error {
 		return fmt.Errorf("%w: %s", ErrNonPublicAddress, ip)
 	}
 	return nil
+}
+
+// privateAddressControl is PublicAddressControl also admitting private
+// addresses (RFC 1918, IPv6 unique local), for AllowedPrivatePushHosts.
+func privateAddressControl(network, address string, c syscall.RawConn) error {
+	err := PublicAddressControl(network, address, c)
+	if !errors.Is(err, ErrNonPublicAddress) {
+		return err
+	}
+	host, _, _ := net.SplitHostPort(address) // parsed by PublicAddressControl
+	if ip, perr := netip.ParseAddr(host); perr == nil && ip.Unmap().IsPrivate() {
+		return nil
+	}
+	return err
 }
 
 // isPublic reports whether ip is a globally routable unicast address.
