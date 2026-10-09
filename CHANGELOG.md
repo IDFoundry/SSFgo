@@ -37,9 +37,14 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
   stream the audience `<client_id>/<stream_id>`, accepts such a stream,
   and SETs addressed to a stream the Transmitter confirms is this
   Receiver's — never on the form alone, since another Receiver's audience
-  can share the prefix. A stream another instance created is read from
-  the Transmitter once; one not found is not asked about again for a
-  minute, and a failed read has the SET delivered again. Off by default.
+  can share the prefix. Only a SET otherwise acceptable, within the
+  replay window, can make the Receiver read a stream it does not know,
+  and every outcome is kept: a stream not found — or refused with 403 —
+  is not asked about again for a minute, a failed read for ten seconds,
+  and one found is confirmed again after an hour, so a stream deleted
+  elsewhere stops being accepted. Lookups run on their own, bounded by
+  their caller's deadline, and survive a panic. Off by default; a stream
+  refused with a per-stream audience says to set it.
 - Observability: `receiver.Config.Hooks` reports every SET's outcome
   (handled, duplicate, rejected with its code, failed), every poll and
   every JWKS refetch; `transmitter.Config.Hooks` every emit (streams
@@ -159,6 +164,9 @@ does every module of the CAEP Interop Receiver plan, as of the suite's
   `FuzzIssuerScope` holds the `revocation` package to its trust boundary:
   for any subject, a trusted Transmitter's SET revokes only its own token
   issuer's tokens, and another Transmitter's revokes nothing.
+  `FuzzStreamAudience` holds `AudiencePerStream` to its own: a signed
+  SET is accepted only when addressed to the Receiver's audience or its
+  own stream's.
 
 ### Security
 
@@ -235,6 +243,15 @@ each finding was reproduced by a failing test before it was fixed.
 
 ### Fixed since v0.5
 
+- A panicking event handler escaped the Receiver — under `RunPoller`,
+  ending the process. It now fails the SET's handling, so the SET is
+  delivered again, and is logged with its stack.
+- A failed token request quoted up to 64 KB of the authorization
+  server's response in its error; it returns an `*APIError`, which shows
+  only a cleaned error code and description. `receiver.New` checks a
+  `ClientCredentials` — also through a wrapper's `Unwrap() TokenSource`,
+  key custody included — reporting every problem by field, and its
+  cached access token no longer prints with `%+v`.
 - RISC account-disabled with a `reason` RISC 1.0 §2.3 does not list —
   `disabled-by-admin`, as Keycloak sends — was rejected, losing the
   account-disabled event. §2.3 lists two possible values without

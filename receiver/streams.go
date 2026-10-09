@@ -71,17 +71,35 @@ var ErrIssuerMismatch = errors.New("receiver: stream issuer is not the configure
 // rejected. The caller decides whether to delete the stream.
 var ErrAudienceMismatch = errors.New("receiver: stream audience does not include the receiver's audience")
 
-// checkStream validates a stream configuration the Transmitter returned
-// (SSF 1.0 §8.1.1.1: "iss" must match; §8.1.1.1.1: validate "aud").
+// checkStream validates a stream configuration the Transmitter returned,
+// and remembers a stream with a per-stream audience as this Receiver's.
 func (r *Receiver) checkStream(c ssf.StreamConfiguration) error {
+	before := r.deletionsOf(c.StreamID)
+	if err := r.validateStream(c); err != nil {
+		return err
+	}
+	if !slices.Contains(c.Audience, r.cfg.Audience) {
+		r.rememberStream(c.StreamID, before)
+	}
+	return nil
+}
+
+// validateStream validates a stream configuration the Transmitter
+// returned (SSF 1.0 §8.1.1.1: "iss" must match; §8.1.1.1.1: validate
+// "aud").
+func (r *Receiver) validateStream(c ssf.StreamConfiguration) error {
 	if c.Issuer != r.cfg.Issuer {
 		return fmt.Errorf("%w: stream %s names issuer %q, not %q", ErrIssuerMismatch, c.StreamID, c.Issuer, r.cfg.Issuer)
 	}
 	if c.StreamID == "" {
 		return errors.New("receiver: stream configuration has no stream_id")
 	}
-	if !slices.Contains(c.Audience, r.cfg.Audience) && !r.acceptStreamAudience(c) {
-		return fmt.Errorf("%w: stream %s has aud %v", ErrAudienceMismatch, c.StreamID, []string(c.Audience))
+	if !slices.Contains(c.Audience, r.cfg.Audience) && !r.perStreamAudience(c) {
+		hint := ""
+		if !r.cfg.AudiencePerStream && slices.Contains(c.Audience, r.cfg.Audience+"/"+c.StreamID) {
+			hint = " (the Transmitter gives each stream its own audience: set Config.AudiencePerStream)"
+		}
+		return fmt.Errorf("%w: stream %s has aud %v%s", ErrAudienceMismatch, c.StreamID, []string(c.Audience), hint)
 	}
 	return nil
 }

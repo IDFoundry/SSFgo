@@ -16,13 +16,35 @@ import (
 
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/internal/clientassertion"
+	"github.com/idfoundry/ssfgo/internal/jose"
 )
 
 // TokenSource supplies the OAuth 2.0 access token the Receiver presents to
 // the Transmitter's stream management API and poll endpoints (CAEP
 // Interoperability Profile §2.4.3).
+//
+// A TokenSource that wraps another — to add metrics, say — should
+// implement Unwrap() TokenSource, so New still checks what it wraps: a
+// ClientCredentials' settings, and under ssf.AssuranceProduction its
+// signing key's custody.
 type TokenSource interface {
 	Token(ctx context.Context) (string, error)
+}
+
+// clientCredentialsOf finds the ClientCredentials ts is or wraps, through
+// Unwrap() TokenSource.
+func clientCredentialsOf(ts TokenSource) *ClientCredentials {
+	for range 16 {
+		switch t := ts.(type) {
+		case *ClientCredentials:
+			return t
+		case interface{ Unwrap() TokenSource }:
+			ts = t.Unwrap()
+		default:
+			return nil
+		}
+	}
+	return nil
 }
 
 // tokenInvalidator is implemented by token sources that cache: after a
@@ -75,14 +97,21 @@ const (
 // ClientCredentials is a TokenSource that obtains tokens with the OAuth 2.0
 // client credentials grant (RFC 6749 §4.4) and caches each until shortly
 // before it expires.
+//
+// Its access token is cached out of reach of fmt and slog: a
+// ClientCredentials printed with %+v shows only where the cache is.
 type ClientCredentials struct {
+	// TokenURL is the authorization server's token endpoint. It must be
+	// https: the request carries the client's credentials.
 	TokenURL string
+	// ClientID is the Receiver's OAuth client identifier.
 	ClientID string
 	// ClientSecret is used by every AuthMethod except PrivateKeyJWT.
 	ClientSecret ssf.Secret
 	// Scopes to request, e.g. "ssf.read" and "ssf.manage" (CAEP Interop
 	// §2.7.3). Optional.
-	Scopes     []string
+	Scopes []string
+	// AuthMethod is how the client authenticates to the token endpoint.
 	AuthMethod ClientAuthMethod
 
 	// SigningKey, SigningAlgorithm and KeyID sign PrivateKeyJWT
@@ -104,9 +133,51 @@ type ClientCredentials struct {
 	// HTTPClient defaults to a client with a 10-second timeout.
 	HTTPClient *http.Client
 
-	mu      sync.Mutex
+	mu    sync.Mutex
+	cache *cachedToken
+}
+
+// cachedToken is held by pointer, so fmt prints its address, not the
+// token.
+type cachedToken struct {
 	token   string
 	expires time.Time
+}
+
+// errors reports every problem with c, naming each field under prefix.
+func (c *ClientCredentials) errors(prefix string) []error {
+	var errs []error
+	if u, err := url.Parse(c.TokenURL); c.TokenURL == "" || err != nil || u.Scheme != "https" || u.Host == "" {
+		errs = append(errs, fmt.Errorf("%sTokenURL must be an https URL: the request carries the client's credentials", prefix))
+	}
+	if c.ClientID == "" {
+		errs = append(errs, fmt.Errorf("%sClientID is required", prefix))
+	}
+	switch c.AuthMethod {
+	case ClientSecretBasic, ClientSecretPost:
+		if c.ClientSecret.IsZero() {
+			errs = append(errs, fmt.Errorf("%sClientSecret is required with %s", prefix, c.AuthMethod))
+		}
+	case ClientSecretJWT:
+		if len(c.ClientSecret.Reveal()) < 32 {
+			errs = append(errs, fmt.Errorf("%sClientSecret must be at least 32 bytes with %s", prefix, c.AuthMethod))
+		}
+	case PrivateKeyJWT:
+		switch {
+		case c.SigningKey == nil:
+			errs = append(errs, fmt.Errorf("%sSigningKey is required with %s", prefix, c.AuthMethod))
+		case c.SigningAlgorithm == 0:
+			errs = append(errs, fmt.Errorf("%sSigningAlgorithm is required with %s", prefix, c.AuthMethod))
+		default:
+			if err := jose.ValidateKeyForAlgorithm(c.SigningKey.Public(), c.SigningAlgorithm); err != nil {
+				errs = append(errs, fmt.Errorf("%sSigningKey: %w", prefix, err))
+			}
+		}
+	default:
+		errs = append(errs, fmt.Errorf("%sAuthMethod must be %s, %s, %s or %s, not %q", prefix,
+			ClientSecretBasic, ClientSecretPost, ClientSecretJWT, PrivateKeyJWT, c.AuthMethod))
+	}
+	return errs
 }
 
 // tokenRefreshMargin is how long before expiry a cached token is replaced.
@@ -116,15 +187,14 @@ const tokenRefreshMargin = 30 * time.Second
 func (c *ClientCredentials) Token(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.token != "" && time.Now().Before(c.expires) {
-		return c.token, nil
+	if c.cache != nil && time.Now().Before(c.cache.expires) {
+		return c.cache.token, nil
 	}
 	token, lifetime, err := c.fetch(ctx)
 	if err != nil {
 		return "", err
 	}
-	c.token = token
-	c.expires = time.Now().Add(lifetime - tokenRefreshMargin)
+	c.cache = &cachedToken{token: token, expires: time.Now().Add(lifetime - tokenRefreshMargin)}
 	return token, nil
 }
 
@@ -132,7 +202,7 @@ func (c *ClientCredentials) Token(ctx context.Context) (string, error) {
 func (c *ClientCredentials) Invalidate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.token = ""
+	c.cache = nil
 }
 
 func (c *ClientCredentials) fetch(ctx context.Context) (string, time.Duration, error) {
@@ -162,7 +232,9 @@ func (c *ClientCredentials) fetch(ctx context.Context) (string, time.Duration, e
 	defer func() { _ = res.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(res.Body, 64*1024))
 	if res.StatusCode != http.StatusOK {
-		return "", 0, fmt.Errorf("receiver: token endpoint returned %d: %s", res.StatusCode, body)
+		// The body is the authorization server's text: APIError shows only
+		// a cleaned error code and description from it.
+		return "", 0, &APIError{Method: http.MethodPost, URL: c.TokenURL, StatusCode: res.StatusCode, Body: truncate(body, maxAPIErrorBody)}
 	}
 	return parseTokenResponse(body)
 }
@@ -170,15 +242,8 @@ func (c *ClientCredentials) fetch(ctx context.Context) (string, time.Duration, e
 // tokenForm builds the client credentials request body, including the
 // client's credentials for every method but client_secret_basic.
 func (c *ClientCredentials) tokenForm() (url.Values, error) {
-	if c.TokenURL == "" || c.ClientID == "" {
-		return nil, errors.New("receiver: ClientCredentials needs TokenURL and ClientID")
-	}
-	if u, err := url.Parse(c.TokenURL); err != nil || u.Scheme != "https" || u.Host == "" {
-		// The request carries the client's credentials.
-		return nil, fmt.Errorf("receiver: TokenURL %q must be an https URL", c.TokenURL)
-	}
-	if c.AuthMethod != PrivateKeyJWT && c.ClientSecret.IsZero() {
-		return nil, fmt.Errorf("receiver: %s needs a ClientSecret", c.AuthMethod)
+	if errs := c.errors("ClientCredentials."); len(errs) > 0 {
+		return nil, fmt.Errorf("receiver: invalid ClientCredentials: %w", errors.Join(errs...))
 	}
 	form := url.Values{"grant_type": {"client_credentials"}}
 	if len(c.Scopes) > 0 {

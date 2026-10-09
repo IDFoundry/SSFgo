@@ -209,3 +209,9 @@ These need no code change, but may change what an application sees:
 - `UpdateStream`, `ReplaceStream` and `SetStatus` return
   `receiver.ErrNotProcessed` for a 202 answer.
 - `ClientCredentials.TokenURL` must be `https`.
+- `receiver.New` checks a `ClientCredentials` `TokenSource` — or one a
+  wrapper exposes through `Unwrap() TokenSource` — and refuses one that is
+  incomplete, rather than failing at the first token request. A failed
+  token request returns an `*APIError`.
+- A handler that panics fails the SET's handling, so the Transmitter
+  delivers it again, instead of the panic reaching the caller.

@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/caep"
@@ -93,6 +95,34 @@ func FuzzPollResponse(f *testing.F) {
 		}
 		if n := handled.Load() - before; n > int64(res.Received) {
 			t.Fatalf("handled %d SETs from a response holding %d", n, res.Received)
+		}
+	})
+}
+
+// FuzzStreamAudience holds AudiencePerStream to its boundary for any
+// audience a validly signed SET carries: it is accepted only when
+// addressed to the Receiver's own audience or to its own stream's.
+func FuzzStreamAudience(f *testing.F) {
+	e := newEnv(f, perStream)
+	perStreamTransmitter(f, e)
+	stream, err := e.rx.CreateStream(context.Background(), receiver.StreamRequest{})
+	if err != nil {
+		f.Fatal(err)
+	}
+	own := audience + "/" + stream.StreamID
+	h := e.rx.PushHandler(receiver.PushOptions{})
+	for _, aud := range []string{own, audience, audience + "/", audience + "/app", own + "/x", own + "?a", strings.ToUpper(own), "rx.example/" + stream.StreamID} {
+		f.Add(aud)
+	}
+	var n atomic.Int64
+	f.Fuzz(func(t *testing.T, aud string) {
+		if (&ssf.SET{Issuer: e.cfg.Issuer, Audience: []string{aud}, JWTID: "x", IssuedAt: time.Now(), Subject: alice, Event: revoked()}).Validate() != nil {
+			return // not a SET a Transmitter could sign
+		}
+		jti := fmt.Sprintf("fuzz-%d", n.Add(1))
+		got := push(t, h, "", sign(t, e, func(s *ssf.SET) { s.Audience = []string{aud}; s.JWTID = jti }))
+		if got.status == http.StatusAccepted && aud != own && aud != audience {
+			t.Fatalf("accepted a SET addressed to %q", aud)
 		}
 	})
 }

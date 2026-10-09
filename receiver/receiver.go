@@ -72,7 +72,7 @@ func New(ctx context.Context, cfg Config) (*Receiver, error) {
 		states:    map[string][]string{},
 		acks:      map[string]*pendingAcks{},
 		inflight:  map[setKey]*handling{},
-		streamAud: streamAudiences{lookups: map[string]*streamLookup{}},
+		streamAud: newStreamAudiences(),
 	}
 	locations, err := metadataLocations(cfg)
 	if err != nil {
@@ -335,8 +335,8 @@ type APIError struct {
 	URL        string
 	StatusCode int
 	// Body is the response body, cut to its first 1 KiB. It is the
-	// Transmitter's text, unfiltered: Error shows only a cleaned error
-	// code and description from it.
+	// Transmitter's or authorization server's text, unfiltered: Error
+	// shows only a cleaned error code and description from it.
 	Body string
 }
 
