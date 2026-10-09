@@ -255,3 +255,7 @@ These need no code change, but may change what an application sees:
   address, such as `127.1` or `0x7f.1`, nor `0.0.0.0` or `[::]`.
 - A typed-nil signer or store is reported as missing by `New`, in every
   role, rather than panicking.
+- `storage/sqlstore` stores on a SQLite in-memory database no longer
+  declare themselves durable, so `AssuranceProduction` refuses them, in
+  every role; and `CreateSchema` and the stores refuse an `ssf_schema`
+  table they did not write.

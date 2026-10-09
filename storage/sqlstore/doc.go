@@ -26,7 +26,8 @@
 // stores. The stores refuse, at construction, a database whose version is
 // not SchemaVersion: one never migrated, or one a newer release of this
 // module has migrated. A release that changes the schema adds a migration;
-// it never edits one already released.
+// it never edits one already released. An ssf_schema table holding
+// anything but the one row CreateSchema writes is refused, not adopted.
 //
 // # Concurrency
 //
@@ -36,6 +37,15 @@
 // limit takes a transaction-scoped advisory lock on the Receiver, so any
 // number of Transmitter instances can share the database. On SQLite, those
 // transactions begin with BEGIN IMMEDIATE and so run one at a time.
+// PostgreSQL transactions run at READ COMMITTED, whatever the database's
+// default, as the locks require.
+//
+// # Assurance
+//
+// The stores declare themselves durable (storage.StoreAssurance), except
+// on a SQLite in-memory database, which AssuranceProduction therefore
+// refuses; on PostgreSQL they also declare themselves consistent across
+// instances, which a SQLite file, local to one host, is not.
 //
 // Several Transmitter instances may share a PostgreSQL database and each
 // call Run. A pushed SET may then be delivered by more than one instance;

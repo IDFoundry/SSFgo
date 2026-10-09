@@ -120,15 +120,29 @@ func CreateSchema(ctx context.Context, db *sql.DB, d Dialect) error {
 }
 
 // readVersion returns the schema version recorded in the database, or 0
-// for one with none.
+// for one with none. The record must be the one row CreateSchema writes:
+// a table of another shape, or a negative version, is not this module's.
 func readVersion(ctx context.Context, q querier) (int, error) {
-	var version int
-	err := q.QueryRowContext(ctx, "SELECT version FROM ssf_schema WHERE id = 1").Scan(&version)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil
+	rows, err := q.QueryContext(ctx, "SELECT id, version FROM ssf_schema")
+	if err != nil {
+		return 0, err
 	}
-	return version, err
+	defer func() { _ = rows.Close() }()
+	n, version := 0, 0
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id, &version); err != nil {
+			return 0, err
+		}
+		if n++; n > 1 || id != 1 || version < 0 {
+			return 0, errForeignSchema
+		}
+	}
+	return version, rows.Err()
 }
+
+// errForeignSchema reports an ssf_schema table CreateSchema did not write.
+var errForeignSchema = errors.New("sqlstore: the ssf_schema table is not this module's: it must hold one row, with id 1 and a version of at least 0")
 
 // checkSchema reports whether the database's schema is the version this
 // module's stores use, so a store refuses at construction, rather than at
@@ -136,6 +150,8 @@ func readVersion(ctx context.Context, q querier) (int, error) {
 func checkSchema(ctx context.Context, db *sql.DB) error {
 	version, err := readVersion(ctx, db)
 	switch {
+	case errors.Is(err, errForeignSchema):
+		return err
 	case err != nil:
 		return fmt.Errorf("sqlstore: read the schema version (has CreateSchema run?): %w", err)
 	case version < len(migrations):

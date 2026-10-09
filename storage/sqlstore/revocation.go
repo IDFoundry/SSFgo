@@ -16,6 +16,7 @@ import (
 type RevocationStore struct {
 	db      *sql.DB
 	d       Dialect
+	caps    storage.Capabilities
 	inserts atomic.Uint64
 }
 
@@ -26,13 +27,11 @@ var _ storage.RevocationStore = (*RevocationStore)(nil)
 // SchemaVersion, so a database left unmigrated is found at startup rather
 // than at the first query that needs what changed.
 func NewRevocationStore(ctx context.Context, db *sql.DB, d Dialect) (*RevocationStore, error) {
-	if err := d.check(db); err != nil {
+	caps, err := d.open(ctx, db)
+	if err != nil {
 		return nil, err
 	}
-	if err := checkSchema(ctx, db); err != nil {
-		return nil, err
-	}
-	return &RevocationStore{db: db, d: d}, nil
+	return &RevocationStore{db: db, d: d, caps: caps}, nil
 }
 
 // Revoke implements storage.RevocationStore. One statement records a new

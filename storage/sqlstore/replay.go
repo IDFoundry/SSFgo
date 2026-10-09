@@ -14,6 +14,7 @@ import (
 type ReplayStore struct {
 	db      *sql.DB
 	d       Dialect
+	caps    storage.Capabilities
 	now     func() time.Time
 	inserts atomic.Uint64
 }
@@ -25,13 +26,11 @@ var _ storage.ReplayStore = (*ReplayStore)(nil)
 // SchemaVersion, so a database left unmigrated is found at startup rather
 // than at the first query that needs what changed.
 func NewReplayStore(ctx context.Context, db *sql.DB, d Dialect) (*ReplayStore, error) {
-	if err := d.check(db); err != nil {
+	caps, err := d.open(ctx, db)
+	if err != nil {
 		return nil, err
 	}
-	if err := checkSchema(ctx, db); err != nil {
-		return nil, err
-	}
-	return &ReplayStore{db: db, d: d, now: time.Now}, nil
+	return &ReplayStore{db: db, d: d, caps: caps, now: time.Now}, nil
 }
 
 // pruneEvery is how many marks pass between deletions of expired records.

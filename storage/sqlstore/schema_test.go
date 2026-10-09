@@ -110,3 +110,82 @@ func TestSchemaNewerRefused(t *testing.T) {
 		})
 	}
 }
+
+// A store on a SQLite in-memory database does not declare itself durable,
+// so AssuranceProduction refuses what forgets everything on restart.
+func TestInMemorySQLiteNotDurable(t *testing.T) {
+	for _, dsn := range []string{":memory:", "file::memory:?cache=shared", "file:ssf?mode=memory&cache=shared", ""} {
+		db, err := sql.Open("sqlite", dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		db.SetMaxOpenConns(1) // each connection to :memory: is a database of its own
+		if err := sqlstore.CreateSchema(ctx, db, sqlstore.SQLite); err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range capabilities(t, db, sqlstore.SQLite) {
+			if c.Durable {
+				t.Errorf("a store on %q declares itself durable", dsn)
+			}
+		}
+	}
+	for _, c := range capabilities(t, openSQLite(t), sqlstore.SQLite) {
+		if !c.Durable || c.CrossInstanceConsistent {
+			t.Errorf("a store on a SQLite file declares %+v, want durable only", c)
+		}
+	}
+}
+
+// capabilities returns what each store on db declares.
+func capabilities(t *testing.T, db *sql.DB, d sqlstore.Dialect) []storage.Capabilities {
+	t.Helper()
+	streams, err := sqlstore.NewStreamStore(ctx, db, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := sqlstore.NewReplayStore(ctx, db, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revocations, err := sqlstore.NewRevocationStore(ctx, db, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return []storage.Capabilities{streams.Capabilities(), replay.Capabilities(), revocations.Capabilities()}
+}
+
+// An ssf_schema table CreateSchema did not write — more than one row,
+// another id, a negative version — is refused, not adopted or migrated.
+func TestForeignSchemaTableRefused(t *testing.T) {
+	for name, stmts := range map[string][]string{
+		"negative version": {"UPDATE ssf_schema SET version = -1"},
+		"two rows": {
+			"DROP TABLE ssf_schema",
+			"CREATE TABLE ssf_schema (id INTEGER, version INTEGER)",
+			"INSERT INTO ssf_schema VALUES (1, 1), (1, 0)",
+		},
+		"another id": {
+			"DROP TABLE ssf_schema",
+			"CREATE TABLE ssf_schema (id INTEGER, version INTEGER)",
+			"INSERT INTO ssf_schema VALUES (2, 1)",
+		},
+	} {
+		for _, d := range dialects {
+			t.Run(d.name+"/"+name, func(t *testing.T) {
+				db := d.open(t)
+				for _, s := range stmts {
+					if _, err := db.ExecContext(ctx, s); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := sqlstore.CreateSchema(ctx, db, d.dialect); err == nil || !strings.Contains(err.Error(), "not this module's") {
+					t.Errorf("CreateSchema = %v", err)
+				}
+				if err := newStores(db, d.dialect); err == nil || !strings.Contains(err.Error(), "not this module's") {
+					t.Errorf("stores = %v", err)
+				}
+			})
+		}
+	}
+}

@@ -15,8 +15,9 @@ import (
 
 // StreamStore implements storage.StreamStore.
 type StreamStore struct {
-	db *sql.DB
-	d  Dialect
+	db   *sql.DB
+	d    Dialect
+	caps storage.Capabilities
 }
 
 var _ storage.StreamStore = (*StreamStore)(nil)
@@ -26,13 +27,11 @@ var _ storage.StreamStore = (*StreamStore)(nil)
 // SchemaVersion, so a database left unmigrated is found at startup rather
 // than at the first query that needs what changed.
 func NewStreamStore(ctx context.Context, db *sql.DB, d Dialect) (*StreamStore, error) {
-	if err := d.check(db); err != nil {
+	caps, err := d.open(ctx, db)
+	if err != nil {
 		return nil, err
 	}
-	if err := checkSchema(ctx, db); err != nil {
-		return nil, err
-	}
-	return &StreamStore{db: db, d: d}, nil
+	return &StreamStore{db: db, d: d, caps: caps}, nil
 }
 
 const streamColumns = `id, receiver_id, audience, delivery, events_requested, events_delivered,
