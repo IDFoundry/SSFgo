@@ -40,6 +40,7 @@ jobs:
           # Untrusted network input first.
           - { pkg: ./receiver, name: FuzzPushHandler }
           - { pkg: ./receiver, name: FuzzPollResponse }
+          - { pkg: ./receiver, name: FuzzStreamAudience }
           - { pkg: ./transmitter, name: FuzzManagementAPI }
           - { pkg: ./internal/setcodec, name: FuzzDecode }
           - { pkg: ./internal/jose, name: FuzzParseCompact }

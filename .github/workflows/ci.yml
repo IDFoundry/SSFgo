@@ -304,15 +304,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+
       # With no third-party dependencies, any finding is a standard-library
       # CVE fixed in a newer Go patch release, so scan with the latest Go
-      # rather than go.mod's minimum.
-      - uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
-
+      # rather than go.mod's minimum. The toolchain comes from go.dev's
+      # release list, as setup-go's lags new releases by up to days.
       # storage/sqlstore's test-only drivers are third-party code.
-      - uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
-        with:
-          work-dir: storage/sqlstore
+      - name: govulncheck
+        run: |
+          GOTOOLCHAIN=$(curl -fsS 'https://go.dev/dl/?mode=json' | jq -r '.[0].version')
+          export GOTOOLCHAIN
+          go version
+          go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+          cd storage/sqlstore
+          go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
   # Workflow files are otherwise only checked when GitHub runs them — for
   # the scheduled conformance workflow, after merge.

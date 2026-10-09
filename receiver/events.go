@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"slices"
 
 	ssf "github.com/idfoundry/ssfgo"
@@ -103,9 +104,6 @@ func (r *Receiver) process(ctx context.Context, token string) (processed, error)
 		return processed{}, err
 	}
 	p := processed{jti: set.JWTID, eventType: set.Event.EventType()}
-	if err := r.checkSETAudience(ctx, set); err != nil {
-		return p, err
-	}
 	if err := r.checkCriticalMembers(set.Subject); err != nil {
 		return p, err
 	}
@@ -117,6 +115,11 @@ func (r *Receiver) process(ctx context.Context, token string) (processed, error)
 	if r.cfg.Now().After(expires) {
 		return p, &rejectedSET{code: setcodec.CodeInvalidRequest,
 			description: "the SET is older than the Receiver's replay window"}
+	}
+	// Last of the checks, as it may call the Transmitter: only a SET that
+	// is otherwise acceptable can make it.
+	if err := r.checkSETAudience(ctx, set); err != nil {
+		return p, err
 	}
 	// A redelivery that arrives while this Receiver is still handling the
 	// first copy waits for that outcome and reports it, as it would have
@@ -281,6 +284,20 @@ func (r *Receiver) dispatch(ctx context.Context, set ssf.SET) error {
 	if h == nil {
 		return nil
 	}
+	return r.runHandler(ctx, h, set)
+}
+
+// runHandler calls h, turning a panic into a handling failure: the SET is
+// delivered again, and the process — under RunPoller, the library's own
+// goroutine — survives a bug in a handler.
+func (r *Receiver) runHandler(ctx context.Context, h HandlerFunc, set ssf.SET) (err error) {
+	defer func() {
+		if v := recover(); v != nil {
+			r.cfg.Logger.ErrorContext(ctx, "ssf receiver: handler panicked", "jti", set.JWTID,
+				"event_type", set.Event.EventType(), "panic", v, "stack", string(debug.Stack()))
+			err = fmt.Errorf("receiver: handler for %s panicked: %v", set.Event.EventType(), v)
+		}
+	}()
 	return h(ctx, set)
 }
 

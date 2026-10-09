@@ -186,12 +186,17 @@ func (l Limits) errors() []error {
 func (c *Config) validate() error {
 	errs := c.Limits.errors()
 	var keys []assurance.Key
-	if cc, ok := c.TokenSource.(*ClientCredentials); ok && cc.AuthMethod == PrivateKeyJWT {
-		keys = append(keys, assurance.Key{Field: "TokenSource.SigningKey", Custody: assurance.CustodyOf(cc.SigningKey, cc.SigningKeyCustody)})
+	urls := []assurance.URL{{Field: "Issuer", Value: c.Issuer}, {Field: "MetadataURL", Value: c.MetadataURL}}
+	if cc := clientCredentialsOf(c.TokenSource); cc != nil {
+		errs = append(errs, cc.errors("TokenSource.")...)
+		urls = append(urls, assurance.URL{Field: "TokenSource.TokenURL", Value: cc.TokenURL})
+		if cc.AuthMethod == PrivateKeyJWT && cc.SigningKey != nil {
+			keys = append(keys, assurance.Key{Field: "TokenSource.SigningKey", Custody: assurance.CustodyOf(cc.SigningKey, cc.SigningKeyCustody)})
+		}
 	}
 	errs = append(errs, assurance.Check(c.Assurance, c.HorizontallyScaled, assurance.Deps{
 		Stores: []assurance.Store{{Field: "ReplayStore", Store: c.ReplayStore}},
-		URLs:   []assurance.URL{{Field: "Issuer", Value: c.Issuer}, {Field: "MetadataURL", Value: c.MetadataURL}},
+		URLs:   urls,
 		Keys:   keys,
 	})...)
 	if err := ssf.ValidateIssuer(c.Issuer); err != nil {
