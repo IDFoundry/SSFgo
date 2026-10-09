@@ -135,6 +135,7 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	idpServer.Config.Handler = tx.Handler()
 	runCtx, stop := context.WithCancel(ctx)
+	defer stop()
 	ran := make(chan struct{})
 	go func() { defer close(ran); _ = tx.Run(runCtx) }()
 	// Stop push delivery, and wait for it, before returning.
@@ -154,7 +155,7 @@ func run(ctx context.Context, w io.Writer) error {
 		Issuer:      issuer,
 		Audience:    "https://rp.example",
 		Registry:    registry,
-		Algorithms:  []ssf.SignatureAlgorithm{ssf.RS256},
+		Algorithms:  receiver.RecommendedAlgorithms(),
 		TokenSource: receiver.StaticToken(rpToken),
 		ReplayStore: memstore.NewReplayStore(),
 		HTTPClient:  idpServer.Client(),
@@ -175,7 +176,8 @@ func run(ctx context.Context, w io.Writer) error {
 	// sessions too.
 	revoked := make(chan struct{})
 	var once sync.Once
-	rev, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{
+	rev, err := revocation.New(revocation.Options{
+		Store:     memstore.NewRevocationStore(),
 		Assurance: ssf.AssuranceDevelopment,
 		Issuers:   revocation.SameIssuer, // the IdP is its own Transmitter
 		Events:    revocation.RecommendedEvents(),

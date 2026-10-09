@@ -35,7 +35,7 @@ replay, err := sqlstore.NewReplayStore(ctx, db, sqlstore.Postgres) // receiver.C
 if err != nil {
 	return err
 }
-revocations, err := sqlstore.NewRevocationStore(ctx, db, sqlstore.Postgres) // revocation.New
+revocations, err := sqlstore.NewRevocationStore(ctx, db, sqlstore.Postgres) // revocation.Options.Store
 if err != nil {
 	return err
 }

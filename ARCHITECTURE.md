@@ -43,6 +43,7 @@ github.com/idfoundry/ssfgo     // package ssf: shared value types only
 ├── cmd/conformance-transmitter/ // the conformance Transmitter on memstore
 ├── cmd/conformance-receiver/  // drives the Receiver through OIDF Receiver plans
 ├── examples/session-revocation/ // both roles in one process (its own module)
+├── interoptest/keycloak/      // the Receiver against Keycloak's SSF Transmitter
 └── conformance/               // suite configs, run scripts, recorded results
 ```
 

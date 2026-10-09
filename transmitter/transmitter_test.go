@@ -233,7 +233,7 @@ func TestConfigValidation(t *testing.T) {
 		"negative retry":        func(c *transmitter.Config) { c.PushRetry.MaxAttempts = -1 },
 		// No implicit defaults for what bounds a Receiver's state.
 		"no limits":    func(c *transmitter.Config) { c.Limits = transmitter.Limits{} },
-		"no assurance": func(c *transmitter.Config) { c.Assurance = "" },
+		"no assurance": func(c *transmitter.Config) { c.Assurance = 0 },
 		// An in-memory store loses every stream and queued SET on restart.
 		"production memstore": func(c *transmitter.Config) { c.Assurance = ssf.AssuranceProduction },
 		"no queue limit":      func(c *transmitter.Config) { c.Limits.QueuedSETsPerStream = 0 },

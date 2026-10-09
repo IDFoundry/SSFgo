@@ -33,7 +33,8 @@ store, err := sqlstore.NewRevocationStore(ctx, db, sqlstore.Postgres)
 if err != nil {
 	return err
 }
-rev, err := revocation.New(store, revocation.Options{
+rev, err := revocation.New(revocation.Options{
+	Store: store,
 	// Which token issuer each Transmitter speaks for. A Transmitter not
 	// listed, or a subject naming another issuer, revokes nothing.
 	Issuers: revocation.StaticTokenIssuers{

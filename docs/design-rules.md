@@ -168,10 +168,13 @@ attacked and held up.
 
 ### 12. One package and constructor per role
 
-`transmitter`, `receiver`, `revocation` and `ssftest` each have their own
-constructor and `Config` or `Options` struct. They are plain structs, not
-functional options, so a configuration is visible, comparable and
-validated in one place. `transmitter` and `receiver` never import each
+`transmitter`, `receiver` and `revocation` each have one constructor,
+taking everything it needs — stores included — in one `Config` or
+`Options` struct; a constructor that does I/O, such as `receiver.New`,
+takes a context first. They are plain structs, not functional options,
+so a configuration is visible, comparable and validated in one place.
+`ssftest`, a test helper, starts from working defaults and takes
+optional adjustments to them. `transmitter` and `receiver` never import each
 other; they share protocol code through `internal/`, and packages built
 on a role (`revocation`, `ssftest`) follow the
 [dependency rules](../ARCHITECTURE.md#dependency-rules).

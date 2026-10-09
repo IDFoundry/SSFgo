@@ -26,7 +26,8 @@ func TestCheck(t *testing.T) {
 		url    string
 		want   string // "" for no error
 	}{
-		"no level":                  {"", false, shared, "", "Assurance level must be"},
+		"no level":                  {0, false, shared, "", "Assurance is required"},
+		"unknown level":             {3, false, shared, "", "Assurance is required"},
 		"development, memory":       {ssf.AssuranceDevelopment, true, memory, "https://localhost", ""},
 		"production, memory":        {ssf.AssuranceProduction, false, memory, "", "S must declare itself durable"},
 		"production, undeclared":    {ssf.AssuranceProduction, false, struct{}{}, "", "S must declare itself durable"},

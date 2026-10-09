@@ -73,7 +73,7 @@ rx, err := receiver.New(ctx, receiver.Config{
 	Issuer:      "https://idp.example.com/ssf",
 	Audience:    "https://rp.example.com",
 	Registry:    registry, // ssf.NewRegistry() + caep.Register
-	Algorithms:  []ssf.SignatureAlgorithm{ssf.RS256},
+	Algorithms:  receiver.RecommendedAlgorithms(),
 	TokenSource: &receiver.ClientCredentials{TokenURL: tokenURL, ClientID: id, ClientSecret: ssf.NewSecret(secret), AuthMethod: receiver.ClientSecretBasic},
 	ReplayStore: memstore.NewReplayStore(),
 	Assurance:   ssf.AssuranceDevelopment,
@@ -104,7 +104,7 @@ db, err := sql.Open("pgx", dsn) // any database/sql driver for PostgreSQL or SQL
 err = sqlstore.CreateSchema(ctx, db, sqlstore.Postgres)
 store, err := sqlstore.NewStreamStore(ctx, db, sqlstore.Postgres)   // transmitter.Config.Store
 replay, err := sqlstore.NewReplayStore(ctx, db, sqlstore.Postgres)  // receiver.Config.ReplayStore
-revocations, err := sqlstore.NewRevocationStore(ctx, db, sqlstore.Postgres) // revocation.New
+revocations, err := sqlstore.NewRevocationStore(ctx, db, sqlstore.Postgres) // revocation.Options.Store
 ```
 
 [`examples/session-revocation`](examples/session-revocation) runs both
@@ -116,7 +116,8 @@ what session-revoked, account-disabled and similar events mean and checks
 the application's validated tokens against it:
 
 ```go
-rev, err := revocation.New(memstore.NewRevocationStore(), revocation.Options{
+rev, err := revocation.New(revocation.Options{
+	Store:     memstore.NewRevocationStore(),
 	Issuers:   revocation.SameIssuer,           // or StaticTokenIssuers{transmitter: tokenIssuer}
 	Events:    revocation.RecommendedEvents(),  // session-revoked, account-disabled, ...
 	Retention: 24 * time.Hour,                  // at least the longest token lifetime

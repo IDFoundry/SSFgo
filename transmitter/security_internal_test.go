@@ -1,8 +1,14 @@
 package transmitter
 
 import (
+	"context"
+	"log/slog"
 	"net/netip"
+	"strings"
 	"testing"
+
+	"github.com/idfoundry/ssfgo/storage"
+	"github.com/idfoundry/ssfgo/storage/memstore"
 )
 
 // Addresses that embed an IPv4 address must not smuggle an internal one
@@ -44,5 +50,28 @@ func TestValidHeaderValue(t *testing.T) {
 	}
 	if validHeaderValue(string(make([]byte, maxHeaderBytes+1))) {
 		t.Error("an oversized header value was accepted")
+	}
+}
+
+// ctxStore fails AckEvents once its context is done, as a database driver
+// does.
+type ctxStore struct{ storage.StreamStore }
+
+func (s ctxStore) AckEvents(ctx context.Context, id string, jtis []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return s.StreamStore.AckEvents(ctx, id, jtis)
+}
+
+// A SET delivered as Run stops is still removed from its queue, not
+// logged as an error and pushed again at the next start.
+func TestDequeueOutlivesRun(t *testing.T) {
+	var logged strings.Builder
+	tx := &Transmitter{cfg: Config{Store: ctxStore{memstore.NewStreamStore()}}, log: slog.New(slog.NewTextHandler(&logged, nil))}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if tx.dequeue(ctx, "s1", "jti-1") || logged.Len() > 0 {
+		t.Errorf("dequeue after Run stopped asked for a retry, or logged %q", logged.String())
 	}
 }

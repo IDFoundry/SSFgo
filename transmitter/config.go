@@ -295,17 +295,16 @@ func (c *Config) signingKeyErrors() []error {
 	}
 	kids := map[string]bool{}
 	for i, k := range c.SigningKeys {
+		if assurance.IsNil(k.Signer) {
+			errs = append(errs, fmt.Errorf("SigningKeys[%d].Signer is required", i))
+		} else if err := jose.ValidateKeyForAlgorithm(k.Signer.Public(), k.Algorithm); err != nil {
+			errs = append(errs, fmt.Errorf("SigningKeys[%d].Algorithm: %w", i, err))
+		}
 		switch {
-		case assurance.IsNil(k.Signer):
-			errs = append(errs, fmt.Errorf("SigningKeys[%d]: Signer is required", i))
 		case k.KeyID == "":
-			errs = append(errs, fmt.Errorf("SigningKeys[%d]: KeyID is required", i))
+			errs = append(errs, fmt.Errorf("SigningKeys[%d].KeyID is required", i))
 		case kids[k.KeyID]:
-			errs = append(errs, fmt.Errorf("SigningKeys[%d]: duplicate KeyID %q", i, k.KeyID))
-		default:
-			if err := jose.ValidateKeyForAlgorithm(k.Signer.Public(), k.Algorithm); err != nil {
-				errs = append(errs, fmt.Errorf("SigningKeys[%d]: %w", i, err))
-			}
+			errs = append(errs, fmt.Errorf("SigningKeys[%d].KeyID %q is used by an earlier key", i, k.KeyID))
 		}
 		kids[k.KeyID] = true
 	}
@@ -315,8 +314,8 @@ func (c *Config) signingKeyErrors() []error {
 // requiredErrors checks the settings every Transmitter must have.
 func (c *Config) requiredErrors() []error {
 	var errs []error
-	if err := ssf.ValidateIssuer(c.Issuer); err != nil {
-		errs = append(errs, err)
+	if ssf.ValidateIssuer(c.Issuer) != nil {
+		errs = append(errs, errors.New("Issuer must be an https URL with no query, fragment or userinfo"))
 	}
 	if len(c.EventsSupported) == 0 {
 		errs = append(errs, errors.New("EventsSupported is required"))
@@ -324,22 +323,22 @@ func (c *Config) requiredErrors() []error {
 	if len(c.DeliveryMethods) == 0 {
 		errs = append(errs, errors.New("DeliveryMethods is required"))
 	}
-	for _, m := range c.DeliveryMethods {
+	for i, m := range c.DeliveryMethods {
 		if m != ssf.DeliveryPush && m != ssf.DeliveryPoll {
-			errs = append(errs, fmt.Errorf("unsupported delivery method %q", m))
+			errs = append(errs, fmt.Errorf("DeliveryMethods[%d] must be ssf.DeliveryPush or ssf.DeliveryPoll, not %q", i, m))
 		}
 	}
 	if c.DefaultSubjects != ssf.DefaultSubjectsAll && c.DefaultSubjects != ssf.DefaultSubjectsNone {
 		errs = append(errs, errors.New(`DefaultSubjects must be "ALL" or "NONE"`))
 	}
 	if assurance.IsNil(c.Store) {
-		errs = append(errs, errors.New("a Store is required"))
+		errs = append(errs, errors.New("Store is required (memstore.NewStreamStore for development)"))
 	}
 	if c.Authorize == nil {
-		errs = append(errs, errors.New("an Authorize function is required"))
+		errs = append(errs, errors.New("Authorize is required"))
 	}
 	if c.PermitEvent == nil {
-		errs = append(errs, errors.New("a PermitEvent function is required; PermitAll permits every event"))
+		errs = append(errs, errors.New("PermitEvent is required (PermitAll permits every event)"))
 	}
 	return errs
 }
@@ -357,7 +356,7 @@ func (c *Config) pushClientErrors() []error {
 			errs = append(errs, errors.New("under AssuranceProduction, HTTPClient requires UnrestrictedPushClient: it replaces the refusal of non-public addresses (PushTransport and AllowedPrivatePushHosts keep it)"))
 		}
 	} else if c.UnrestrictedPushClient {
-		errs = append(errs, errors.New("UnrestrictedPushClient is set without an HTTPClient"))
+		errs = append(errs, errors.New("UnrestrictedPushClient is set without HTTPClient"))
 	}
 	for i, h := range c.AllowedPrivatePushHosts {
 		if h == "" || strings.ContainsAny(h, "*/:@[] ") {

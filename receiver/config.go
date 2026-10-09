@@ -51,8 +51,8 @@ type Config struct {
 	// request them by default, and a SET of any other type is rejected.
 	Registry *ssf.Registry
 
-	// Algorithms lists the SET signature algorithms accepted. The CAEP
-	// Interoperability Profile §2.6 uses RS256.
+	// Algorithms lists the SET signature algorithms accepted. Required:
+	// RecommendedAlgorithms is the usual choice.
 	Algorithms []ssf.SignatureAlgorithm
 
 	// TokenSource supplies access tokens for the Transmitter's APIs.
@@ -152,6 +152,15 @@ type Limits struct {
 // it stay representable.
 const MaxReplayWindow = 365 * 24 * time.Hour
 
+// RecommendedAlgorithms returns the SET signature algorithms a Receiver
+// usually accepts: RS256, which the CAEP Interoperability Profile §2.6
+// requires; and PS256 and ES256, which Transmitters also sign with. A key
+// is used only with the algorithm its type allows, so accepting several
+// lets the Transmitter choose without weakening any of them.
+func RecommendedAlgorithms() []ssf.SignatureAlgorithm {
+	return []ssf.SignatureAlgorithm{ssf.RS256, ssf.PS256, ssf.ES256}
+}
+
 // RecommendedLimits returns starting values for Limits. None is a
 // specification requirement; each is this package's operational choice:
 //
@@ -185,57 +194,9 @@ func (l Limits) errors() []error {
 
 func (c *Config) validate() error {
 	errs := c.Limits.errors()
-	var keys []assurance.Key
-	urls := []assurance.URL{{Field: "Issuer", Value: c.Issuer}, {Field: "MetadataURL", Value: c.MetadataURL}}
-	if cc := clientCredentialsOf(c.TokenSource); cc != nil {
-		errs = append(errs, cc.errors("TokenSource.")...)
-		urls = append(urls, assurance.URL{Field: "TokenSource.TokenURL", Value: cc.TokenURL})
-		if cc.AuthMethod == PrivateKeyJWT && !assurance.IsNil(cc.SigningKey) {
-			keys = append(keys, assurance.Key{Field: "TokenSource.SigningKey", Custody: assurance.CustodyOf(cc.SigningKey, cc.SigningKeyCustody)})
-		}
-	}
-	errs = append(errs, assurance.Check(c.Assurance, c.HorizontallyScaled, assurance.Deps{
-		Stores: []assurance.Store{{Field: "ReplayStore", Store: c.ReplayStore}},
-		URLs:   urls,
-		Keys:   keys,
-	})...)
-	if err := ssf.ValidateIssuer(c.Issuer); err != nil {
-		errs = append(errs, err)
-	}
-	if c.Audience == "" {
-		errs = append(errs, errors.New("an Audience is required"))
-	}
-	if c.AudiencePerStream && strings.HasSuffix(c.Audience, "/") {
-		errs = append(errs, errors.New(`with AudiencePerStream, Audience must not end in "/"`))
-	}
-	if c.Registry == nil {
-		errs = append(errs, errors.New("a Registry is required"))
-	}
-	if len(c.Algorithms) == 0 {
-		errs = append(errs, errors.New("at least one accepted algorithm is required"))
-	}
-	for _, a := range c.Algorithms {
-		if !a.IsValid() {
-			errs = append(errs, fmt.Errorf("invalid algorithm %v", a))
-		}
-	}
-	if c.TokenSource == nil {
-		errs = append(errs, errors.New("a TokenSource is required"))
-	}
-	if assurance.IsNil(c.ReplayStore) {
-		errs = append(errs, errors.New("a ReplayStore is required"))
-	}
-	if c.MetadataURL != "" {
-		if u, err := url.Parse(c.MetadataURL); err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" {
-			errs = append(errs, fmt.Errorf("MetadataURL: %q is not an https URL", c.MetadataURL))
-		}
-	}
-	for _, o := range c.TrustedOrigins {
-		if u, err := url.Parse(o); err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil ||
-			(u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
-			errs = append(errs, fmt.Errorf("TrustedOrigins: %q is not an https origin", o))
-		}
-	}
+	errs = append(errs, c.assuranceErrors()...)
+	errs = append(errs, c.requiredErrors()...)
+	errs = append(errs, c.urlErrors()...)
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("receiver: invalid config: %w", err)
 	}
@@ -250,4 +211,80 @@ func (c *Config) validate() error {
 		c.Logger = slog.Default()
 	}
 	return nil
+}
+
+// assuranceErrors checks the configuration against its Assurance,
+// including a ClientCredentials TokenSource's URL and key.
+func (c *Config) assuranceErrors() []error {
+	var errs []error
+	var keys []assurance.Key
+	urls := []assurance.URL{{Field: "Issuer", Value: c.Issuer}, {Field: "MetadataURL", Value: c.MetadataURL}}
+	if cc := clientCredentialsOf(c.TokenSource); cc != nil {
+		errs = append(errs, cc.errors("TokenSource.")...)
+		urls = append(urls, assurance.URL{Field: "TokenSource.TokenURL", Value: cc.TokenURL})
+		if cc.AuthMethod == PrivateKeyJWT && !assurance.IsNil(cc.SigningKey) {
+			keys = append(keys, assurance.Key{Field: "TokenSource.SigningKey", Custody: assurance.CustodyOf(cc.SigningKey, cc.SigningKeyCustody)})
+		}
+	}
+	return append(errs, assurance.Check(c.Assurance, c.HorizontallyScaled, assurance.Deps{
+		Stores: []assurance.Store{{Field: "ReplayStore", Store: c.ReplayStore}},
+		URLs:   urls,
+		Keys:   keys,
+	})...)
+}
+
+// requiredErrors checks the settings every Receiver must have.
+func (c *Config) requiredErrors() []error {
+	var errs []error
+	if ssf.ValidateIssuer(c.Issuer) != nil {
+		errs = append(errs, errors.New("Issuer must be an https URL with no query, fragment or userinfo"))
+	}
+	if c.Audience == "" {
+		errs = append(errs, errors.New("Audience is required"))
+	}
+	if c.AudiencePerStream && strings.HasSuffix(c.Audience, "/") {
+		errs = append(errs, errors.New(`Audience must not end in "/" with AudiencePerStream`))
+	}
+	if c.Registry == nil {
+		errs = append(errs, errors.New("Registry is required (ssf.NewRegistry, with each event family registered)"))
+	}
+	if len(c.Algorithms) == 0 {
+		errs = append(errs, errors.New("Algorithms is required (RecommendedAlgorithms is the usual choice)"))
+	}
+	for i, a := range c.Algorithms {
+		if !a.IsValid() {
+			errs = append(errs, fmt.Errorf("Algorithms[%d] is not a known algorithm", i))
+		}
+	}
+	if c.TokenSource == nil {
+		errs = append(errs, errors.New("TokenSource is required (ClientCredentials, or StaticToken)"))
+	}
+	if assurance.IsNil(c.ReplayStore) {
+		errs = append(errs, errors.New("ReplayStore is required (memstore.NewReplayStore for development)"))
+	}
+	return errs
+}
+
+// urlErrors checks the optional MetadataURL and TrustedOrigins.
+func (c *Config) urlErrors() []error {
+	var errs []error
+	if c.MetadataURL != "" {
+		if u, err := url.Parse(c.MetadataURL); err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" {
+			errs = append(errs, errors.New("MetadataURL must be an https URL"))
+		}
+	}
+	for i, o := range c.TrustedOrigins {
+		if !isHTTPSOrigin(o) {
+			errs = append(errs, fmt.Errorf("TrustedOrigins[%d] must be an https origin, with no path", i))
+		}
+	}
+	return errs
+}
+
+// isHTTPSOrigin reports whether o is an https origin: a scheme and host,
+// with no userinfo, path, query or fragment.
+func isHTTPSOrigin(o string) bool {
+	u, err := url.Parse(o)
+	return err == nil && u.Scheme == "https" && u.Host != "" && u.User == nil &&
+		(u.Path == "" || u.Path == "/") && u.RawQuery == "" && u.Fragment == ""
 }

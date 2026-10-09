@@ -89,13 +89,12 @@ func NewTransmitter(t testing.TB, options ...func(*transmitter.Config)) *Transmi
 		handler.ServeHTTP(w, r)
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_ = tt.tx.Run(ctx)
+		_ = tt.tx.Run(t.Context()) // done just before cleanup
 	}()
-	t.Cleanup(func() { cancel(); <-done })
+	t.Cleanup(func() { <-done })
 	return tt
 }
 
@@ -127,7 +126,7 @@ func (tt *Transmitter) ReceiverConfig(registry *ssf.Registry) receiver.Config {
 		Issuer:      tt.Issuer(),
 		Audience:    ReceiverAudience,
 		Registry:    registry,
-		Algorithms:  []ssf.SignatureAlgorithm{ssf.RS256},
+		Algorithms:  receiver.RecommendedAlgorithms(),
 		TokenSource: receiver.StaticToken(receiverToken),
 		ReplayStore: memstore.NewReplayStore(),
 		HTTPClient:  tt.Client(),

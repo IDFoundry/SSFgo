@@ -281,9 +281,17 @@ func transientRejection(code string) bool {
 	return false
 }
 
+// dequeueTimeout bounds removing a SET from its queue once Run's context
+// is done.
+const dequeueTimeout = 10 * time.Second
+
 // dequeue removes a SET from a stream's queue, reporting whether that
-// failed and the stream should retry.
+// failed and the stream should retry. It outlives ctx, briefly: a SET
+// delivered as Run stops is still removed, rather than logged as an
+// error and pushed again at the next start.
 func (t *Transmitter) dequeue(ctx context.Context, id, jti string) (retry bool) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), dequeueTimeout)
+	defer cancel()
 	err := t.cfg.Store.AckEvents(ctx, id, []string{jti})
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		t.log.ErrorContext(ctx, "ssf transmitter: remove pushed SET from queue", "stream_id", id, "error", err)

@@ -189,3 +189,12 @@ func TestForeignSchemaTableRefused(t *testing.T) {
 		}
 	}
 }
+
+// CreateSchema on a database of another dialect says which dialect it
+// assumed, rather than returning the driver's error alone.
+func TestCreateSchemaWrongDialect(t *testing.T) {
+	err := sqlstore.CreateSchema(ctx, rawSQLite(t), sqlstore.Postgres)
+	if err == nil || !strings.Contains(err.Error(), "sqlstore: create the schema as postgres") {
+		t.Errorf("CreateSchema = %v", err)
+	}
+}

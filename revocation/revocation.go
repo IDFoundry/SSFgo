@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -27,10 +28,13 @@ const MaxRetention = 10 * 365 * 24 * time.Hour
 // user who signs in again long after the revocation.
 const MaxClockSkewBound = time.Hour
 
-// Options configures a Revoker. Issuers, Events and Retention are
-// required: there are no implicit defaults, and RecommendedEvents is the
-// usual choice for Events.
+// Options configures a Revoker. Store, Issuers, Events, Retention and
+// Assurance are required: there are no implicit defaults, and
+// RecommendedEvents is the usual choice for Events.
 type Options struct {
+	// Store records revocations. Required: memstore.NewRevocationStore
+	// for development, or a durable store such as storage/sqlstore's.
+	Store storage.RevocationStore
 	// Issuers says which token issuer each Transmitter speaks for. A SET
 	// from a Transmitter it does not name revokes nothing, and neither
 	// does a subject naming any other issuer — so one Transmitter cannot
@@ -84,6 +88,9 @@ type Options struct {
 	// Receiver's goroutine for the SET and must not block for long. An
 	// error fails the SET's handling, so the Transmitter delivers it again.
 	OnRevoke func(ctx context.Context, keys []storage.RevocationKey, set ssf.SET) error
+	// Logger receives what Middleware cannot answer from, such as a
+	// store failure behind a 503. Defaults to slog.Default().
+	Logger *slog.Logger
 	// Now returns the current time. Defaults to time.Now.
 	Now func() time.Time
 }
@@ -139,30 +146,30 @@ type Revoker struct {
 	opts  Options
 }
 
-// New returns a Revoker that records revocations in store. It reports
-// every problem with opts at once.
-func New(store storage.RevocationStore, opts Options) (*Revoker, error) {
+// New returns a Revoker configured by opts. It reports every problem
+// with opts at once.
+func New(opts Options) (*Revoker, error) {
 	var errs []error
-	if assurance.IsNil(store) {
-		errs = append(errs, errors.New("a store is required"))
+	if assurance.IsNil(opts.Store) {
+		errs = append(errs, errors.New("Store is required (memstore.NewRevocationStore for development)"))
 	}
 	if assurance.IsNil(opts.Issuers) {
-		errs = append(errs, errors.New("Options.Issuers is required (StaticTokenIssuers, or SameIssuer)"))
+		errs = append(errs, errors.New("Issuers is required (StaticTokenIssuers, or SameIssuer)"))
 	}
 	if len(opts.Events) == 0 {
-		errs = append(errs, errors.New("Options.Events is required (RecommendedEvents is the usual choice)"))
+		errs = append(errs, errors.New("Events is required (RecommendedEvents is the usual choice)"))
 	}
 	if opts.Retention <= 0 || opts.Retention > MaxRetention {
-		errs = append(errs, fmt.Errorf("Options.Retention must be positive and at most %v", MaxRetention))
+		errs = append(errs, fmt.Errorf("Retention must be positive and at most %v", MaxRetention))
 	}
 	errs = append(errs, assurance.Check(opts.Assurance, opts.HorizontallyScaled, assurance.Deps{
-		Stores: []assurance.Store{{Field: "the store", Store: store}},
+		Stores: []assurance.Store{{Field: "Store", Store: opts.Store}},
 	})...)
 	if opts.MaxClockSkew < 0 || opts.MaxClockSkew > MaxClockSkewBound {
-		errs = append(errs, fmt.Errorf("Options.MaxClockSkew must not be negative or more than %v", MaxClockSkewBound))
+		errs = append(errs, fmt.Errorf("MaxClockSkew must not be negative or more than %v", MaxClockSkewBound))
 	}
 	if strings.TrimSpace(opts.AllSessions) != opts.AllSessions {
-		errs = append(errs, errors.New("Options.AllSessions must not begin or end with white space"))
+		errs = append(errs, errors.New("AllSessions must not begin or end with white space"))
 	}
 	if err := errors.Join(errs...); err != nil {
 		return nil, fmt.Errorf("revocation: invalid options: %w", err)
@@ -171,7 +178,10 @@ func New(store storage.RevocationStore, opts Options) (*Revoker, error) {
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
-	return &Revoker{store: store, opts: opts}, nil
+	if opts.Logger == nil {
+		opts.Logger = slog.Default()
+	}
+	return &Revoker{store: opts.Store, opts: opts}, nil
 }
 
 // Register installs Handle on rx for each of Options.Events, replacing any
@@ -373,7 +383,7 @@ func (r *Revoker) IsRevoked(ctx context.Context, tok Token) (bool, error) {
 // false for one it has not, which passes through untouched: Middleware
 // checks revocation, not authentication. A revoked token gets 401 with an
 // RFC 6750 invalid_token challenge; a store failure gets 503, failing
-// closed.
+// closed, and is logged to Options.Logger.
 func (r *Revoker) Middleware(extract func(*http.Request) (Token, bool), next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		tok, ok := extract(req)
@@ -383,6 +393,7 @@ func (r *Revoker) Middleware(extract func(*http.Request) (Token, bool), next htt
 		}
 		revoked, err := r.IsRevoked(req.Context(), tok)
 		if err != nil {
+			r.opts.Logger.ErrorContext(req.Context(), "ssf revocation: cannot check a token, answering 503", "error", err)
 			http.Error(w, "revocation status unavailable", http.StatusServiceUnavailable)
 			return
 		}
