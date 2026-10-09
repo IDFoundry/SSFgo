@@ -114,15 +114,7 @@ func undocumentedSpec(d *ast.GenDecl, spec ast.Spec) []ident {
 	var names []ident
 	switch s := spec.(type) {
 	case *ast.TypeSpec:
-		if !s.Name.IsExported() {
-			return nil
-		}
-		if s.Doc == nil && d.Doc == nil {
-			names = append(names, ident{s.Pos(), s.Name.Name})
-		}
-		if st, ok := s.Type.(*ast.StructType); ok {
-			names = append(names, undocumentedFields(s.Name.Name, st)...)
-		}
+		names = undocumentedType(d, s)
 	case *ast.ValueSpec:
 		if s.Doc != nil || s.Comment != nil || d.Doc != nil {
 			return nil
@@ -132,6 +124,22 @@ func undocumentedSpec(d *ast.GenDecl, spec ast.Spec) []ident {
 				names = append(names, ident{n.Pos(), n.Name})
 			}
 		}
+	}
+	return names
+}
+
+// undocumentedType reports an exported type with no doc comment of its
+// own or d's, and its undocumented exported fields if it is a struct.
+func undocumentedType(d *ast.GenDecl, s *ast.TypeSpec) []ident {
+	if !s.Name.IsExported() {
+		return nil
+	}
+	var names []ident
+	if s.Doc == nil && d.Doc == nil {
+		names = append(names, ident{s.Pos(), s.Name.Name})
+	}
+	if st, ok := s.Type.(*ast.StructType); ok {
+		names = append(names, undocumentedFields(s.Name.Name, st)...)
 	}
 	return names
 }
