@@ -73,49 +73,84 @@ func check(root string) ([]string, error) {
 	return missing, err
 }
 
+// undocumented returns "file:line: name" for each exported identifier
+// decl declares without a doc comment.
 func undocumented(fset *token.FileSet, decl ast.Decl) []string {
-	var missing []string
-	report := func(pos token.Pos, name string) {
-		p := fset.Position(pos)
-		missing = append(missing, fmt.Sprintf("%s:%d: %s", p.Filename, p.Line, name))
-	}
+	var names []ident
 	switch d := decl.(type) {
 	case *ast.FuncDecl:
-		if !d.Name.IsExported() || (d.Recv != nil && !exportedReceiver(d.Recv)) {
-			return nil
-		}
-		if d.Doc == nil {
-			report(d.Pos(), d.Name.Name)
-		}
+		names = undocumentedFunc(d)
 	case *ast.GenDecl:
 		for _, spec := range d.Specs {
-			switch s := spec.(type) {
-			case *ast.TypeSpec:
-				if !s.Name.IsExported() {
-					continue
-				}
-				if s.Doc == nil && d.Doc == nil {
-					report(s.Pos(), s.Name.Name)
-				}
-				if st, ok := s.Type.(*ast.StructType); ok {
-					for _, f := range st.Fields.List {
-						for _, n := range f.Names {
-							if n.IsExported() && f.Doc == nil && f.Comment == nil {
-								report(n.Pos(), s.Name.Name+"."+n.Name)
-							}
-						}
-					}
-				}
-			case *ast.ValueSpec:
-				for _, n := range s.Names {
-					if n.IsExported() && s.Doc == nil && s.Comment == nil && d.Doc == nil {
-						report(n.Pos(), n.Name)
-					}
-				}
+			names = append(names, undocumentedSpec(d, spec)...)
+		}
+	}
+	missing := make([]string, len(names))
+	for i, n := range names {
+		p := fset.Position(n.pos)
+		missing[i] = fmt.Sprintf("%s:%d: %s", p.Filename, p.Line, n.name)
+	}
+	return missing
+}
+
+// ident is an undocumented identifier and where it is declared.
+type ident struct {
+	pos  token.Pos
+	name string
+}
+
+// undocumentedFunc reports an exported function, or a method of an
+// exported type, with no doc comment.
+func undocumentedFunc(d *ast.FuncDecl) []ident {
+	if !d.Name.IsExported() || (d.Recv != nil && !exportedReceiver(d.Recv)) || d.Doc != nil {
+		return nil
+	}
+	return []ident{{d.Pos(), d.Name.Name}}
+}
+
+// undocumentedSpec reports the exported names in spec, a type or value of
+// declaration d, with no doc comment of their own or d's.
+func undocumentedSpec(d *ast.GenDecl, spec ast.Spec) []ident {
+	var names []ident
+	switch s := spec.(type) {
+	case *ast.TypeSpec:
+		if !s.Name.IsExported() {
+			return nil
+		}
+		if s.Doc == nil && d.Doc == nil {
+			names = append(names, ident{s.Pos(), s.Name.Name})
+		}
+		if st, ok := s.Type.(*ast.StructType); ok {
+			names = append(names, undocumentedFields(s.Name.Name, st)...)
+		}
+	case *ast.ValueSpec:
+		if s.Doc != nil || s.Comment != nil || d.Doc != nil {
+			return nil
+		}
+		for _, n := range s.Names {
+			if n.IsExported() {
+				names = append(names, ident{n.Pos(), n.Name})
 			}
 		}
 	}
-	return missing
+	return names
+}
+
+// undocumentedFields reports the exported fields of struct typeName with
+// no comment above them or at the end of their line.
+func undocumentedFields(typeName string, st *ast.StructType) []ident {
+	var names []ident
+	for _, f := range st.Fields.List {
+		if f.Doc != nil || f.Comment != nil {
+			continue
+		}
+		for _, n := range f.Names {
+			if n.IsExported() {
+				names = append(names, ident{n.Pos(), typeName + "." + n.Name})
+			}
+		}
+	}
+	return names
 }
 
 // exportedReceiver reports whether a method's receiver type is exported.
