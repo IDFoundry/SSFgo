@@ -21,7 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      KEYCLOAK_IMAGE: quay.io/keycloak/keycloak:26.8.0
+      # Pinned by digest, so the tag cannot be moved under the test.
+      KEYCLOAK_IMAGE: quay.io/keycloak/keycloak:26.8.0@sha256:b0f60d489d51c5d113390bdf5461d4c06e6051be026c05549f2e1e10ec352bcc
     steps:
       - uses: actions/checkout@v7
         with:
@@ -31,6 +32,9 @@ jobs:
         with:
           go-version-file: go.mod
           check-latest: true
+          # The job runs a third-party image alongside the build, so it
+          # caches no Go build state another workflow could restore.
+          cache: false
 
       # The Receiver requires an https issuer, so Keycloak serves https
       # with a self-signed certificate the test trusts.
