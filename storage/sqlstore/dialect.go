@@ -202,7 +202,7 @@ func sqliteFile(ctx context.Context, db *sql.DB) (string, error) {
 }
 
 // Capabilities implements storage.StoreAssurance.
-func (s *StreamStore) Capabilities() storage.Capabilities { return s.caps }
+func (m *StreamStore) Capabilities() storage.Capabilities { return m.caps }
 
 // Capabilities implements storage.StoreAssurance.
 func (s *ReplayStore) Capabilities() storage.Capabilities { return s.caps }
