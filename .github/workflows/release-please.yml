@@ -1,0 +1,32 @@
+# Keeps a release pull request for storage/sqlstore — version bump and
+# storage/sqlstore/CHANGELOG.md, from the Conventional Commits on main
+# since its last release — up to date on every push to main, and tags
+# storage/sqlstore/vX.Y.Z with a GitHub Release when that pull request is
+# merged. release-please-config.json and .release-please-manifest.json
+# hold the versioning.
+#
+# Authenticates with the RELEASE_PLEASE_TOKEN secret rather than
+# GITHUB_TOKEN: events GITHUB_TOKEN causes don't trigger other workflows,
+# so ci.yml would never run on the release pull request. CONTRIBUTING.md
+# says what the token needs.
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

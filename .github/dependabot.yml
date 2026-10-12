@@ -24,7 +24,7 @@ updates:
         update-types: [minor, patch]
 
   # The third-party actions pinned by commit SHA and GitHub's own actions
-  # pinned by major version, across ci.yml, conformance.yml and fuzz.yml.
+  # pinned by major version, across every workflow.
   - package-ecosystem: github-actions
     directory: /
     schedule:

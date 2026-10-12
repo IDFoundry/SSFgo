@@ -68,7 +68,14 @@ in the same pull request: who it affects, why, and what to change.
 messages, by the paths a commit touches: its tags are
 `storage/sqlstore/vX.Y.Z`, starting at v0.x, where a breaking change
 bumps the minor version. Leaving 0.x is a deliberate decision, not
-something a commit message triggers. No workflow runs it yet.
+something a commit message triggers. `.github/workflows/release-please.yml`
+keeps a release pull request open for the next version; merging it tags
+the release.
+
+`release-please.yml` authenticates with the `RELEASE_PLEASE_TOKEN`
+repository secret, a fine-grained personal access token for this
+repository with **Contents** and **Pull requests** read and write. Replace
+the secret when the token expires.
 
 ## Security
 
