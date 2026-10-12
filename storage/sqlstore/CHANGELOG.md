@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/IDFoundry/SSFgo/compare/storage/sqlstore/v0.1.0...storage/sqlstore/v0.1.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **sqlstore:** require the core at v0.1.0 ([5caef1e](https://github.com/IDFoundry/SSFgo/commit/5caef1ed1668b3d8c6982cf8882440f02ffb4380))
+
 ## 0.1.0 (2026-10-12)
 
 The first release: durable implementations of SSFgo's storage contracts
