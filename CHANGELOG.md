@@ -1,10 +1,9 @@
 # Changelog
 
-## Unreleased — v0.1.0
+## 0.1.0 (2026-10-12)
 
-Not yet tagged; this entry becomes the release notes when it is. The
-first release: an embeddable SSF Transmitter and Receiver with CAEP and
-RISC, verified against the OpenID Foundation conformance suite.
+The first release: an embeddable SSF Transmitter and Receiver with CAEP
+and RISC, verified against the OpenID Foundation conformance suite.
 See [COMPATIBILITY.md](COMPATIBILITY.md) for what v0.x and v1 promise.
 
 ### Implemented
