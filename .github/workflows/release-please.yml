@@ -1,8 +1,8 @@
-# Keeps a release pull request for storage/sqlstore — version bump and
-# storage/sqlstore/CHANGELOG.md, from the Conventional Commits on main
-# since its last release — up to date on every push to main, and tags
-# storage/sqlstore/vX.Y.Z with a GitHub Release when that pull request is
-# merged. release-please-config.json and .release-please-manifest.json
+# Keeps a release pull request for each module — the core (CHANGELOG.md,
+# tags vX.Y.Z) and storage/sqlstore (storage/sqlstore/CHANGELOG.md, tags
+# storage/sqlstore/vX.Y.Z) — up to date on every push to main, from the
+# Conventional Commits since its last release, and tags it with a GitHub
+# Release when that pull request is merged. release-please-config.json and .release-please-manifest.json
 # hold the versioning.
 #
 # Authenticates with the RELEASE_PLEASE_TOKEN secret rather than

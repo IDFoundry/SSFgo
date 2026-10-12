@@ -14,7 +14,7 @@ Packages added since v0.5 — `revocation`, `ssftest`, `scim`, the hooks,
 `Receiver.EnsureStream` — have nothing to upgrade from, and are not
 listed.
 
-## v1.0.0 (unreleased)
+## v0.1.0 (unreleased)
 
 ### Every role declares its assurance level (transmitter, receiver)
 

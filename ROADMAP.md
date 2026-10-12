@@ -82,7 +82,8 @@ API freeze, after a review of every exported identifier (see
 [CHANGELOG.md](CHANGELOG.md)); the compatibility promise is in
 [COMPATIBILITY.md](COMPATIBILITY.md). The full matrix runs daily in CI.
 Certification will be submitted once OIDF opens the SSF certification
-programme. Remaining: tag and publish `v1.0.0`.
+programme. Remaining: tag and publish `v1.0.0`; until it is, releases
+are v0.x.
 
 Added since the freeze: a security review
 ([docs/security-review-2026-09.md](docs/security-review-2026-09.md)),

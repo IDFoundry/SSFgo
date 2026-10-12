@@ -64,13 +64,14 @@ what changed and why.
 A breaking change also adds its section to [UPGRADING.md](UPGRADING.md)
 in the same pull request: who it affects, why, and what to change.
 
-`release-please-config.json` versions `storage/sqlstore` from these
-messages, by the paths a commit touches: its tags are
-`storage/sqlstore/vX.Y.Z`, starting at v0.x, where a breaking change
-bumps the minor version. Leaving 0.x is a deliberate decision, not
-something a commit message triggers. `.github/workflows/release-please.yml`
-keeps a release pull request open for the next version; merging it tags
-the release.
+`release-please-config.json` versions both modules from these messages,
+by the paths a commit touches: the core (tags `vX.Y.Z`; a commit only
+under `storage/sqlstore` or `examples` is left out) and `storage/sqlstore`
+(tags `storage/sqlstore/vX.Y.Z`). Both are at v0.x, where a breaking
+change bumps the minor version. Leaving 0.x is a deliberate decision,
+not something a commit message triggers.
+`.github/workflows/release-please.yml` keeps a release pull request open
+for each module's next version; merging it tags the release.
 
 `release-please.yml` authenticates with the `RELEASE_PLEASE_TOKEN`
 repository secret, a fine-grained personal access token for this

@@ -236,5 +236,5 @@ An unsafe choice needs more code and a name that says what it does.
 | 10 | There were no assurance levels or store capabilities; a wrapped `ClientCredentials`, a supplied push `HTTPClient`, loopback addresses spelled `127.1` or `0.0.0.0`, and a SQLite in-memory database escaped the production checks | #52, #65, #66, #67 |
 | 12 | `revocation.New` took its store apart from its `Options` | #69 |
 | 14 | Examples shared the root module; there was no `GETTING_STARTED.md` or guides; 112 exported identifiers had no doc comment, and no package had a runnable example | #54, #55, #56, #70 |
-| 15 | There was no `UPGRADING.md` or `AGENTS.md`; release-please is not set up, so the CHANGELOG lists breaking changes under "Changed since v0.5" rather than "⚠ BREAKING CHANGES" | #53; release-please when v1 is cut |
+| 15 | There was no `UPGRADING.md` or `AGENTS.md`; release-please is not set up, so the CHANGELOG lists breaking changes under "Changed since v0.5" rather than "⚠ BREAKING CHANGES" | #53; release-please from v0.1.0 |
 | 17 | Key custody was not declared or checked: a key generated at startup passed production assurance | #57 |
