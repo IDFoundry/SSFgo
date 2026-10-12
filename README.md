@@ -3,6 +3,7 @@
 [![CI](https://github.com/IDFoundry/SSFgo/actions/workflows/ci.yml/badge.svg)](https://github.com/IDFoundry/SSFgo/actions/workflows/ci.yml)
 [![SSF Conformance](https://github.com/IDFoundry/SSFgo/actions/workflows/conformance.yml/badge.svg)](https://github.com/IDFoundry/SSFgo/actions/workflows/conformance.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/idfoundry/ssfgo.svg)](https://pkg.go.dev/github.com/idfoundry/ssfgo)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/IDFoundry/SSFgo/badge)](https://securityscorecards.dev/viewer/?uri=github.com/IDFoundry/SSFgo)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [![Quality Gate](https://sonarcloud.io/api/project_badges/quality_gate?project=IDFoundry_SSFgo)](https://sonarcloud.io/summary/new_code?id=IDFoundry_SSFgo)

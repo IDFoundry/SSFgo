@@ -23,8 +23,8 @@ updates:
         patterns: ["*"]
         update-types: [minor, patch]
 
-  # The third-party actions pinned by commit SHA and GitHub's own actions
-  # pinned by major version, across every workflow.
+  # The actions every workflow uses, all pinned by commit SHA with the
+  # version in a comment.
   - package-ecosystem: github-actions
     directory: /
     schedule:
