@@ -9,16 +9,20 @@ rather than opening a public issue.
 ## Reporting a vulnerability
 
 Use GitHub's private vulnerability reporting: open the **Security** tab on
-this repository and select **Report a vulnerability**. This creates a
-private advisory visible only to maintainers until a fix is ready.
+this repository and select **Report a vulnerability**, or go straight to
+<https://github.com/IDFoundry/SSFgo/security/advisories/new>. This
+creates a private advisory visible only to maintainers until a fix is
+ready.
 
 If private reporting isn't available, open a regular issue asking a
 maintainer to open a private channel — without vulnerability details.
 
 ## Supported versions
 
-SSFgo is pre-1.0 and has no tagged releases yet. Reports against `main`
-are the ones we can act on.
+SSFgo is pre-1.0. Security fixes go into the next release from `main`
+— of the core or of `storage/sqlstore`, whichever the fix is in; earlier
+releases aren't patched separately, so report against the latest
+release or `main`, and upgrade to the release that carries a fix.
 
 ## What to include
 
