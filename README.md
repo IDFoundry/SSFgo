@@ -3,8 +3,13 @@
 [![CI](https://github.com/IDFoundry/SSFgo/actions/workflows/ci.yml/badge.svg)](https://github.com/IDFoundry/SSFgo/actions/workflows/ci.yml)
 [![SSF Conformance](https://github.com/IDFoundry/SSFgo/actions/workflows/conformance.yml/badge.svg)](https://github.com/IDFoundry/SSFgo/actions/workflows/conformance.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/idfoundry/ssfgo.svg)](https://pkg.go.dev/github.com/idfoundry/ssfgo)
-[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=IDFoundry_SSFgo&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=IDFoundry_SSFgo)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+[![Quality Gate](https://sonarcloud.io/api/project_badges/quality_gate?project=IDFoundry_SSFgo)](https://sonarcloud.io/summary/new_code?id=IDFoundry_SSFgo)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=IDFoundry_SSFgo&metric=coverage)](https://sonarcloud.io/summary/new_code?id=IDFoundry_SSFgo)
+[![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=IDFoundry_SSFgo&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=IDFoundry_SSFgo)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=IDFoundry_SSFgo&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=IDFoundry_SSFgo)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=IDFoundry_SSFgo&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=IDFoundry_SSFgo)
 
 SSFgo is a lightweight Go implementation of the OpenID Shared Signals
 Framework, CAEP and RISC, providing embeddable Transmitter and Receiver
