@@ -10,8 +10,8 @@ updates:
 
   # storage/sqlstore's database drivers (pgx, modernc.org/sqlite) and what
   # they pull in. Its requirement on the core module is left alone: a
-  # replace directive points it at this repository, and the pseudo-version
-  # is moved deliberately when sqlstore is released.
+  # replace directive points it at this repository, and the requirement
+  # is raised deliberately, to a core release or commit sqlstore needs.
   - package-ecosystem: gomod
     directory: /storage/sqlstore
     schedule:
