@@ -2,87 +2,8 @@
 
 ## 0.1.0 (2026-10-12)
 
-
-### ⚠ BREAKING CHANGES
-
-* ssf.Assurance is no longer a string type, and revocation.New(store, opts) is now revocation.New(opts) with Options.Store.
-* **transmitter:** under AssuranceProduction, a transmitter.Config with an HTTPClient must also set UnrestrictedPushClient, or use PushTransport and AllowedPrivatePushHosts instead. See UPGRADING.md.
-* **revocation:** revocation.Options.KeysFor takes the token issuer as a second argument, and Revoker.Register returns an error.
-* **sqlstore:** the sqlstore store constructors take a context.Context as their first argument, and refuse a database whose schema CreateSchema has not created or migrated.
-* under ssf.AssuranceProduction, signing keys and private_key_jwt client keys must declare their custody.
-* transmitter.Config, receiver.Config and revocation.Options require Assurance.
-* Delivery.AuthorizationHeader, PushOptions.AuthorizationHeader and ClientCredentials.ClientSecret are ssf.Secret; wrap values with ssf.NewSecret and read them with Reveal.
-* receiver.Config's ReplayWindow, KeyMaxAge and MaxClockSkew move into Limits; transmitter.Config.LongPollTimeout moves into Limits; both roles' Limits, and PushRetry for push, must be set — use the Recommended* functions for the former defaults.
-* EnsureStream no longer replaces a stream on 409 unless StreamRequest.ReplaceOnConflict is set, and APIError.Error() no longer includes the response body.
-* scope revocations to the token issuer each Transmitter speaks for
-* interop.Apply is renamed interop.ApplyTransmitter.
-* storage.CreateOptions.MaxStreamsPerReceiver replaces SingleStreamPerReceiver and ErrTooManyStreams replaces ErrReceiverHasStream; StreamStore.SetSubjectRule and Enqueue take a limit and return ErrTooManySubjectRules / ErrQueueFull.
-* ssf.OAuth2AuthorizationScheme, interop.Events, interop.SubjectFormats (as variables), memstore.Store, memstore.New, receiver.RejectedSET and receiver.ErrCode* are removed or renamed, and caep.AssuranceLevelChange.Namespace changes type; see CHANGELOG.md.
-* storage.StreamStore replaces AddSubject, RemoveSubject and Subjects with SetSubjectRule and SubjectRules (include/exclude rules, needed so a removal is remembered under default_subjects ALL), adds AllStreams, AckEvents and PurgeEvents, and gives PendingEvents a controlOnly parameter.
-
-### Features
-
-* assurance levels and store capabilities ([3f48b89](https://github.com/IDFoundry/SSFgo/commit/3f48b891579449dab6a580d82431785f81953658))
-* **conformance:** run the Transmitter conformance matrix on sqlstore ([ef7e524](https://github.com/IDFoundry/SSFgo/commit/ef7e524fe7893a7d3fe449183d8cf7b99a8e404b))
-* declare and check signing key custody ([205e2ab](https://github.com/IDFoundry/SSFgo/commit/205e2ab5cbb644e95a7ed9fb9bd54392cb5c437d))
-* hardening, client assertions, SSRF-safe push, conformance CI (v0.5) ([6e2b5f1](https://github.com/IDFoundry/SSFgo/commit/6e2b5f1a56d8160492bf9c0024e6d86c75511214))
-* hold credentials in ssf.Secret ([e634c6b](https://github.com/IDFoundry/SSFgo/commit/e634c6b31e3db09f0fb21108faa3afba56a6649a))
-* make Assurance an enumeration, give the Revoker its store in Options, and name fields in every config error ([5bb43f2](https://github.com/IDFoundry/SSFgo/commit/5bb43f21d100cbfd61b02cffc39319e1c81c3040))
-* no implicit defaults for security-relevant configuration ([771ceae](https://github.com/IDFoundry/SSFgo/commit/771ceaef2b434c1ddc7b54ad8e4b7fb37b30c3ae))
-* observability hooks and readiness checks ([4dd9055](https://github.com/IDFoundry/SSFgo/commit/4dd9055e45260bc0a6f743eccb1fb2003926c518))
-* Receiver-side CAEP Interoperability Profile preset ([af23beb](https://github.com/IDFoundry/SSFgo/commit/af23bebf37f584e3032478e17105df5163c8f921))
-* **receiver:** accept per-stream audiences with AudiencePerStream ([5a6a248](https://github.com/IDFoundry/SSFgo/commit/5a6a248455c427b39a98cb5b1e6612d1a0ad2767))
-* **receiver:** EnsureStream ([06ef924](https://github.com/IDFoundry/SSFgo/commit/06ef924272f25fe689391d70400d468736cdb382))
-* **receiver:** KeepAlive for inactivity_timeout ([64883ef](https://github.com/IDFoundry/SSFgo/commit/64883efbc0d74d60a3fbc27f6f2d157fb0ca824a))
-* **receiver:** metadata location fallback; Streams reports rejected streams ([bcedbff](https://github.com/IDFoundry/SSFgo/commit/bcedbfff421b918a3c5decfabc107db25c668741))
-* **receiver:** return ErrIssuerMismatch with the refused stream ([db8e48c](https://github.com/IDFoundry/SSFgo/commit/db8e48cc07ae09aa921378c311e29474ec1a8511))
-* **revocation:** opt-in placeholder session meaning every session ([05c2593](https://github.com/IDFoundry/SSFgo/commit/05c2593f37875fcee4b429e4bc8e54667bea8ff3))
-* **revocation:** revoke tokens as security events arrive ([3efe17f](https://github.com/IDFoundry/SSFgo/commit/3efe17f022f99e84b729643083e49d8c561458bd))
-* **scim:** SCIM events (RFC 9967) ([498e156](https://github.com/IDFoundry/SSFgo/commit/498e156c625c8e8dc8fd79803def34e6f559a339))
-* **sqlstore:** RevocationStore ([94dca5f](https://github.com/IDFoundry/SSFgo/commit/94dca5f3a593eae802f20b3c7083afa46a50f2ab))
-* **sqlstore:** version the schema and migrate it in CreateSchema ([29646f0](https://github.com/IDFoundry/SSFgo/commit/29646f01092164a5f5bf112382473e6a393e8155))
-* SSF Receiver (v0.4) ([1450a2d](https://github.com/IDFoundry/SSFgo/commit/1450a2dd36d8a8db6fa24d57679e917c493af128))
-* SSF, CAEP and RISC wire formats (v0.1) ([1bfc3fc](https://github.com/IDFoundry/SSFgo/commit/1bfc3fcca09ed3c68687af4d7d1356b21419b73e))
-* **ssftest:** in-process Transmitter and Receiver for tests ([faf1a9b](https://github.com/IDFoundry/SSFgo/commit/faf1a9bc2ae76b445bde16a707428c17ff2ff635))
-* **storage:** sqlstore, durable storage for PostgreSQL and SQLite ([c41bf6c](https://github.com/IDFoundry/SSFgo/commit/c41bf6c25c91d452109823a4066216aa87af7a6f))
-* stricter parsing of nbf, repeated members and format names ([3add10b](https://github.com/IDFoundry/SSFgo/commit/3add10be2acf14492cbf2123045e0c2fd8ec8a84))
-* support every asymmetric JWS algorithm ([8d50274](https://github.com/IDFoundry/SSFgo/commit/8d502742359080c0752e95c6532323bdf3e78804))
-* Transmitter event delivery and CAEP Interop profile (v0.3) ([dd57929](https://github.com/IDFoundry/SSFgo/commit/dd57929a98063d348e6613e8a3f4290dfc2ff459))
-* Transmitter stream management API (v0.2) ([0ef7a5e](https://github.com/IDFoundry/SSFgo/commit/0ef7a5ed444de5e64a0eedeccd3505cfb89eb604))
-* Transmitter-initiated verification and inactivity_timeout ([c839400](https://github.com/IDFoundry/SSFgo/commit/c8394005b86a9e0858d2062722df7ec21e3d320c))
-* v1.0 API review and compatibility policy ([c286f02](https://github.com/IDFoundry/SSFgo/commit/c286f0232324b24c2a3724f13d3c273bac47b207))
-
-
-### Bug Fixes
-
-* benchmarks and sqlstore build against the explicit limits ([c844df2](https://github.com/IDFoundry/SSFgo/commit/c844df295cb2c6500e6e376d60db51ed5ebd8681))
-* close SSF spec gaps in subject rules, redelivery and stream calls ([a3511ed](https://github.com/IDFoundry/SSFgo/commit/a3511ed5981ec45e00df7eef6069fcf00c6ea75a))
-* discard SETs with unprocessed critical subject members (SSF 3.6) ([177c58c](https://github.com/IDFoundry/SSFgo/commit/177c58cd8e5c7c668837faa120de4b7f725ef66d))
-* harden hooks, EnsureStream, peer text and push attempts ([fbc4d20](https://github.com/IDFoundry/SSFgo/commit/fbc4d202748c9d6bd14b5ca13ffbd7b6dba1a403))
-* **interop:** require reason_admin on device-compliance-change ([0b1eeba](https://github.com/IDFoundry/SSFgo/commit/0b1eeba9f116f3d4fd26be152ba59facf73b752e))
-* **jose:** refuse small-order Ed25519 keys, parse JWS strictly ([9d268d4](https://github.com/IDFoundry/SSFgo/commit/9d268d4239e4da6b911c5039b50d2ea67f0b7623))
-* pass the 2026-09-30 conformance suite update ([0576756](https://github.com/IDFoundry/SSFgo/commit/0576756d76f6bc7daae3d1eb9dda4f5eed4797ed))
-* pin conformance CI dependencies and address SonarCloud findings ([acbe883](https://github.com/IDFoundry/SSFgo/commit/acbe8835429fb7abf3ddeb35d5ac0d7cece01af7))
-* **receiver:** bound stream lookups, recover handlers, clean token errors ([3797af3](https://github.com/IDFoundry/SSFgo/commit/3797af386d48f807a9c2350837a78bd1b169529f))
-* **receiver:** harden key refresh, redirects and credential origins ([f543163](https://github.com/IDFoundry/SSFgo/commit/f543163bfcf2e02884d4ebe3ccef59c71982bb1e))
-* repair the conformance workflow and lint workflows in CI ([728b141](https://github.com/IDFoundry/SSFgo/commit/728b141adb2ca03933f3a9475f5788e50a48ac41))
-* **revocation:** hold KeysFor to Issuers, and refuse unregistered events ([73508ce](https://github.com/IDFoundry/SSFgo/commit/73508ce6204c1c2ab258a273bb62b67574a0cd9e))
-* **risc:** accept account-disabled reasons RISC does not list ([03988af](https://github.com/IDFoundry/SSFgo/commit/03988afc1b37b47bb99b916c9d437b976111b166))
-* scope revocations to the token issuer each Transmitter speaks for ([9d179b6](https://github.com/IDFoundry/SSFgo/commit/9d179b6434f25f1f594cf59eda9976dcdd90c5c0))
-* security review — trust-boundary fixes ([ab9a6bd](https://github.com/IDFoundry/SSFgo/commit/ab9a6bde74b503373b369b872fef6be307816a0f))
-* **sqlstore:** refuse in-memory SQLite in production, foreign schema tables, and other isolation levels ([733b3b5](https://github.com/IDFoundry/SSFgo/commit/733b3b522721aca1bb65fb477d1637268cd3b929))
-* start storage/sqlstore releases at v0.1.0 ([5d4cbc3](https://github.com/IDFoundry/SSFgo/commit/5d4cbc378a454fdaa4b3d10bd1a09c7ab4d1a88b))
-* **transmitter:** keep push SSRF protection with a custom client, and withhold secrets everywhere ([df9d553](https://github.com/IDFoundry/SSFgo/commit/df9d55332fbf489db77d8c95a4a72dc9db04e1bf))
-* **transmitter:** require PermitEvent and close lock, rule and state gaps ([6fb2c13](https://github.com/IDFoundry/SSFgo/commit/6fb2c1340bb9ac4d712e37d6d4ab9a83b474edfd))
-* **transmitter:** retry push rejections that may clear on their own ([fe21b4e](https://github.com/IDFoundry/SSFgo/commit/fe21b4ecc32931f133ee469b361501554dbbdfbf))
-
-## Changelog
-
-## Unreleased — v0.1.0
-
-Not yet tagged; this entry becomes the release notes when it is. The
-first release: an embeddable SSF Transmitter and Receiver with CAEP and
-RISC, verified against the OpenID Foundation conformance suite.
+The first release: an embeddable SSF Transmitter and Receiver with CAEP
+and RISC, verified against the OpenID Foundation conformance suite.
 See [COMPATIBILITY.md](COMPATIBILITY.md) for what v0.x and v1 promise.
 
 ### Implemented
