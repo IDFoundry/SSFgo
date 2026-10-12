@@ -64,6 +64,12 @@ what changed and why.
 A breaking change also adds its section to [UPGRADING.md](UPGRADING.md)
 in the same pull request: who it affects, why, and what to change.
 
+`release-please-config.json` versions `storage/sqlstore` from these
+messages, by the paths a commit touches: its tags are
+`storage/sqlstore/vX.Y.Z`, starting at v0.x, where a breaking change
+bumps the minor version. Leaving 0.x is a deliberate decision, not
+something a commit message triggers. No workflow runs it yet.
+
 ## Security
 
 Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
