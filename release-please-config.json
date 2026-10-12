@@ -9,7 +9,10 @@
       "bump-patch-for-minor-pre-major": false,
       "exclude-paths": [
         "storage/sqlstore",
-        "examples"
+        "examples",
+        ".github",
+        "conformance",
+        "interoptest"
       ]
     },
     "storage/sqlstore": {
