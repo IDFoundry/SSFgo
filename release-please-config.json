@@ -1,6 +1,17 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "packages": {
+    ".": {
+      "release-type": "go",
+      "include-component-in-tag": false,
+      "initial-version": "0.1.0",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
+      "exclude-paths": [
+        "storage/sqlstore",
+        "examples"
+      ]
+    },
     "storage/sqlstore": {
       "release-type": "go",
       "component": "storage/sqlstore",

@@ -4,6 +4,12 @@ From v1.0.0 SSFgo follows [Semantic Versioning](https://semver.org): a
 program that compiles and works against v1.x keeps compiling and working
 against every later v1.y.
 
+Before v1.0.0, releases are v0.x. A minor release (v0.x.0) may break the
+API; each breaking change is listed under "⚠ BREAKING CHANGES" in
+[CHANGELOG.md](CHANGELOG.md), with a section in
+[UPGRADING.md](UPGRADING.md) saying what to change. A patch release
+(v0.x.y) does not break it.
+
 ## What is covered
 
 The public API is every exported identifier in these packages:
