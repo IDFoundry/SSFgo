@@ -7,7 +7,8 @@
 #   Receiver    — CAEP Interop plan, {static, dynamic} x {poll, push}
 #               — dynamic auth with client_secret_post, client_secret_jwt
 #                 and private_key_jwt
-#               — base plan supported-events test (CAEP + RISC), poll and push
+#               — base plan, every module (supported-events with CAEP + RISC),
+#                 poll and push
 #
 # A Transmitter variant that fails is retried once: the suite occasionally
 # cannot connect to the harness at all (see conformance/README.md).
@@ -97,9 +98,8 @@ for ca in client_secret_post client_secret_jwt private_key_jwt; do
 		-modules openid-ssf-receiver-stream-create-delete,openid-ssf-receiver-stream-verification
 done
 for delivery in poll push; do
-	run_receiver "base supported-events/$delivery" -plan openid-ssf-receiver-test-plan \
-		-variant ssf_profile=default -subjects email -delivery "$delivery" \
-		-modules openid-ssf-receiver-stream-supported-events
+	run_receiver "base/$delivery" -plan openid-ssf-receiver-test-plan \
+		-variant ssf_profile=default -subjects email -delivery "$delivery"
 done
 
 echo
