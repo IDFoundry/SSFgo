@@ -85,13 +85,17 @@ func BenchmarkStreamStore(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			b.Run("MarkSET", func(b *testing.B) {
+			b.Run("ClaimAndComplete", func(b *testing.B) {
 				until := time.Now().Add(time.Hour)
 				i := 0
 				for b.Loop() {
 					i++
-					if fresh, err := replay.MarkSET(ctx, "https://iss", fmt.Sprint(i), until); err != nil || !fresh {
-						b.Fatal(fresh, err)
+					jti := fmt.Sprint(i)
+					if got, err := replay.ClaimSET(ctx, "https://iss", jti, "h", until); err != nil || got != storage.ClaimAcquired {
+						b.Fatal(got, err)
+					}
+					if err := replay.CompleteSET(ctx, "https://iss", jti, until); err != nil {
+						b.Fatal(err)
 					}
 				}
 			})

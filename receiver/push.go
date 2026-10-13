@@ -3,6 +3,7 @@ package receiver
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
@@ -22,8 +23,8 @@ type PushOptions struct {
 // PushHandler returns the http.Handler for a push delivery endpoint
 // (RFC 8935). It answers 202 once a SET has been verified and handled
 // (or recognised as a redelivery), 400 with an RFC 8935 error body for a
-// SET it rejects, and 500 when a handler fails, so the Transmitter
-// retries.
+// SET it rejects, and 500 when a handler fails or another instance is
+// still handling the SET, so the Transmitter retries.
 func (r *Receiver) PushHandler(opts PushOptions) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodPost {
@@ -45,6 +46,11 @@ func (r *Receiver) PushHandler(opts PushOptions) http.Handler {
 		if rej, ok := isRejection(err); ok {
 			r.cfg.Logger.WarnContext(req.Context(), "ssf receiver: rejected pushed SET", "jti", jti, "err", rej.code, "description", rej.description)
 			pushError(w, http.StatusBadRequest, rej.code, rej.description)
+			return
+		}
+		if errors.Is(err, ErrSETInProgress) {
+			r.cfg.Logger.InfoContext(req.Context(), "ssf receiver: pushed SET is being handled by another instance", "jti", jti)
+			http.Error(w, "the SET is being processed", http.StatusInternalServerError)
 			return
 		}
 		if err != nil {

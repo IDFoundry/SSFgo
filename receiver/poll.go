@@ -134,6 +134,8 @@ func (r *Receiver) handlePolled(ctx context.Context, streamID string, sets map[s
 				r.cfg.Logger.WarnContext(ctx, "ssf receiver: rejected polled SET", "jti", got, "err", rej.code, "description", rej.description)
 			}
 			r.queueAck(streamID, "", got, &setErr{Err: rej.code, Description: rej.description})
+		case errors.Is(err, ErrSETInProgress):
+			r.cfg.Logger.InfoContext(ctx, "ssf receiver: polled SET is being handled by another instance", "jti", got)
 		case err != nil:
 			r.cfg.Logger.ErrorContext(ctx, "ssf receiver: handling polled SET failed", "jti", got, "error", err)
 		default:

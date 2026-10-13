@@ -14,6 +14,40 @@ Packages added since v0.5 — `revocation`, `ssftest`, `scim`, the hooks,
 `Receiver.EnsureStream` — have nothing to upgrade from, and are not
 listed.
 
+## v0.2.0 (unreleased)
+
+### `ReplayStore` claims a SET while it is handled (storage, sqlstore)
+
+**Affects:** your own `storage.ReplayStore` implementation, and code
+that calls `MarkSET` or `ForgetSET` itself. A deployment using
+`memstore` or `storage/sqlstore` only needs sqlstore's schema migrated —
+below.
+
+**Why:** a SET was recorded as handled before its handlers ran. If the
+process crashed while they ran, the record survived, and the SET's
+redelivery was acknowledged without being handled; and another instance
+receiving it meanwhile acknowledged it even if the handling then failed.
+Either way the Transmitter discarded a SET that was never handled.
+
+**What to change:** replace `MarkSET` and `ForgetSET` with four methods.
+A record is either a claim, held by a holder until its lease ends, or a
+SET handled:
+
+| Before | After |
+|---|---|
+| `MarkSET(ctx, iss, jti, until) (fresh bool, err error)` | `ClaimSET(ctx, iss, jti, holder, leaseUntil) (storage.ClaimOutcome, error)` — `ClaimAcquired`, `ClaimHeld` or `ClaimDone` |
+| — | `RenewClaim(ctx, iss, jti, holder, leaseUntil) (held bool, err error)` |
+| — | `CompleteSET(ctx, iss, jti, until) error` |
+| `ForgetSET(ctx, iss, jti) error` | `ReleaseClaim(ctx, iss, jti, holder) error` — only the holder's claim |
+
+Each must be atomic; `storagetest.ReplayStore` checks the contract,
+including claims taken over once their lease ends.
+
+`storage/sqlstore`'s schema moves to version 2, adding a column to
+`ssf_replay`; records made before it count as SETs handled. Call
+`CreateSchema` before building the stores, as on every start; until
+then they refuse the database.
+
 ## v0.1.0
 
 ### Every role declares its assurance level (transmitter, receiver)
