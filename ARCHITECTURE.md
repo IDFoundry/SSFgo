@@ -281,8 +281,13 @@ the Transmitter's JWKS.
   are redelivered; `RunPoller` long-polls in a loop.
 - **Processing.** Every SET is decoded by `internal/setcodec` against the
   Transmitter's keys (refetched at most once a minute when a SET names an
-  unknown key), then recorded in a `storage.ReplayStore` so a redelivered
-  SET is acknowledged without being handled twice. A verification event
+  unknown key), then claimed in a `storage.ReplayStore` while its
+  handlers run and recorded as handled once they succeed, so a
+  redelivered SET is acknowledged without being handled twice, and a copy
+  that reaches another instance during the handling, or arrives after a
+  crash, is not acknowledged on the strength of handling that may yet
+  fail. The claim's lease, a minute, is renewed while the handlers run; a
+  crashed process's claim lapses when it ends. A verification event
   carrying a `state` must match one `RequestVerification` issued and has
   not yet been used (§8.1.4.1); one without `state` is accepted
   (§8.1.4). A SET whose complex subject carries a member the Transmitter

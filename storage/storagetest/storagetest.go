@@ -403,59 +403,127 @@ func withoutTimes(s storage.Stream) storage.Stream {
 // newStore. Each subtest gets a fresh, empty store.
 func ReplayStore(t *testing.T, newStore func(t *testing.T) storage.ReplayStore) {
 	far := time.Now().Add(time.Hour)
-	t.Run("MarkOnce", func(t *testing.T) {
-		st := newStore(t)
-		if fresh, err := st.MarkSET(ctx, "https://iss", "1", far); err != nil || !fresh {
-			t.Fatalf("first mark = %v, %v", fresh, err)
-		}
-		if fresh, err := st.MarkSET(ctx, "https://iss", "1", far); err != nil || fresh {
-			t.Errorf("second mark = %v, %v; want not fresh", fresh, err)
-		}
-		if fresh, _ := st.MarkSET(ctx, "https://other", "1", far); !fresh {
-			t.Error("the same jti from another issuer was treated as a replay")
-		}
-	})
-	t.Run("Forget", func(t *testing.T) {
-		st := newStore(t)
-		_, _ = st.MarkSET(ctx, "https://iss", "1", far)
-		if err := st.ForgetSET(ctx, "https://iss", "1"); err != nil {
+	past := time.Now().Add(-time.Second)
+	claim := func(t *testing.T, st storage.ReplayStore, issuer, holder string, until time.Time) storage.ClaimOutcome {
+		t.Helper()
+		got, err := st.ClaimSET(ctx, issuer, "1", holder, until)
+		if err != nil {
 			t.Fatal(err)
 		}
-		if fresh, _ := st.MarkSET(ctx, "https://iss", "1", far); !fresh {
-			t.Error("a forgotten SET is still recorded")
+		return got
+	}
+	t.Run("ClaimOnce", func(t *testing.T) {
+		st := newStore(t)
+		if got := claim(t, st, "https://iss", "a", far); got != storage.ClaimAcquired {
+			t.Fatalf("first claim = %v, want acquired", got)
 		}
-		if err := st.ForgetSET(ctx, "https://iss", "unknown"); err != nil {
-			t.Errorf("forgetting an unknown SET: %v", err)
+		if got := claim(t, st, "https://iss", "b", far); got != storage.ClaimHeld {
+			t.Errorf("claim while held = %v, want held", got)
+		}
+		if got := claim(t, st, "https://iss", "a", far); got != storage.ClaimHeld {
+			t.Errorf("the holder claiming again = %v, want held", got)
+		}
+		if got := claim(t, st, "https://other", "b", far); got != storage.ClaimAcquired {
+			t.Errorf("the same jti from another issuer = %v, want acquired", got)
+		}
+	})
+	t.Run("Complete", func(t *testing.T) {
+		st := newStore(t)
+		claim(t, st, "https://iss", "a", far)
+		if err := st.CompleteSET(ctx, "https://iss", "1", far); err != nil {
+			t.Fatal(err)
+		}
+		if got := claim(t, st, "https://iss", "b", far); got != storage.ClaimDone {
+			t.Errorf("claim of a handled SET = %v, want done", got)
+		}
+		// A handled SET is no one's claim: releasing or renewing it
+		// changes nothing.
+		if err := st.ReleaseClaim(ctx, "https://iss", "1", "a"); err != nil {
+			t.Fatal(err)
+		}
+		if held, err := st.RenewClaim(ctx, "https://iss", "1", "a", far); err != nil || held {
+			t.Errorf("renewing a handled SET = %v, %v; want false", held, err)
+		}
+		if got := claim(t, st, "https://iss", "b", far); got != storage.ClaimDone {
+			t.Errorf("after release and renewal, claim = %v, want done", got)
+		}
+	})
+	t.Run("Release", func(t *testing.T) {
+		st := newStore(t)
+		claim(t, st, "https://iss", "a", far)
+		if err := st.ReleaseClaim(ctx, "https://iss", "1", "b"); err != nil {
+			t.Fatal(err)
+		}
+		if got := claim(t, st, "https://iss", "b", far); got != storage.ClaimHeld {
+			t.Errorf("after another holder's release, claim = %v, want held", got)
+		}
+		if err := st.ReleaseClaim(ctx, "https://iss", "1", "a"); err != nil {
+			t.Fatal(err)
+		}
+		if got := claim(t, st, "https://iss", "b", far); got != storage.ClaimAcquired {
+			t.Errorf("after the holder's release, claim = %v, want acquired", got)
+		}
+		if err := st.ReleaseClaim(ctx, "https://iss", "unknown", "a"); err != nil {
+			t.Errorf("releasing an unknown SET: %v", err)
+		}
+	})
+	t.Run("Lease", func(t *testing.T) {
+		st := newStore(t)
+		claim(t, st, "https://iss", "crashed", past)
+		if got := claim(t, st, "https://iss", "b", far); got != storage.ClaimAcquired {
+			t.Fatalf("claim after the lease ended = %v, want acquired", got)
+		}
+		if held, err := st.RenewClaim(ctx, "https://iss", "1", "crashed", far); err != nil || held {
+			t.Errorf("renewing a claim taken over = %v, %v; want false", held, err)
+		}
+		if held, err := st.RenewClaim(ctx, "https://iss", "1", "b", far); err != nil || !held {
+			t.Errorf("the holder renewing = %v, %v; want true", held, err)
+		}
+		if held, err := st.RenewClaim(ctx, "https://iss", "unknown", "b", far); err != nil || held {
+			t.Errorf("renewing an unknown SET = %v, %v; want false", held, err)
+		}
+	})
+	t.Run("RenewKeepsClaim", func(t *testing.T) {
+		st := newStore(t)
+		claim(t, st, "https://iss", "a", time.Now().Add(200*time.Millisecond))
+		if held, err := st.RenewClaim(ctx, "https://iss", "1", "a", far); err != nil || !held {
+			t.Fatalf("renew = %v, %v", held, err)
+		}
+		time.Sleep(300 * time.Millisecond)
+		if got := claim(t, st, "https://iss", "b", far); got != storage.ClaimHeld {
+			t.Errorf("claim after the original lease, renewed, would have ended = %v, want held", got)
 		}
 	})
 	t.Run("Expiry", func(t *testing.T) {
 		st := newStore(t)
-		_, _ = st.MarkSET(ctx, "https://iss", "1", time.Now().Add(-time.Second))
-		if fresh, _ := st.MarkSET(ctx, "https://iss", "1", far); !fresh {
-			t.Error("an expired record still blocks the SET")
+		if err := st.CompleteSET(ctx, "https://iss", "1", past); err != nil {
+			t.Fatal(err)
+		}
+		if got := claim(t, st, "https://iss", "a", far); got != storage.ClaimAcquired {
+			t.Errorf("claim after the record expired = %v, want acquired", got)
 		}
 	})
 	t.Run("Concurrent", func(t *testing.T) {
 		st := newStore(t)
 		var wg sync.WaitGroup
 		var mu sync.Mutex
-		fresh := 0
-		for range 50 {
+		acquired := 0
+		for i := range 50 {
 			wg.Go(func() {
-				ok, err := st.MarkSET(ctx, "https://iss", "race", far)
+				got, err := st.ClaimSET(ctx, "https://iss", "race", fmt.Sprint("holder-", i), far)
 				if err != nil {
 					t.Error(err)
 				}
-				if ok {
+				if got == storage.ClaimAcquired {
 					mu.Lock()
-					fresh++
+					acquired++
 					mu.Unlock()
 				}
 			})
 		}
 		wg.Wait()
-		if fresh != 1 {
-			t.Errorf("%d concurrent marks succeeded, want exactly 1", fresh)
+		if acquired != 1 {
+			t.Errorf("%d concurrent claims succeeded, want exactly 1", acquired)
 		}
 	})
 }

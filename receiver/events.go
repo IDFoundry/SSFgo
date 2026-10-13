@@ -10,6 +10,7 @@ import (
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/internal/peertext"
 	"github.com/idfoundry/ssfgo/internal/setcodec"
+	"github.com/idfoundry/ssfgo/storage"
 )
 
 // HandlerFunc handles one verified, de-duplicated SET. Returning an error
@@ -136,19 +137,25 @@ func (r *Receiver) process(ctx context.Context, token string) (processed, error)
 		}
 	}
 	defer r.finishHandling(set, h)
-	fresh, err := r.cfg.ReplayStore.MarkSET(ctx, set.Issuer, set.JWTID, expires.Add(r.cfg.Limits.MaxClockSkew))
-	if err != nil {
+	holder, outcome, err := r.claim(ctx, set)
+	switch {
+	case err != nil:
 		h.err = fmt.Errorf("receiver: replay store: %w", err)
 		return p, h.err
-	}
-	if !fresh {
+	case outcome == storage.ClaimDone:
 		// A redelivery (RFC 8935 §2, RFC 8936 §2.4) of a SET already
 		// handled: acknowledge it again without handling it twice.
 		h.err = nil
 		p.duplicate = true
 		return p, nil
+	case outcome == storage.ClaimHeld:
+		h.err = ErrSETInProgress
+		return p, h.err
+	case outcome != storage.ClaimAcquired:
+		h.err = fmt.Errorf("receiver: replay store: unknown claim outcome %d", outcome)
+		return p, h.err
 	}
-	h.err = r.dispatchOrForget(ctx, set)
+	h.err = r.handleClaimed(ctx, set, holder, expires.Add(r.cfg.Limits.MaxClockSkew))
 	return p, h.err
 }
 
@@ -168,8 +175,8 @@ type handling struct {
 
 // startHandling registers set as being handled by this Receiver. If another
 // copy of it already is, it returns that handling and false instead. Only
-// copies reaching the same Receiver value are coordinated; across
-// processes the ReplayStore alone de-duplicates.
+// copies reaching the same Receiver value wait for each other; across
+// processes, a copy that finds the SET claimed reports ErrSETInProgress.
 func (r *Receiver) startHandling(set ssf.SET) (*handling, bool) {
 	key := setKey{set.Issuer, set.JWTID}
 	r.inflightMu.Lock()
@@ -187,24 +194,6 @@ func (r *Receiver) finishHandling(set ssf.SET, h *handling) {
 	delete(r.inflight, setKey{set.Issuer, set.JWTID})
 	r.inflightMu.Unlock()
 	close(h.done)
-}
-
-// dispatchOrForget runs dispatch and, if it fails or panics, forgets the
-// SET so that its redelivery is handled rather than dismissed as a
-// duplicate. A panic is re-raised after the record is removed.
-func (r *Receiver) dispatchOrForget(ctx context.Context, set ssf.SET) (err error) {
-	done := false
-	defer func() {
-		if done && err == nil {
-			return
-		}
-		if ferr := r.cfg.ReplayStore.ForgetSET(context.WithoutCancel(ctx), set.Issuer, set.JWTID); ferr != nil {
-			r.cfg.Logger.ErrorContext(ctx, "ssf receiver: forget failed SET", "jti", set.JWTID, "error", ferr)
-		}
-	}()
-	err = r.dispatch(ctx, set)
-	done = true
-	return err
 }
 
 func (r *Receiver) decode(ctx context.Context, token string) (ssf.SET, error) {

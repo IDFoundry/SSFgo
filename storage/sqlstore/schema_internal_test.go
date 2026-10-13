@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/idfoundry/ssfgo/storage"
 	_ "modernc.org/sqlite"
 )
 
@@ -58,5 +60,38 @@ func TestMigrationsApplyInOrder(t *testing.T) {
 	}
 	if v, _ := readVersion(ctx, db); v != len(released)+2 {
 		t.Errorf("a failed migration recorded version %d", v)
+	}
+}
+
+// A replay record from before version 2 recorded a SET handled, and still
+// does once migrated: its redelivery is acknowledged, not handled again.
+func TestReplayRecordsSurviveVersion2(t *testing.T) {
+	ctx := context.Background()
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(t.TempDir(), "v1.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	released := migrations
+	t.Cleanup(func() { migrations = released })
+	migrations = released[:1]
+	if err := CreateSchema(ctx, db, SQLite); err != nil {
+		t.Fatal(err)
+	}
+	until := time.Now().Add(time.Hour).UnixNano()
+	if _, err := db.ExecContext(ctx, `INSERT INTO ssf_replay (issuer, jti, expires_at) VALUES ('https://iss', 'old', ?)`, until); err != nil {
+		t.Fatal(err)
+	}
+
+	migrations = released
+	if err := CreateSchema(ctx, db, SQLite); err != nil {
+		t.Fatal(err)
+	}
+	replay, err := NewReplayStore(ctx, db, SQLite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := replay.ClaimSET(ctx, "https://iss", "old", "h", time.Now().Add(time.Minute)); err != nil || got != storage.ClaimDone {
+		t.Errorf("a SET recorded before the migration = %v, %v; want done", got, err)
 	}
 }

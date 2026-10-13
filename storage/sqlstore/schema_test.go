@@ -68,8 +68,12 @@ func TestSchemaAdoptsUnversioned(t *testing.T) {
 			if err := st.CreateStream(ctx, storage.Stream{ID: "s1", ReceiverID: "rx", Delivery: ssf.Delivery{Method: ssf.DeliveryPoll}}, storage.CreateOptions{}); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := db.ExecContext(ctx, "DROP TABLE ssf_schema"); err != nil {
-				t.Fatal(err)
+			// What a database made before versions were recorded lacks:
+			// ssf_schema, and what later versions added.
+			for _, stmt := range []string{"DROP TABLE ssf_schema", "ALTER TABLE ssf_replay DROP COLUMN holder"} {
+				if _, err := db.ExecContext(ctx, stmt); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if err := newStores(db, d.dialect); err == nil || !strings.Contains(err.Error(), "CreateSchema") {
 				t.Errorf("stores on an unversioned database: %v", err)

@@ -67,6 +67,11 @@ var migrations = [][]string{{
 		PRIMARY KEY (kind, issuer, value)
 	)`,
 	`CREATE INDEX IF NOT EXISTS ssf_revocations_expires ON ssf_revocations (expires_at)`,
+}, {
+	// Version 2: a replay record is a claim while a SET is being handled,
+	// held by holder; with no holder, it is a SET handled, as every record
+	// before this version was.
+	`ALTER TABLE ssf_replay ADD COLUMN holder TEXT NOT NULL DEFAULT ''`,
 }}
 
 // schemaTable records the database's schema version, in one row.

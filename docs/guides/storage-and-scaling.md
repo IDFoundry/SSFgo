@@ -67,7 +67,10 @@ rxCfg.HorizontallyScaled = true
   delivers pushed SETs, in **one** instance only: it coordinates
   deliveries within its process, so several would push the same SETs.
 - **Receiver.** Any instance can take a push or poll: the shared replay
-  store keeps a SET from being handled twice.
+  store keeps a SET from being handled twice. An instance that receives
+  a SET another is still handling leaves it unacknowledged
+  (`receiver.ErrSETInProgress`), so the Transmitter delivers it again,
+  and it is handled then if that handling failed.
 - **Revocation.** Every instance sees every revocation, so set
   `HorizontallyScaled` in `revocation.Options` too.
 

@@ -211,7 +211,7 @@ func TestDurable(t *testing.T) {
 	if err := st.Enqueue(ctx, "s1", storage.QueuedEvent{JTI: "j1", SET: "a.b.c", EnqueuedAt: created, Control: true}, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := replay.MarkSET(ctx, "https://iss", "j9", time.Now().Add(time.Hour)); err != nil {
+	if err := replay.CompleteSET(ctx, "https://iss", "j9", time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -236,8 +236,8 @@ func TestDurable(t *testing.T) {
 	if len(q) != 1 || q[0] != (storage.QueuedEvent{JTI: "j1", SET: "a.b.c", EnqueuedAt: created, Control: true}) {
 		t.Errorf("reopened queue = %+v", q)
 	}
-	if fresh, _ := replay.MarkSET(ctx, "https://iss", "j9", time.Now().Add(time.Hour)); fresh {
-		t.Error("a SET recorded before reopening was accepted again")
+	if got, _ := replay.ClaimSET(ctx, "https://iss", "j9", "h", time.Now().Add(time.Hour)); got != storage.ClaimDone {
+		t.Errorf("a SET handled before reopening = %v, want done", got)
 	}
 }
 

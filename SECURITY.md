@@ -42,8 +42,10 @@ What SSFgo enforces on its own, so reviewers know where to look:
   the algorithm the token names. `none` and HMAC algorithms are rejected.
   RSA keys must be 2048–8192 bits. `iss`, `aud`, `typ` and `iat` are
   checked, and SETs carrying `sub` or `exp` are refused (SSF 1.0 §4).
-- **Replay.** Processed SETs are recorded in a `storage.ReplayStore`; a
-  redelivered SET is acknowledged but not handled again.
+- **Replay.** A SET is claimed in a `storage.ReplayStore` while its
+  handlers run and recorded once they succeed; a redelivered SET is
+  acknowledged but not handled again, and one another instance is still
+  handling is left for the Transmitter to deliver again.
 - **Verification state.** A verification event carrying `state` must match
   an outstanding request from this Receiver (SSF 1.0 §8.1.4.1).
 - **Transport.** Issuers and every advertised endpoint must be `https`.
