@@ -14,7 +14,7 @@ Packages added since v0.5 — `revocation`, `ssftest`, `scim`, the hooks,
 `Receiver.EnsureStream` — have nothing to upgrade from, and are not
 listed.
 
-## v0.2.0 (unreleased)
+## v0.2.0
 
 ### `ReplayStore` claims a SET while it is handled (storage, sqlstore)
 
