@@ -24,6 +24,8 @@ const (
 	verificationRetry = 5 * time.Second
 	// cleanupTimeout bounds the final acknowledgement and stream deletion.
 	cleanupTimeout = 30 * time.Second
+	// subjectEmail is the subject the suite sends events about.
+	subjectEmail = "ssfgo-user@example.com"
 )
 
 // session is one Receiver run against one test module's emulated
@@ -32,6 +34,7 @@ type session struct {
 	o        options
 	client   *http.Client
 	exposed  map[string]string
+	module   string
 	moduleID string
 	push     *pushRouter
 	finished func() bool
@@ -128,6 +131,7 @@ func (s *session) run(ctx context.Context) error {
 
 	// Take delivery until the module is satisfied, or events stop.
 	lastCount, lastChange := int64(-1), time.Now()
+	managed, awaitAfter := false, int64(-1)
 	for ctx.Err() == nil && !s.finished() {
 		if s.o.delivery == "poll" {
 			if _, err := rx.Poll(ctx, stream, receiver.PollOptions{}); err != nil {
@@ -143,10 +147,20 @@ func (s *session) run(ctx context.Context) error {
 			}
 			lastRequest = time.Now()
 		}
+		if s.verification.Load() && !managed {
+			managed = true
+			await, err := s.manage(ctx, rx, stream, req)
+			if err != nil {
+				return err
+			}
+			if await {
+				awaitAfter = s.events.Load()
+			}
+		}
 		if n := s.events.Load(); n != lastCount {
 			lastCount, lastChange = n, time.Now()
 		}
-		if s.verification.Load() && time.Since(lastChange) > s.o.idle {
+		if s.verification.Load() && s.events.Load() > awaitAfter && time.Since(lastChange) > s.o.idle {
 			break
 		}
 		time.Sleep(time.Second)
@@ -165,6 +179,38 @@ func (s *session) run(ctx context.Context) error {
 	}
 	slog.Info("session done", "module", s.moduleID, "events", s.events.Load(), "verified", s.verification.Load())
 	return nil
+}
+
+// manage makes the stream management calls a base-plan module waits
+// for, once the stream is verified, and reports whether the module
+// then sends an event the session must take delivery of before it
+// deletes the stream.
+func (s *session) manage(ctx context.Context, rx *receiver.Receiver, stream ssf.StreamConfiguration, req receiver.StreamRequest) (bool, error) {
+	switch s.module {
+	case "openid-ssf-receiver-happypath":
+		description := "SSFgo conformance Receiver, updated"
+		if _, err := rx.UpdateStream(ctx, stream.StreamID, receiver.StreamUpdate{Description: &description}); err != nil {
+			return false, fmt.Errorf("update stream: %w", err)
+		}
+		if _, err := rx.ReplaceStream(ctx, stream.StreamID, req); err != nil {
+			return false, fmt.Errorf("replace stream: %w", err)
+		}
+		return false, nil
+	case "openid-ssf-receiver-stream-status-update":
+		// The Transmitter reports the change with a stream-updated event.
+		if _, err := rx.SetStatus(ctx, stream.StreamID, ssf.StreamEnabled, ""); err != nil {
+			return false, fmt.Errorf("set status: %w", err)
+		}
+		return true, nil
+	case "openid-ssf-receiver-removed-subject-event":
+		// The Transmitter then sends an event about the removed subject,
+		// which SSF 1.0 §9.3 allows and the Receiver must accept.
+		if err := rx.RemoveSubject(ctx, stream.StreamID, ssf.EmailSubject{Email: subjectEmail}); err != nil {
+			return false, fmt.Errorf("remove subject: %w", err)
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 func (s *session) tokenSource() (receiver.TokenSource, error) {
