@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/IDFoundry/SSFgo/compare/v0.1.0...v0.2.0) (2026-10-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* storage.ReplayStore's MarkSET and ForgetSET are replaced by ClaimSET, RenewClaim, CompleteSET and ReleaseClaim, and storage/sqlstore's schema moves to version 2: call CreateSchema before building the stores. See UPGRADING.md for v0.2.0.
+
+### Bug Fixes
+
+* claim a SET while it is handled, so a crash or another instance cannot lose it ([3c5ac65](https://github.com/IDFoundry/SSFgo/commit/3c5ac65d2259f388d7ed8658b9b70deb538bf28f))
+
 ## 0.1.0 (2026-10-12)
 
 The first release: an embeddable SSF Transmitter and Receiver with CAEP
