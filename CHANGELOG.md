@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/IDFoundry/SSFgo/compare/v0.2.0...v0.2.1) (2026-10-14)
+
+
+### Tests
+
+* **storagetest:** the ReplayStore and RevocationStore suites race concurrent writes to one record, so a store whose concurrent writes fail rather than wait fails them ([ee38a31](https://github.com/IDFoundry/SSFgo/commit/ee38a316ac41c32bd7eda8ff176375f04ecda16f))
+
 ## [0.2.0](https://github.com/IDFoundry/SSFgo/compare/v0.1.0...v0.2.0) (2026-10-13)
 
 
