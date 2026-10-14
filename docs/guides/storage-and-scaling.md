@@ -78,7 +78,11 @@ rxCfg.HorizontallyScaled = true
   store keeps a SET from being handled twice. An instance that receives
   a SET another is still handling leaves it unacknowledged
   (`receiver.ErrSETInProgress`), so the Transmitter delivers it again,
-  and it is handled then if that handling failed.
+  and it is handled then if that handling failed. To spread a stream's
+  SETs across instances, use push delivery behind a load balancer. Run a
+  poll stream's `RunPoller` in **one** instance: a poll returns every SET
+  not yet acknowledged (RFC 8936 §2.4), so several pollers receive the
+  same SETs — safe, but no faster than one.
 - **Revocation.** Every instance sees every revocation, so set
   `HorizontallyScaled` in `revocation.Options` too.
 
