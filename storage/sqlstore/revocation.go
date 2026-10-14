@@ -78,7 +78,8 @@ func (s *RevocationStore) RevokedAt(ctx context.Context, key storage.RevocationK
 
 // unixNano is t.UnixNano clamped to the int64 range, which UnixNano
 // leaves undefined beyond: an expiry after 2262 would otherwise wrap into
-// the past, and the revocation would never be in force.
+// the past, a revocation would never be in force, and a claimed or
+// handled SET would be claimed again.
 func unixNano(t time.Time) int64 {
 	switch {
 	case t.After(maxTime):

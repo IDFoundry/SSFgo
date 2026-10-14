@@ -186,6 +186,48 @@ func TestRevocationContract(t *testing.T) {
 	}
 }
 
+// TestReplayFarFuture stores leases and records ending after 2262, which
+// int64 nanoseconds cannot hold: they must not wrap into the past, where
+// a claim would be taken over and a handled SET handled again.
+func TestReplayFarFuture(t *testing.T) {
+	year3000 := time.Date(3000, 1, 1, 0, 0, 0, 0, time.UTC)
+	soon := time.Now().Add(time.Minute)
+	for _, d := range dialects {
+		t.Run(d.name, func(t *testing.T) {
+			st, err := sqlstore.NewReplayStore(ctx, d.open(t), d.dialect)
+			if err != nil {
+				t.Fatal(err)
+			}
+			claim := func(jti, holder string, until time.Time) storage.ClaimOutcome {
+				t.Helper()
+				got, err := st.ClaimSET(ctx, "https://iss", jti, holder, until)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return got
+			}
+			claim("claimed", "a", year3000)
+			if got := claim("claimed", "b", soon); got != storage.ClaimHeld {
+				t.Errorf("claim of a SET leased until 3000 = %v, want held", got)
+			}
+			claim("renewed", "a", soon)
+			if held, err := st.RenewClaim(ctx, "https://iss", "renewed", "a", year3000); err != nil || !held {
+				t.Fatalf("renew = %v, %v", held, err)
+			}
+			if got := claim("renewed", "b", soon); got != storage.ClaimHeld {
+				t.Errorf("claim of a SET renewed until 3000 = %v, want held", got)
+			}
+			claim("completed", "a", soon)
+			if err := st.CompleteSET(ctx, "https://iss", "completed", year3000); err != nil {
+				t.Fatal(err)
+			}
+			if got := claim("completed", "b", soon); got != storage.ClaimDone {
+				t.Errorf("claim of a SET handled until 3000 = %v, want done", got)
+			}
+		})
+	}
+}
+
 // TestDurable reopens a database and finds everything that was stored.
 func TestDurable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ssf.db")
