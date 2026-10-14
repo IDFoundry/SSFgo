@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/IDFoundry/SSFgo/compare/v0.2.1...v0.3.0) (2026-10-14)
+
+
+### Features
+
+* add Receiver.Verify and the ssf command-line tool ([c22b0bf](https://github.com/IDFoundry/SSFgo/commit/c22b0bff04aa9b4e47c644e3767a606bf5d229fb))
+
 ## [0.2.1](https://github.com/IDFoundry/SSFgo/compare/v0.2.0...v0.2.1) (2026-10-14)
 
 
