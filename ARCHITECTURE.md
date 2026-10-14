@@ -40,6 +40,7 @@ github.com/idfoundry/ssfgo     // package ssf: shared value types only
 │   ├── clientassertion/       // RFC 7523 client assertions (HS256 kept out of jose)
 │   ├── conformance/txharness/ // the conformance Transmitter, on any StreamStore
 │   └── testcert/              // throwaway TLS certificates for the harnesses
+├── cmd/ssf/                   // CLI: discover a Transmitter, verify or decode a SET
 ├── cmd/conformance-transmitter/ // the conformance Transmitter on memstore
 ├── cmd/conformance-receiver/  // drives the Receiver through OIDF Receiver plans
 ├── examples/session-revocation/ // both roles in one process (its own module)
@@ -298,7 +299,8 @@ the Transmitter's JWKS.
   (§3.6): the §3.3 members always count as processed, others only when
   listed in `Config.SubjectMembers`. Handlers are registered per event
   type, typed with `receiver.On[E]`; an event of a registered type with no
-  handler is acknowledged and ignored.
+  handler is acknowledged and ignored. `Verify` makes the same checks on a
+  SET without claiming, handling or recording it.
 
 ## Stream management (v0.2)
 

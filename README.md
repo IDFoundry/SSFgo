@@ -177,6 +177,22 @@ err = tx.Emit(ctx, subject, caep.SessionRevoked{...})
 _, err = rx.Poll(ctx, stream, receiver.PollOptions{}) // your handlers run
 ```
 
+## Command line
+
+`ssf` inspects a Transmitter and its SETs with the Receiver's own checks:
+
+```sh
+go install github.com/idfoundry/ssfgo/cmd/ssf@latest
+
+ssf metadata https://tx.example.com      # discover it as a Receiver does, or say why one would refuse it
+ssf verify -issuer https://tx.example.com -audience https://rp.example.com set.jwt
+ssf decode -unverified < set.jwt         # print a SET without checking anything
+```
+
+`verify` checks a SET's signature against the Transmitter's published
+keys, and its issuer, audience, age, event type and subject, as delivery
+does — through `receiver.Receiver.Verify`, which applications can call too.
+
 ## Design
 
 See [ARCHITECTURE.md](ARCHITECTURE.md), and [SECURITY.md](SECURITY.md) for
