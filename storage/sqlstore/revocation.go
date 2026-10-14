@@ -38,14 +38,19 @@ func NewRevocationStore(ctx context.Context, db *sql.DB, d Dialect) (*Revocation
 // revocation or, for a key already revoked, keeps the later of each time,
 // so concurrent Revokes cannot lose the latest.
 func (s *RevocationStore) Revoke(ctx context.Context, key storage.RevocationKey, at, expires time.Time) error {
-	_, err := s.db.ExecContext(ctx, s.d.rebind(`INSERT INTO ssf_revocations (kind, issuer, value, revoked_at, expires_at)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT (kind, issuer, value) DO UPDATE SET
-			revoked_at = CASE WHEN excluded.revoked_at > ssf_revocations.revoked_at
-				THEN excluded.revoked_at ELSE ssf_revocations.revoked_at END,
-			expires_at = CASE WHEN excluded.expires_at > ssf_revocations.expires_at
-				THEN excluded.expires_at ELSE ssf_revocations.expires_at END`),
-		string(key.Kind), key.Issuer, key.Value, unixNano(at), unixNano(expires))
+	// At READ COMMITTED on PostgreSQL: at a higher isolation level,
+	// concurrent upserts of one key can fail with a serialization error.
+	err := s.d.readCommitted(ctx, s.db, func(q querier) error {
+		_, err := q.ExecContext(ctx, s.d.rebind(`INSERT INTO ssf_revocations (kind, issuer, value, revoked_at, expires_at)
+			VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT (kind, issuer, value) DO UPDATE SET
+				revoked_at = CASE WHEN excluded.revoked_at > ssf_revocations.revoked_at
+					THEN excluded.revoked_at ELSE ssf_revocations.revoked_at END,
+				expires_at = CASE WHEN excluded.expires_at > ssf_revocations.expires_at
+					THEN excluded.expires_at ELSE ssf_revocations.expires_at END`),
+			string(key.Kind), key.Issuer, key.Value, unixNano(at), unixNano(expires))
+		return err
+	})
 	if err != nil {
 		return err
 	}
