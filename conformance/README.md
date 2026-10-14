@@ -98,14 +98,21 @@ until one is accepted), take delivery until events stop, delete the
 stream. Push deliveries arrive on a self-signed
 HTTPS listener the suite reaches at `https://host.docker.internal:9444`.
 
+Three base-plan modules wait for a stream management call as well. Once
+the stream is verified the driver makes it: for `happypath` it updates
+the stream and replaces it; for `stream-status-update` it sets the
+status, and for `removed-subject-event` it removes the email subject. In
+those last two the driver also waits for the event the emulated
+Transmitter sends in reply before deleting the stream — otherwise the
+module logs that it could not assess the Receiver, and passes.
+
 ```bash
 # CAEP Interop plan: -auth static|dynamic, -delivery poll|push
 go run ./cmd/conformance-receiver -auth dynamic -delivery push
 
-# base plan's supported-events test (every CAEP and RISC event type)
+# base plan, every module: -delivery poll|push
 go run ./cmd/conformance-receiver -plan openid-ssf-receiver-test-plan \
-  -variant ssf_profile=default -subjects email \
-  -modules openid-ssf-receiver-stream-supported-events
+  -variant ssf_profile=default -subjects email -delivery poll
 ```
 
 For the CAEP Interop plan the driver applies `interop.ApplyReceiver`, so
@@ -122,9 +129,19 @@ configuration). All four pass the create-delete and verification modules
 [`scripts/run-all.sh`](scripts/run-all.sh) runs the whole matrix — both
 roles, every variant, every client authentication method — and prints one
 summary.
-`.github/workflows/conformance.yml` runs it daily and on demand.
+`.github/workflows/conformance.yml` runs it daily and on demand, against
+the suite's newest release: it finds the highest `release-v*` tag, checks
+the suite out at that tag and runs the prebuilt image of the same tag.
+The suite's `latest` and `unstable` images are not rebuilt with each
+release, so they can lag it by months.
 
 ### Results
+
+**2026-10-14, suite release-v5.3.2:** the whole matrix passes — every
+Transmitter variant on memory and SQLite, every CAEP Interop Receiver
+variant and client authentication method, and every module of the base
+Receiver plan below. The tables below record when each plan was first
+run in full.
 
 Transmitter: v0.4, run 2026-09-26 against the suite's `latest` prebuilt
 image, and still passing every module on both stores on 2026-10-03.
@@ -149,10 +166,33 @@ used to send:
 | openid-ssf-receiver-access-token-expiry | — | — | PASSED | PASSED |
 | openid-ssf-receiver-stream-caep-interop | PASSED | PASSED | PASSED | PASSED |
 
-**Base SSF Receiver plan**, `openid-ssf-receiver-stream-supported-events`
-with CAEP and RISC registered: PASSED for poll and push. Each run
-delivered 23 distinct event types — verification, all 8 CAEP and all 14
-RISC types — every one verified, handled and acknowledged.
+**Base SSF Receiver plan** — every module, run 2026-10-14 against
+release-v5.3.2 with CAEP and RISC registered and static auth. The CAEP
+Interop plan leaves out `happypath`, `stream-status-update`,
+`transmitter-initiated-status-change` and `removed-subject-event`, so
+they run only here:
+
+| Module | poll | push |
+|---|---|---|
+| openid-ssf-receiver-happypath | PASSED | PASSED |
+| openid-ssf-receiver-stream-create-delete | PASSED | PASSED |
+| openid-ssf-receiver-stream-status-update | PASSED | PASSED |
+| openid-ssf-receiver-stream-verification | PASSED | PASSED |
+| openid-ssf-receiver-unsolicited-stream-verification | PASSED | PASSED |
+| openid-ssf-receiver-stream-supported-events | PASSED | PASSED |
+| openid-ssf-receiver-invalid-set-rejection | PASSED | PASSED |
+| openid-ssf-receiver-verification-wrong-state | PASSED | PASSED |
+| openid-ssf-receiver-verification-wrong-subject | PASSED | PASSED |
+| openid-ssf-receiver-stream-issuer-mismatch | PASSED | PASSED |
+| openid-ssf-receiver-transmitter-initiated-status-change | PASSED | PASSED |
+| openid-ssf-receiver-verification-behind-queued-events | PASSED | PASSED |
+| openid-ssf-receiver-redelivered-set | PASSED | PASSED |
+| openid-ssf-receiver-removed-subject-event | PASSED | PASSED |
+
+`access-token-expiry` needs dynamic auth; it passes in the CAEP Interop
+plan above. The supported-events module delivered 23 distinct event
+types — verification, all 8 CAEP and all 14 RISC types — every one
+verified, handled and acknowledged.
 
 **Subjects for the base plan.** The supported-events test sends every
 event about every configured subject, including RISC `identifier-changed`

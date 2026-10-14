@@ -150,7 +150,7 @@ func runModule(client *http.Client, o options, planID, name string, push *pushRo
 		st, _, _ := waitUntilFinished(client, o.suite, module.ID, 0)
 		return st == "FINISHED" || st == "INTERRUPTED"
 	}
-	s := &session{o: o, client: client, exposed: exposed, moduleID: module.ID, push: push, finished: finished}
+	s := &session{o: o, client: client, exposed: exposed, module: name, moduleID: module.ID, push: push, finished: finished}
 	if err := s.run(ctx); err != nil {
 		slog.Error("receiver session", "module", name, "error", err)
 	}
@@ -169,7 +169,7 @@ func runModule(client *http.Client, o options, planID, name string, push *pushRo
 // subjects events are sent about, and the credentials the emulated
 // Transmitter accepts.
 func suiteConfig(o options, staticToken string) ([]byte, error) {
-	subjects := []map[string]string{{"format": "email", "email": "ssfgo-user@example.com"}}
+	subjects := []map[string]string{{"format": "email", "email": subjectEmail}}
 	if o.subjects == "caep" {
 		subjects = append(subjects, map[string]string{"format": "iss_sub", "iss": "https://idp.example.com", "sub": "ssfgo-user"})
 	}

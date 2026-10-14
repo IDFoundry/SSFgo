@@ -14,7 +14,7 @@ jobs:
   conformance:
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    # The job runs the OIDF suite's latest code, unpinned, as an early
+    # The job runs the OIDF suite's newest release, unpinned, as an early
     # warning of suite changes. So it keeps no Git credentials for that code
     # to use, and caches no Go build state another workflow could restore.
     steps:
@@ -32,8 +32,21 @@ jobs:
         with:
           python-version: '3.x'
 
+      # The suite publishes an image for each release; its "latest" image
+      # is not rebuilt with them. Run the newest release's image, with the
+      # scripts from the same release.
+      - name: Find the suite's newest release
+        id: suite
+        run: |
+          tag=$(git ls-remote --tags --refs https://gitlab.com/openid/conformance-suite.git 'release-v*' | sed 's#.*refs/tags/##' | sort -V | tail -1)
+          if [ -z "$tag" ]; then echo "no suite release found" >&2; exit 1; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "OIDF conformance suite: $tag" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Clone OIDF conformance suite
-        run: git clone --depth 1 https://gitlab.com/openid/conformance-suite.git /tmp/conformance-suite
+        env:
+          SUITE_TAG: ${{ steps.suite.outputs.tag }}
+        run: git clone --depth 1 --branch "$SUITE_TAG" https://gitlab.com/openid/conformance-suite.git /tmp/conformance-suite
 
       # Pinned and hash-checked here rather than taken from the suite's own
       # unpinned requirements.txt.
@@ -42,6 +55,8 @@ jobs:
 
       - name: Bring up OIDF conformance suite
         working-directory: /tmp/conformance-suite
+        env:
+          IMAGE_TAG: ${{ steps.suite.outputs.tag }}
         run: docker compose -f docker-compose-prebuilt.yml -f "$GITHUB_WORKSPACE/conformance/scripts/suite-host-gateway.override.yml" up -d
 
       - name: Run the conformance matrix
@@ -69,4 +84,6 @@ jobs:
       - name: Tear down suite containers
         if: always()
         working-directory: /tmp/conformance-suite
+        env:
+          IMAGE_TAG: ${{ steps.suite.outputs.tag }}
         run: docker compose -f docker-compose-prebuilt.yml down -v || true
