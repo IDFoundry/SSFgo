@@ -115,6 +115,33 @@ func TestRedeliveryAfterCrashMidHandling(t *testing.T) {
 	}
 }
 
+func TestPollAcknowledgementLostInRestart(t *testing.T) {
+	// A polled SET's acknowledgement waits, in memory, for the next poll.
+	// If the process stops first, the Transmitter returns the SET to the
+	// restarted process, which must acknowledge it without handling it
+	// again: the shared replay store, not the lost acknowledgement,
+	// records that it was handled.
+	e := newEnv(t)
+	var calls atomic.Int32
+	receiver.On(e.rx, func(context.Context, ssf.SET, caep.SessionRevoked) error {
+		calls.Add(1)
+		return nil
+	})
+	token := sign(t, e, func(s *ssf.SET) { s.JWTID = "unacked" })
+	// Handled, and its acknowledgement lost with the process.
+	_, _ = receiver.ProcessPolled(e.rx, "stream", map[string]string{"unacked": token})
+
+	restarted := secondInstance(t, e)
+	receiver.On(restarted, func(context.Context, ssf.SET, caep.SessionRevoked) error {
+		calls.Add(1)
+		return nil
+	})
+	ack, errs := receiver.ProcessPolled(restarted, "stream", map[string]string{"unacked": token})
+	if len(ack) != 1 || len(errs) != 0 || calls.Load() != 1 {
+		t.Errorf("returned to the restarted process: ack %v, errors %v after %d handler calls; want it acknowledged after 1", ack, errs, calls.Load())
+	}
+}
+
 func TestClaimRenewedWhileHandling(t *testing.T) {
 	receiver.SetClaimLease(t, 150*time.Millisecond)
 	e := newEnv(t)
