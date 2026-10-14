@@ -81,6 +81,12 @@ go func() { _ = rx.RunPoller(ctx, stream) }()
 For more control, call `rx.Poll(ctx, stream, receiver.PollOptions{Wait:
 true})` yourself; what it handled is acknowledged with the next poll.
 
+Poll a stream from one process. A poll returns every SET not yet
+acknowledged, so several pollers of one stream receive the same SETs:
+the replay store keeps each from being handled twice, but the work is
+not shared. Push spreads a stream's SETs across instances behind a load
+balancer — see [Storage and scaling](storage-and-scaling.md).
+
 On the Transmitter, poll needs nothing beyond `Handler()`.
 `transmitter.Limits.LongPollTimeout` is how long a waiting poll is held
 before it is answered empty; keep it under the idle timeout of any proxy
