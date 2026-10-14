@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -504,26 +505,29 @@ func ReplayStore(t *testing.T, newStore func(t *testing.T) storage.ReplayStore) 
 		}
 	})
 	t.Run("Concurrent", func(t *testing.T) {
+		// Several rounds, each racing claims on a new SET: one round
+		// rarely overlaps the claims enough to find a store whose
+		// concurrent claims fail rather than wait for each other.
 		st := newStore(t)
-		var wg sync.WaitGroup
-		var mu sync.Mutex
-		acquired := 0
-		for i := range 50 {
-			wg.Go(func() {
-				got, err := st.ClaimSET(ctx, "https://iss", "race", fmt.Sprint("holder-", i), far)
-				if err != nil {
-					t.Error(err)
-				}
-				if got == storage.ClaimAcquired {
-					mu.Lock()
-					acquired++
-					mu.Unlock()
-				}
-			})
-		}
-		wg.Wait()
-		if acquired != 1 {
-			t.Errorf("%d concurrent claims succeeded, want exactly 1", acquired)
+		for round := range 20 {
+			jti := fmt.Sprint("race-", round)
+			var wg sync.WaitGroup
+			var acquired atomic.Int32
+			for i := range 50 {
+				wg.Go(func() {
+					got, err := st.ClaimSET(ctx, "https://iss", jti, fmt.Sprint("holder-", i), far)
+					if err != nil {
+						t.Error(err)
+					}
+					if got == storage.ClaimAcquired {
+						acquired.Add(1)
+					}
+				})
+			}
+			wg.Wait()
+			if n := acquired.Load(); n != 1 {
+				t.Fatalf("SET %s: %d concurrent claims succeeded, want exactly 1", jti, n)
+			}
 		}
 	})
 }
@@ -566,6 +570,26 @@ func RevocationStore(t *testing.T, newStore func(t *testing.T) storage.Revocatio
 		_ = st.Revoke(ctx, user, now.Add(time.Minute), now.Add(time.Hour))
 		if at, _, _ := st.RevokedAt(ctx, user, now); !at.Equal(now.Add(time.Minute)) {
 			t.Errorf("a later revocation was not recorded: %v", at)
+		}
+	})
+	t.Run("Concurrent", func(t *testing.T) {
+		// Concurrent revocations of one key all succeed, and the latest
+		// is kept.
+		st := newStore(t)
+		for round := range 5 {
+			key := storage.RevocationKey{Kind: storage.RevokeUser, Issuer: "https://idp.example", Value: fmt.Sprint("user-", round)}
+			var wg sync.WaitGroup
+			for i := range 50 {
+				wg.Go(func() {
+					if err := st.Revoke(ctx, key, now.Add(time.Duration(i)*time.Second), now.Add(time.Hour)); err != nil {
+						t.Error(err)
+					}
+				})
+			}
+			wg.Wait()
+			if at, ok, err := st.RevokedAt(ctx, key, now); err != nil || !ok || !at.Equal(now.Add(49*time.Second)) {
+				t.Fatalf("%s after concurrent revocations = %v, %v, %v; want the latest, %v", key.Value, at, ok, err, now.Add(49*time.Second))
+			}
 		}
 	})
 	t.Run("Expires", func(t *testing.T) {
