@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/IDFoundry/SSFgo/compare/storage/sqlstore/v0.2.1...storage/sqlstore/v0.2.2) (2026-10-14)
+
+
+### Bug Fixes
+
+* **sqlstore:** write replay claims and revocations at READ COMMITTED on PostgreSQL ([aae8fb7](https://github.com/IDFoundry/SSFgo/commit/aae8fb7a480ff8d40ff8192a10de5df4ebd651bf))
+
 ## [0.2.1](https://github.com/IDFoundry/SSFgo/compare/storage/sqlstore/v0.2.0...storage/sqlstore/v0.2.1) (2026-10-13)
 
 
