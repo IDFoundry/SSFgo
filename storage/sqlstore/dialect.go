@@ -153,6 +153,19 @@ func (d Dialect) inTx(ctx context.Context, db *sql.DB, fn func(querier) error) e
 	return nil
 }
 
+// readCommitted runs fn at READ COMMITTED: on PostgreSQL in a
+// transaction at that level, whatever the database's default; on SQLite,
+// whose transactions are serializable but run one at a time, directly on
+// db. It is for statements that need no transaction but would, at a
+// higher isolation level, fail with a serialization error rather than
+// wait for a concurrent write to the same row.
+func (d Dialect) readCommitted(ctx context.Context, db *sql.DB, fn func(querier) error) error {
+	if d == Postgres {
+		return d.inTx(ctx, db, fn)
+	}
+	return fn(db)
+}
+
 // discard closes a connection instead of returning it to the pool.
 func discard(conn *sql.Conn) {
 	_ = conn.Raw(func(any) error { return driver.ErrBadConn })

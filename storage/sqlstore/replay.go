@@ -11,7 +11,10 @@ import (
 )
 
 // ReplayStore implements storage.ReplayStore. Expired records are deleted
-// as new ones are added.
+// as new ones are added. Its writes run at READ COMMITTED on PostgreSQL,
+// so that concurrent claims on one SET wait for each other rather than
+// fail with a serialization error on a database whose default isolation
+// level is higher.
 type ReplayStore struct {
 	db      *sql.DB
 	d       Dialect
@@ -47,16 +50,43 @@ func (s *ReplayStore) ClaimSET(ctx context.Context, issuer, jti, holder string, 
 		return 0, errNoHolder
 	}
 	now := s.now().UnixNano()
-	// One statement, so the check and the claim are atomic: the insert
-	// takes a new SET, and the conditional update takes an expired record
-	// of one. A live record makes both no-ops.
-	res, err := s.db.ExecContext(ctx, s.d.rebind(`INSERT INTO ssf_replay (issuer, jti, holder, expires_at) VALUES (?, ?, ?, ?)
-		ON CONFLICT (issuer, jti) DO UPDATE SET holder = excluded.holder, expires_at = excluded.expires_at
-		WHERE ssf_replay.expires_at <= ?`), issuer, jti, holder, leaseUntil.UnixNano(), now)
-	if err != nil {
-		return 0, err
-	}
-	n, err := res.RowsAffected()
+	var outcome storage.ClaimOutcome
+	err := s.d.readCommitted(ctx, s.db, func(q querier) error {
+		// One statement, so the check and the claim are atomic: the
+		// insert takes a new SET, and the conditional update takes an
+		// expired record of one. A live record makes both no-ops.
+		res, err := q.ExecContext(ctx, s.d.rebind(`INSERT INTO ssf_replay (issuer, jti, holder, expires_at) VALUES (?, ?, ?, ?)
+			ON CONFLICT (issuer, jti) DO UPDATE SET holder = excluded.holder, expires_at = excluded.expires_at
+			WHERE ssf_replay.expires_at <= ?`), issuer, jti, holder, leaseUntil.UnixNano(), now)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n == 1 {
+			outcome = storage.ClaimAcquired
+			return nil
+		}
+		// The live record that blocked the claim. If it has gone since —
+		// its claim released — the SET is reported held, so it is
+		// delivered and claimed again rather than taken as handled.
+		var current string
+		err = q.QueryRowContext(ctx, s.d.rebind(`SELECT holder FROM ssf_replay WHERE issuer = ? AND jti = ? AND expires_at > ?`),
+			issuer, jti, now).Scan(&current)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			outcome = storage.ClaimHeld
+		case err != nil:
+			return err
+		case current == "":
+			outcome = storage.ClaimDone
+		default:
+			outcome = storage.ClaimHeld
+		}
+		return nil
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -64,24 +94,7 @@ func (s *ReplayStore) ClaimSET(ctx context.Context, issuer, jti, holder string, 
 		// Best effort: a record left behind only takes space.
 		_, _ = s.db.ExecContext(ctx, s.d.rebind(`DELETE FROM ssf_replay WHERE expires_at <= ?`), now)
 	}
-	if n == 1 {
-		return storage.ClaimAcquired, nil
-	}
-	// The live record that blocked the claim. If it has gone since — its
-	// claim released — the SET is reported held, so it is delivered and
-	// claimed again rather than taken as handled.
-	var current string
-	err = s.db.QueryRowContext(ctx, s.d.rebind(`SELECT holder FROM ssf_replay WHERE issuer = ? AND jti = ? AND expires_at > ?`),
-		issuer, jti, now).Scan(&current)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return storage.ClaimHeld, nil
-	case err != nil:
-		return 0, err
-	case current == "":
-		return storage.ClaimDone, nil
-	}
-	return storage.ClaimHeld, nil
+	return outcome, nil
 }
 
 // RenewClaim implements storage.ReplayStore.
@@ -89,20 +102,27 @@ func (s *ReplayStore) RenewClaim(ctx context.Context, issuer, jti, holder string
 	if holder == "" {
 		return false, errNoHolder
 	}
-	res, err := s.db.ExecContext(ctx, s.d.rebind(`UPDATE ssf_replay SET expires_at = ? WHERE issuer = ? AND jti = ? AND holder = ?`),
-		leaseUntil.UnixNano(), issuer, jti, holder)
-	if err != nil {
-		return false, err
-	}
-	n, err := res.RowsAffected()
-	return n == 1, err
+	var held bool
+	err := s.d.readCommitted(ctx, s.db, func(q querier) error {
+		res, err := q.ExecContext(ctx, s.d.rebind(`UPDATE ssf_replay SET expires_at = ? WHERE issuer = ? AND jti = ? AND holder = ?`),
+			leaseUntil.UnixNano(), issuer, jti, holder)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		held = n == 1
+		return err
+	})
+	return held, err
 }
 
 // CompleteSET implements storage.ReplayStore.
 func (s *ReplayStore) CompleteSET(ctx context.Context, issuer, jti string, until time.Time) error {
-	_, err := s.db.ExecContext(ctx, s.d.rebind(`INSERT INTO ssf_replay (issuer, jti, holder, expires_at) VALUES (?, ?, '', ?)
-		ON CONFLICT (issuer, jti) DO UPDATE SET holder = '', expires_at = excluded.expires_at`), issuer, jti, until.UnixNano())
-	return err
+	return s.d.readCommitted(ctx, s.db, func(q querier) error {
+		_, err := q.ExecContext(ctx, s.d.rebind(`INSERT INTO ssf_replay (issuer, jti, holder, expires_at) VALUES (?, ?, '', ?)
+			ON CONFLICT (issuer, jti) DO UPDATE SET holder = '', expires_at = excluded.expires_at`), issuer, jti, until.UnixNano())
+		return err
+	})
 }
 
 // ReleaseClaim implements storage.ReplayStore.
@@ -110,6 +130,8 @@ func (s *ReplayStore) ReleaseClaim(ctx context.Context, issuer, jti, holder stri
 	if holder == "" {
 		return errNoHolder
 	}
-	_, err := s.db.ExecContext(ctx, s.d.rebind(`DELETE FROM ssf_replay WHERE issuer = ? AND jti = ? AND holder = ?`), issuer, jti, holder)
-	return err
+	return s.d.readCommitted(ctx, s.db, func(q querier) error {
+		_, err := q.ExecContext(ctx, s.d.rebind(`DELETE FROM ssf_replay WHERE issuer = ? AND jti = ? AND holder = ?`), issuer, jti, holder)
+		return err
+	})
 }

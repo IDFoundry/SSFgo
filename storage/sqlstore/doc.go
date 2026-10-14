@@ -38,7 +38,9 @@
 // number of Transmitter instances can share the database. On SQLite, those
 // transactions begin with BEGIN IMMEDIATE and so run one at a time.
 // PostgreSQL transactions run at READ COMMITTED, whatever the database's
-// default, as the locks require.
+// default, as the locks require; so do the ReplayStore's and
+// RevocationStore's writes, so that concurrent writes to one record wait
+// for each other rather than fail with a serialization error.
 //
 // # Assurance
 //
