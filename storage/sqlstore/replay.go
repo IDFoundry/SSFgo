@@ -57,7 +57,7 @@ func (s *ReplayStore) ClaimSET(ctx context.Context, issuer, jti, holder string, 
 		// expired record of one. A live record makes both no-ops.
 		res, err := q.ExecContext(ctx, s.d.rebind(`INSERT INTO ssf_replay (issuer, jti, holder, expires_at) VALUES (?, ?, ?, ?)
 			ON CONFLICT (issuer, jti) DO UPDATE SET holder = excluded.holder, expires_at = excluded.expires_at
-			WHERE ssf_replay.expires_at <= ?`), issuer, jti, holder, leaseUntil.UnixNano(), now)
+			WHERE ssf_replay.expires_at <= ?`), issuer, jti, holder, unixNano(leaseUntil), now)
 		if err != nil {
 			return err
 		}
@@ -105,7 +105,7 @@ func (s *ReplayStore) RenewClaim(ctx context.Context, issuer, jti, holder string
 	var held bool
 	err := s.d.readCommitted(ctx, s.db, func(q querier) error {
 		res, err := q.ExecContext(ctx, s.d.rebind(`UPDATE ssf_replay SET expires_at = ? WHERE issuer = ? AND jti = ? AND holder = ?`),
-			leaseUntil.UnixNano(), issuer, jti, holder)
+			unixNano(leaseUntil), issuer, jti, holder)
 		if err != nil {
 			return err
 		}
@@ -120,7 +120,7 @@ func (s *ReplayStore) RenewClaim(ctx context.Context, issuer, jti, holder string
 func (s *ReplayStore) CompleteSET(ctx context.Context, issuer, jti string, until time.Time) error {
 	return s.d.readCommitted(ctx, s.db, func(q querier) error {
 		_, err := q.ExecContext(ctx, s.d.rebind(`INSERT INTO ssf_replay (issuer, jti, holder, expires_at) VALUES (?, ?, '', ?)
-			ON CONFLICT (issuer, jti) DO UPDATE SET holder = '', expires_at = excluded.expires_at`), issuer, jti, until.UnixNano())
+			ON CONFLICT (issuer, jti) DO UPDATE SET holder = '', expires_at = excluded.expires_at`), issuer, jti, unixNano(until))
 		return err
 	})
 }
