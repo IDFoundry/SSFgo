@@ -278,7 +278,10 @@ the Transmitter's JWKS.
   when a handler fails, so the Transmitter retries. `Poll` acknowledges
   what the previous poll processed (`ack`), reports rejections
   (`setErrs`), and leaves SETs whose handler failed unacknowledged so they
-  are redelivered; `RunPoller` long-polls in a loop.
+  are redelivered; `RunPoller` long-polls in a loop. Acknowledgements wait
+  in memory for the next poll or `Acknowledge`; SETs whose acknowledgement
+  a restart loses are returned, and the replay store has them acknowledged
+  without being handled again.
 - **Processing.** Every SET is decoded by `internal/setcodec` against the
   Transmitter's keys (refetched at most once a minute when a SET names an
   unknown key), then claimed in a `storage.ReplayStore` while its

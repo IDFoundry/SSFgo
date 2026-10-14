@@ -18,6 +18,14 @@ SQLite.
 durable: an in-memory one loses its streams and queued SETs on restart,
 accepts replays of SETs it already handled, and forgets revocations.
 
+A durable replay store is also what makes a polling Receiver's restart
+safe. A poll's acknowledgements wait in memory for the next poll, or for
+`Acknowledge`, which `RunPoller` calls as it stops. A process that stops
+without either loses them, and the Transmitter returns those SETs: the
+replay store, which records a SET as handled for as long as it is
+acceptable, has the restarted process acknowledge them without handling
+them again.
+
 ```go
 // go get github.com/idfoundry/ssfgo/storage/sqlstore
 db, err := sql.Open("pgx", dsn) // any database/sql driver for PostgreSQL or SQLite
