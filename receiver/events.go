@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"runtime/debug"
 	"slices"
+	"time"
 
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/internal/peertext"
@@ -100,26 +101,12 @@ func (r *Receiver) processObserved(ctx context.Context, method ssf.DeliveryMetho
 // *rejectedSET for a SET that must not be retried, or any other error for
 // a handler failure that should be.
 func (r *Receiver) process(ctx context.Context, token string) (processed, error) {
-	set, err := r.decode(ctx, token)
+	set, expires, err := r.verify(ctx, token)
+	var p processed
+	if set.Event != nil {
+		p = processed{jti: set.JWTID, eventType: set.Event.EventType()}
+	}
 	if err != nil {
-		return processed{}, err
-	}
-	p := processed{jti: set.JWTID, eventType: set.Event.EventType()}
-	if err := r.checkCriticalMembers(set.Subject); err != nil {
-		return p, err
-	}
-	// A SET is accepted only within ReplayWindow of its "iat", and its
-	// replay record lasts until that window (plus clock skew) ends, so
-	// there is no moment at which a captured SET is both acceptable and
-	// forgotten.
-	expires := set.IssuedAt.Add(r.cfg.Limits.ReplayWindow)
-	if r.cfg.Now().After(expires) {
-		return p, &rejectedSET{code: setcodec.CodeInvalidRequest,
-			description: "the SET is older than the Receiver's replay window"}
-	}
-	// Last of the checks, as it may call the Transmitter: only a SET that
-	// is otherwise acceptable can make it.
-	if err := r.checkSETAudience(ctx, set); err != nil {
 		return p, err
 	}
 	// A redelivery that arrives while this Receiver is still handling the
@@ -157,6 +144,51 @@ func (r *Receiver) process(ctx context.Context, token string) (processed, error)
 	}
 	h.err = r.handleClaimed(ctx, set, holder, expires.Add(r.cfg.Limits.MaxClockSkew))
 	return p, h.err
+}
+
+// Verify checks token as delivery does — its signature against the
+// Transmitter's keys, "iss", "aud", "iat" within Limits.ReplayWindow, the
+// event type, the subject and any critical subject members — and returns
+// the SET. It does not handle the SET or record it in the ReplayStore, and
+// it does not check a verification event's "state", which only delivery
+// consumes. Use it to inspect a SET, for example one captured from a
+// Transmitter's logs. The error describes why delivery would reject the
+// SET, or, with Config.AudiencePerStream, why its stream could not be
+// looked up.
+func (r *Receiver) Verify(ctx context.Context, token string) (ssf.SET, error) {
+	set, _, err := r.verify(ctx, token)
+	if err != nil {
+		return ssf.SET{}, err
+	}
+	return set, nil
+}
+
+// verify makes every check a SET must pass before it is claimed and
+// handled. It returns the SET whenever it could be decoded, even if a
+// later check failed, and when the SET's replay record may expire.
+func (r *Receiver) verify(ctx context.Context, token string) (ssf.SET, time.Time, error) {
+	set, err := r.decode(ctx, token)
+	if err != nil {
+		return ssf.SET{}, time.Time{}, err
+	}
+	if err := r.checkCriticalMembers(set.Subject); err != nil {
+		return set, time.Time{}, err
+	}
+	// A SET is accepted only within ReplayWindow of its "iat", and its
+	// replay record lasts until that window (plus clock skew) ends, so
+	// there is no moment at which a captured SET is both acceptable and
+	// forgotten.
+	expires := set.IssuedAt.Add(r.cfg.Limits.ReplayWindow)
+	if r.cfg.Now().After(expires) {
+		return set, time.Time{}, &rejectedSET{code: setcodec.CodeInvalidRequest,
+			description: "the SET is older than the Receiver's replay window"}
+	}
+	// Last of the checks, as it may call the Transmitter: only a SET that
+	// is otherwise acceptable can make it.
+	if err := r.checkSETAudience(ctx, set); err != nil {
+		return set, time.Time{}, err
+	}
+	return set, expires, nil
 }
 
 // setKey identifies a SET across Transmitters.
