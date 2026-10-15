@@ -31,8 +31,10 @@
 //
 // # Concurrency
 //
-// Every operation the contract requires to be atomic runs in one
-// transaction. On PostgreSQL, operations on a stream lock its row
+// Every operation the contract requires to be atomic is: one that reads
+// and writes several rows runs in one transaction, and the rest — the
+// ReplayStore's and RevocationStore's on SQLite, for example — are a
+// single statement. On PostgreSQL, operations on a stream lock its row
 // (SELECT ... FOR UPDATE) and creating a stream under a per-Receiver
 // limit takes a transaction-scoped advisory lock on the Receiver, so any
 // number of Transmitter instances can share the database. On SQLite, those
@@ -49,10 +51,11 @@
 // refuses; on PostgreSQL they also declare themselves consistent across
 // instances, which a SQLite file, local to one host, is not.
 //
-// Several Transmitter instances may share a PostgreSQL database and each
-// call Run. A pushed SET may then be delivered by more than one instance;
-// RFC 8935 allows redelivery, and Receivers recognise it by its "jti"
-// (SSFgo's does so through its ReplayStore).
+// Several Transmitter instances may share a PostgreSQL database; run
+// transmitter.Run in one of them, as its documentation says. Should two
+// run it at once — during a rollout, say — a pushed SET may be delivered
+// by both; RFC 8935 allows redelivery, and Receivers recognise it by its
+// "jti" (SSFgo's does so through its ReplayStore).
 //
 // SQLite connections must wait for the database lock rather than fail at
 // once: set a busy timeout on every connection, for example with

@@ -1,10 +1,12 @@
 # Roadmap
 
 Each milestone ends with an exit criterion that can be checked, mostly
-against the OIDF conformance suite. See [ARCHITECTURE.md](ARCHITECTURE.md)
+against the OIDF conformance suite. Milestones are numbered, not
+versioned: they came before the first tag, v0.1.0, and the releases
+since are listed under the API freeze. See [ARCHITECTURE.md](ARCHITECTURE.md)
 for the design these milestones build.
 
-## v0.1 — Wire formats ✅
+## Milestone 1 — Wire formats ✅
 
 - Subject identifiers: every RFC 9493 format, SSF §3.5 formats, complex
   subjects, proprietary formats, and SSF §8.1.3.1 subject matching.
@@ -16,7 +18,7 @@ for the design these milestones build.
 **Exit:** round-trip tests against every example in SSF §5, CAEP §3 and
 RISC §2; fuzz targets on compact JWS, JWKS, subject and SET parsing.
 
-## v0.2 — Transmitter control plane ✅
+## Milestone 2 — Transmitter control plane ✅
 
 - Transmitter configuration metadata, including the issuer path suffix
   (SSF §7.2) and `authorization_schemes`.
@@ -30,10 +32,10 @@ RISC §2; fuzz targets on compact JWS, JWKS, subject and SET parsing.
 Met: every stream-management module passes in all four auth × delivery
 variants — see [conformance/README.md](conformance/README.md).
 
-## v0.3 — Transmitter delivery ✅
+## Milestone 3 — Transmitter delivery ✅
 
 - Poll handler (RFC 8936) and push worker (RFC 8935) draining the
-  per-stream queue v0.2 introduced, with acknowledgement.
+  per-stream queue milestone 2 introduced, with acknowledgement.
 - `Emit` routing; stream-updated and verification event emission.
 - `caep/interop` preset and startup checker.
 
@@ -42,7 +44,7 @@ SSF Transmitter plan also passes. Met: every module of the CAEP Interop
 Transmitter plan passes in all four auth × delivery variants — see
 [conformance/README.md](conformance/README.md).
 
-## v0.4 — Receiver ✅
+## Milestone 4 — Receiver ✅
 
 - Discovery and issuer validation (SSF §7.2.4).
 - `TokenSource`: static bearer token and client credentials.
@@ -58,7 +60,7 @@ millisecond `event_timestamp` that had failed
 `openid-ssf-receiver-stream-caep-interop` — see
 [conformance/README.md](conformance/README.md).
 
-## v0.5 — Hardening ✅
+## Milestone 5 — Hardening ✅
 
 - JWKS rotation and caching (`KeyMaxAge`, rate-limited refetch); push
   retry policy (`PushRetry`: backoff bounds and an optional attempt cap).
@@ -76,7 +78,7 @@ millisecond `event_timestamp` that had failed
 [`conformance/scripts/run-all.sh`](conformance/scripts/run-all.sh) runs it
 and `.github/workflows/conformance.yml` runs that daily.
 
-## v1.0 — API frozen, release pending
+## API freeze — v1.0 pending
 
 API freeze, after a review of every exported identifier (see
 [CHANGELOG.md](CHANGELOG.md)); the compatibility promise is in
@@ -97,6 +99,12 @@ adversarial security review
 SCIM events (RFC 9967), and interop with Keycloak's Transmitter — its
 per-stream audiences and all-sessions revocation — tested weekly
 ([interoptest/README.md](interoptest/README.md)).
+
+Released since: v0.1.0, the first tag; v0.2.0, whose replay store claims
+a SET while it is handled, so a crash or a failure on one instance no
+longer loses it; and v0.3.0, with `Receiver.Verify` and the `ssf`
+command. A review of the changes after the additions review is in
+[docs/security-review-2026-10-delta.md](docs/security-review-2026-10-delta.md).
 
 ## Under consideration
 

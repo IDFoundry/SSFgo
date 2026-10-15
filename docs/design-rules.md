@@ -230,7 +230,7 @@ An unsafe choice needs more code and a name that says what it does.
 |---|---|---|
 | 1 | `revocation` trusted the issuer written in each subject | #45 |
 | 2 | The Receiver and Transmitter silently defaulted `ReplayWindow`, `KeyMaxAge`, `MaxClockSkew` (zero became 1 minute), the Transmitter's limits, `LongPollTimeout` and `PushRetry`; there were no `Recommended*()` presets; `ClientCredentials` was checked only at the first token request, one problem at a time; several errors did not name the Go field | #50, #65, #69 |
-| 3 | `revocation.Retention` was unbounded, and `sqlstore` wrapped far-future times | #45 |
+| 3 | `revocation.Retention` was unbounded, and `sqlstore` wrapped far-future times; its `ReplayStore` still did, and the Receiver's `MaxClockSkew` had no ceiling | #45, #96, #98 |
 | 4 | `ClientCredentials.ClientSecret`, `Delivery.AuthorizationHeader` and `PushOptions.AuthorizationHeader` were plain strings, and `StaticToken` printed itself; a `Secret` still printed with some verbs and from unexported fields, and a JSON log of a `Delivery` showed its header | #51, #66 |
 | 5 | `APIError.Error()` quotes response bodies; SET rejection descriptions carry up to 40 KB of attacker text into logs, responses and hooks; a failed token request quoted the authorization server's body; revocation errors named the user, session or address they concerned; `Receiver.Verify` returned its rejection untyped | #47, #64, #65, #104 |
 | 6 | SCIM full/notice exclusivity is case-sensitive; SCIM `uri` accepts `\`; proprietary format names accept invisible Unicode; `revocation` folded email with `strings.ToLower` | #45, #47 |
@@ -239,6 +239,7 @@ An unsafe choice needs more code and a name that says what it does.
 | 9 | `EnsureStream` replaces the only stream on 409 | #47 |
 | 10 | There were no assurance levels or store capabilities; a wrapped `ClientCredentials`, a supplied push `HTTPClient`, loopback addresses spelled `127.1` or `0.0.0.0`, and a SQLite in-memory database escaped the production checks | #52, #65, #66, #67 |
 | 12 | `revocation.New` took its store apart from its `Options` | #69 |
+| 13 | `EnsureStream`, called on every start as documented, gave instances starting together a stream each, or a 409, and left behind each stream it created and refused | #102 |
 | 14 | Examples shared the root module; there was no `GETTING_STARTED.md` or guides; 112 exported identifiers had no doc comment, and no package had a runnable example | #54, #55, #56, #70 |
-| 15 | There was no `UPGRADING.md` or `AGENTS.md`; release-please is not set up, so the CHANGELOG lists breaking changes under "Changed since v0.5" rather than "⚠ BREAKING CHANGES" | #53; release-please from v0.1.0 |
+| 15 | There was no `UPGRADING.md` or `AGENTS.md`; release-please is not set up, so the CHANGELOG lists breaking changes under "Changed since the Hardening milestone" rather than "⚠ BREAKING CHANGES"; the v0.2.0 upgrade notes showed no code | #53; release-please from v0.1.0; #105 |
 | 17 | Key custody was not declared or checked: a key generated at startup passed production assurance | #57 |

@@ -37,7 +37,8 @@ a migration `CreateSchema` applies, and says so.
 
 ## Storage interfaces
 
-`storage.StreamStore` and `storage.ReplayStore` are implemented by
+`storage.StreamStore`, `storage.ReplayStore` and `storage.RevocationStore`
+are implemented by
 applications, so adding a method to them would break every implementation.
 Within v1 they will not gain methods. A new storage capability will arrive
 as a separate, optional interface that the Transmitter or Receiver detects

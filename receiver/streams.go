@@ -274,7 +274,11 @@ func (r *Receiver) RemoveSubject(ctx context.Context, streamID string, subject s
 // a stream (SSF 1.0 §8.1.4.2) and returns the random state it will echo.
 // A verification event that arrives with a state this Receiver did not
 // request, or has already seen, is rejected as invalid_state
-// (SSF 1.0 §8.1.4.1).
+// (SSF 1.0 §8.1.4.1). The state is kept in memory, so only the instance
+// that requested it accepts the event; any other refuses it. With several
+// instances, request verification from the one running the stream's
+// poller; on a push stream spread across instances by a load balancer,
+// the event reaches it only by chance.
 func (r *Receiver) RequestVerification(ctx context.Context, streamID string) (string, error) {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)

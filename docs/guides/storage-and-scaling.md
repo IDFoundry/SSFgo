@@ -82,7 +82,15 @@ rxCfg.HorizontallyScaled = true
   SETs across instances, use push delivery behind a load balancer. Run a
   poll stream's `RunPoller` in **one** instance: a poll returns every SET
   not yet acknowledged (RFC 8936 §2.4), so several pollers receive the
-  same SETs — safe, but no faster than one.
+  same SETs — safe, but no faster than one. Verification stays with one
+  instance: the `state` of a `RequestVerification` is held in memory, so
+  only the instance that asked accepts the verification event; ask from
+  the poller's. `EnsureStream` can run in every instance: those starting
+  together take turns in the replay store and share one stream.
+- **Clocks.** A replay claim's lease is judged by each instance's clock.
+  Keep instances' clocks within seconds of each other (NTP does): one
+  running some 40 seconds ahead takes over a claim that is still live,
+  and the SET is handled twice — never lost.
 - **Revocation.** Every instance sees every revocation, so set
   `HorizontallyScaled` in `revocation.Options` too.
 
@@ -105,5 +113,8 @@ func TestRedisReplayStore(t *testing.T) {
 ```
 
 The `storagetest` suites — `StreamStore`, `ReplayStore`,
-`RevocationStore` — check everything observable through the interface,
-including the atomicity limits and de-duplication depend on.
+`RevocationStore` — check the contract's behaviour through the
+interface, and race concurrent callers against the atomicity that limits
+and de-duplication depend on. A race that passes is evidence, not proof;
+and durability and consistency across instances, which `Capabilities`
+declares, are yours to ensure.

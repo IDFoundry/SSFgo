@@ -121,7 +121,7 @@ These are deliberate and cite the requirement they implement.
 | The caller states the accepted signature algorithms; the header `alg` is never trusted as policy | RFC 8725 §3.1 |
 | RS256 is supported (unlike FAPIgo) because CAEP Interop §2.6 requires it | CAEP Interop §2.6 |
 
-## Delivery (v0.3)
+## Delivery (milestone 3)
 
 Delivery is a per-stream durable queue of signed SETs with two drains,
 not a single `Deliver(set)` call.
@@ -203,7 +203,7 @@ RS256 with a 2048-bit key:
   where each query took about 0.7 ms, it managed about 220 SETs/s for ten
   streams.
 
-## Hardening (v0.5)
+## Hardening (milestone 5)
 
 - **Push SSRF.** `transmitter.NewPushClient`, the default push client,
   checks the address actually dialled is public unicast (so DNS
@@ -255,7 +255,7 @@ Text from the other party reaches them cleaned and bounded. `Ready` on each role
 backs a readiness probe: the Receiver holds signing keys fetched within
 `KeyMaxAge` (refetching overdue ones), the Transmitter's store answers.
 
-## Receiver (v0.4)
+## Receiver (milestone 4)
 
 `receiver.New(ctx, Config)` fetches the Transmitter Configuration Metadata
 from the well-known location derived from `Config.Issuer` — falling back,
@@ -305,7 +305,7 @@ the Transmitter's JWKS.
   handler is acknowledged and ignored. `Verify` makes the same checks on a
   SET without claiming, handling or recording it.
 
-## Stream management (v0.2)
+## Stream management (milestone 2)
 
 `transmitter.New(Config)` returns one `http.Handler` serving the metadata
 document, the JWKS and every §8 endpoint. All paths derive from the

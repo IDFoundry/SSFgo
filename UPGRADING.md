@@ -1,6 +1,7 @@
 # Upgrading
 
-This page covers every breaking change since v0.5: who each one affects
+This page covers every breaking change since the Hardening milestone
+([ROADMAP.md](ROADMAP.md)), before the first release: who each one affects
 and what to change. [CHANGELOG.md](CHANGELOG.md) has the full history,
 and [COMPATIBILITY.md](COMPATIBILITY.md) what counts as breaking.
 
@@ -10,7 +11,7 @@ naming each field, so a skipped step cannot reach runtime. Where a
 change can't be caught that way — a different result at runtime — the
 section says so.
 
-Packages added since v0.5 — `revocation`, `ssftest`, `scim`, the hooks,
+Packages added since that milestone — `revocation`, `ssftest`, `scim`, the hooks,
 `Receiver.EnsureStream` — have nothing to upgrade from, and are not
 listed.
 
@@ -61,8 +62,47 @@ SET handled:
 Each must be atomic; `storagetest.ReplayStore` checks the contract,
 including claims taken over once their lease ends.
 
+Code that used `MarkSET` to de-duplicate SETs itself now claims the SET,
+and records it as handled only once handling succeeds. `ClaimSET` alone
+is not enough: a claim lapses with its lease, and the SET is then
+accepted again.
+
+```go
+// Before
+fresh, err := replay.MarkSET(ctx, set.Issuer, set.JWTID, until)
+if err != nil || !fresh {
+	return err // a duplicate: acknowledge it
+}
+if err := handle(ctx, set); err != nil {
+	_ = replay.ForgetSET(ctx, set.Issuer, set.JWTID)
+	return err
+}
+return nil
+
+// After
+holder := rand.Text() // unique to this handling
+outcome, err := replay.ClaimSET(ctx, set.Issuer, set.JWTID, holder, time.Now().Add(time.Minute))
+switch {
+case err != nil:
+	return err
+case outcome == storage.ClaimDone:
+	return nil // handled already: acknowledge it
+case outcome == storage.ClaimHeld:
+	return errInProgress // being handled elsewhere, and may yet fail: do not acknowledge
+}
+// Renew the claim with RenewClaim if handling may outlast the lease.
+if err := handle(ctx, set); err != nil {
+	_ = replay.ReleaseClaim(ctx, set.Issuer, set.JWTID, holder)
+	return err
+}
+return replay.CompleteSET(ctx, set.Issuer, set.JWTID, until)
+```
+
 `storage/sqlstore`'s schema moves to version 2, adding a column to
-`ssf_replay`; records made before it count as SETs handled. Call
+`ssf_replay`; records made before it count as SETs handled. Stop every
+v0.1 Receiver before migrating: one still running acknowledges a SET
+that a v0.2 instance is still handling, and its `ForgetSET` deletes that
+instance's claim, so a SET whose handling fails can be lost. Then call
 `CreateSchema` before building the stores, as on every start; until
 then they refuse the database.
 
