@@ -302,6 +302,13 @@ func (r *Receiver) RequestVerification(ctx context.Context, streamID string) (st
 // remembered per stream.
 const maxPendingStates = 16
 
+// hasState reports whether state is an outstanding verification state.
+func (r *Receiver) hasState(streamID, state string) bool {
+	r.stateMu.Lock()
+	defer r.stateMu.Unlock()
+	return slices.Contains(r.states[streamID], state)
+}
+
 // takeState consumes an outstanding verification state.
 func (r *Receiver) takeState(streamID, state string) bool {
 	r.stateMu.Lock()

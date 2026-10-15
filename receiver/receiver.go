@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -453,13 +454,26 @@ func (r *Receiver) call(ctx context.Context, method, endpoint string, in, out an
 	return nil
 }
 
+// token gets an access token, turning a panic in the TokenSource into an
+// error: a bug there fails the request — a poll, under RunPoller — rather
+// than the process.
+func (r *Receiver) token(ctx context.Context) (token string, err error) {
+	defer func() {
+		if v := recover(); v != nil {
+			r.cfg.Logger.ErrorContext(ctx, "ssf receiver: token source panicked", "panic", v, "stack", string(debug.Stack()))
+			err = fmt.Errorf("TokenSource panicked: %v", v)
+		}
+	}()
+	return r.cfg.TokenSource.Token(ctx)
+}
+
 // send makes one authorized request and returns the response status and
 // (size-limited) body.
 func (r *Receiver) send(ctx context.Context, method, endpoint string, payload []byte) (int, []byte, error) {
 	if err := r.checkAuthenticatedEndpoint(endpoint); err != nil {
 		return 0, nil, fmt.Errorf("receiver: refusing to send the access token: %w", err)
 	}
-	token, err := r.cfg.TokenSource.Token(ctx)
+	token, err := r.token(ctx)
 	if err != nil {
 		return 0, nil, fmt.Errorf("receiver: access token: %w", err)
 	}

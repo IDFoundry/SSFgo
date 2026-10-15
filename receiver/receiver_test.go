@@ -1147,3 +1147,43 @@ func TestProductionClientKeyCustody(t *testing.T) {
 		t.Errorf("a durable client key was refused: %v", err)
 	}
 }
+
+// A verification whose handler fails keeps its state, so the Transmitter's
+// retry is handled; once handled, the state is used up.
+func TestVerificationStateKeptWhenHandlerFails(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	stream, err := e.rx.CreateStream(ctx, receiver.StreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := e.rx.RequestVerification(ctx, stream.StreamID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	receiver.On(e.rx, func(context.Context, ssf.SET, ssf.Verification) error {
+		if calls.Add(1) == 1 {
+			return errors.New("transient failure")
+		}
+		return nil
+	})
+	verification := func(jti string) string {
+		return sign(t, e, func(s *ssf.SET) {
+			s.JWTID = jti
+			s.Subject = ssf.OpaqueSubject{ID: stream.StreamID}
+			s.Event = ssf.Verification{State: state}
+		})
+	}
+	h := e.rx.PushHandler(receiver.PushOptions{})
+	token := verification("v1")
+	if got := push(t, h, "", token); got.status != http.StatusInternalServerError {
+		t.Fatalf("first delivery, handler failing: %d, want 500", got.status)
+	}
+	if got := push(t, h, "", token); got.status != http.StatusAccepted {
+		t.Fatalf("retry: %d %q after %d handler calls, want 202", got.status, got.err, calls.Load())
+	}
+	if got := push(t, h, "", verification("v2")); got.status != http.StatusBadRequest || got.err != "invalid_state" {
+		t.Errorf("another SET with the used state: %d %q, want 400 invalid_state", got.status, got.err)
+	}
+}

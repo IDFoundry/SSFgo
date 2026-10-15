@@ -124,7 +124,7 @@ func (r *Receiver) process(ctx context.Context, token string) (processed, error)
 		}
 	}
 	defer r.finishHandling(set, h)
-	holder, outcome, err := r.claim(ctx, set)
+	c, outcome, err := r.claim(ctx, set)
 	switch {
 	case err != nil:
 		h.err = fmt.Errorf("receiver: replay store: %w", err)
@@ -142,7 +142,7 @@ func (r *Receiver) process(ctx context.Context, token string) (processed, error)
 		h.err = fmt.Errorf("receiver: replay store: unknown claim outcome %d", outcome)
 		return p, h.err
 	}
-	h.err = r.handleClaimed(ctx, set, holder, expires.Add(r.cfg.Limits.MaxClockSkew))
+	h.err = r.handleClaimed(ctx, set, c, expires.Add(r.cfg.Limits.MaxClockSkew))
 	return p, h.err
 }
 
@@ -290,22 +290,29 @@ func (r *Receiver) checkCriticalMembers(s ssf.Subject) error {
 }
 
 func (r *Receiver) dispatch(ctx context.Context, set ssf.SET) error {
+	var streamID, state string
 	if v, ok := set.Event.(ssf.Verification); ok && v.State != "" {
 		// A verification the Receiver asked for must echo a state it is
 		// still waiting for (SSF 1.0 §8.1.4.1). One without state is
 		// Transmitter-initiated and always acceptable (§8.1.4).
-		streamID := set.Subject.(ssf.OpaqueSubject).ID
-		if !r.takeState(streamID, v.State) {
+		streamID, state = set.Subject.(ssf.OpaqueSubject).ID, v.State
+		if !r.hasState(streamID, state) {
 			return &rejectedSET{code: errCodeInvalidState, description: "the verification state does not match an outstanding request"}
 		}
 	}
 	r.handlersMu.RLock()
 	h := r.handlers[set.Event.EventType()]
 	r.handlersMu.RUnlock()
-	if h == nil {
-		return nil
+	var err error
+	if h != nil {
+		err = r.runHandler(ctx, h, set)
 	}
-	return r.runHandler(ctx, h, set)
+	if err == nil && state != "" {
+		// Used up only once handled: a failed handling is delivered
+		// again, and the retry must still match.
+		r.takeState(streamID, state)
+	}
+	return err
 }
 
 // runHandler calls h, turning a panic into a handling failure: the SET is

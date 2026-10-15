@@ -291,10 +291,13 @@ the Transmitter's JWKS.
   that reaches another instance during the handling, or arrives after a
   crash, is not acknowledged on the strength of handling that may yet
   fail. The claim's lease, a minute, is renewed while the handlers run; a
-  crashed process's claim lapses when it ends. A verification event
-  carrying a `state` must match one `RequestVerification` issued and has
-  not yet been used (§8.1.4.1); one without `state` is accepted
-  (§8.1.4). A SET whose complex subject carries a member the Transmitter
+  crashed process's claim lapses when it ends. If renewals fail until
+  half a lease remains, or find the claim taken, the handlers' context is
+  cancelled with `ErrClaimLost`, so they can stop before another instance
+  takes the SET. A verification event carrying a `state` must match one
+  `RequestVerification` issued and has not yet been used (§8.1.4.1) — it
+  is used up once handled, so a failed handling's retry still matches;
+  one without `state` is accepted (§8.1.4). A SET whose complex subject carries a member the Transmitter
   declares critical, and the Receiver does not process, is rejected
   (§3.6): the §3.3 members always count as processed, others only when
   listed in `Config.SubjectMembers`. Handlers are registered per event
