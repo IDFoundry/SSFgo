@@ -10,13 +10,35 @@ on:
 permissions:
   contents: read
 
+# The suite release the matrix runs, pinned so that only reviewed suite
+# code runs here: GitHub's cache is shared by every workflow on main, and
+# pull requests restore from it, so code this job runs could poison what
+# ci.yml restores. conformance/scripts/suite-pinned.override.yml pins the
+# release's images; move all three together. The newer-suite job says
+# when a newer release is out.
+env:
+  SUITE_TAG: release-v5.3.3
+  SUITE_COMMIT: 7d420f716e49d44f8a6b04f0a3e240ad6d68ab55
+
 jobs:
+  newer-suite:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for a newer suite release
+        run: |
+          newest=$(git ls-remote --tags --refs https://gitlab.com/openid/conformance-suite.git 'release-v*' | sed 's#.*refs/tags/##' | sort -V | tail -1)
+          if [ -z "$newest" ]; then echo "no suite release found" >&2; exit 1; fi
+          echo "OIDF conformance suite: pinned $SUITE_TAG, newest $newest" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$newest" != "$SUITE_TAG" ]; then
+            echo "::error::The OIDF conformance suite released $newest; the matrix runs $SUITE_TAG. Review the release, then move the pin in conformance.yml and suite-pinned.override.yml."
+            exit 1
+          fi
+
   conformance:
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    # The job runs the OIDF suite's newest release, unpinned, as an early
-    # warning of suite changes. So it keeps no Git credentials for that code
-    # to use, and caches no Go build state another workflow could restore.
+    # Even pinned, the suite's code keeps no Git credentials to use, and
+    # the job saves no cache of its own.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,21 +54,15 @@ jobs:
         with:
           python-version: '3.x'
 
-      # The suite publishes an image for each release; its "latest" image
-      # is not rebuilt with them. Run the newest release's image, with the
-      # scripts from the same release.
-      - name: Find the suite's newest release
-        id: suite
-        run: |
-          tag=$(git ls-remote --tags --refs https://gitlab.com/openid/conformance-suite.git 'release-v*' | sed 's#.*refs/tags/##' | sort -V | tail -1)
-          if [ -z "$tag" ]; then echo "no suite release found" >&2; exit 1; fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "OIDF conformance suite: $tag" >> "$GITHUB_STEP_SUMMARY"
-
       - name: Clone OIDF conformance suite
-        env:
-          SUITE_TAG: ${{ steps.suite.outputs.tag }}
-        run: git clone --depth 1 --branch "$SUITE_TAG" https://gitlab.com/openid/conformance-suite.git /tmp/conformance-suite
+        run: |
+          git clone --depth 1 --branch "$SUITE_TAG" https://gitlab.com/openid/conformance-suite.git /tmp/conformance-suite
+          got=$(git -C /tmp/conformance-suite rev-parse HEAD)
+          if [ "$got" != "$SUITE_COMMIT" ]; then
+            echo "::error::suite tag $SUITE_TAG is at $got, not the pinned $SUITE_COMMIT"
+            exit 1
+          fi
+          echo "OIDF conformance suite: $SUITE_TAG ($SUITE_COMMIT)" >> "$GITHUB_STEP_SUMMARY"
 
       # Pinned and hash-checked here rather than taken from the suite's own
       # unpinned requirements.txt.
@@ -55,9 +71,11 @@ jobs:
 
       - name: Bring up OIDF conformance suite
         working-directory: /tmp/conformance-suite
-        env:
-          IMAGE_TAG: ${{ steps.suite.outputs.tag }}
-        run: docker compose -f docker-compose-prebuilt.yml -f "$GITHUB_WORKSPACE/conformance/scripts/suite-host-gateway.override.yml" up -d
+        run: >-
+          docker compose -f docker-compose-prebuilt.yml
+          -f "$GITHUB_WORKSPACE/conformance/scripts/suite-host-gateway.override.yml"
+          -f "$GITHUB_WORKSPACE/conformance/scripts/suite-pinned.override.yml"
+          up -d
 
       - name: Run the conformance matrix
         env:
@@ -84,6 +102,7 @@ jobs:
       - name: Tear down suite containers
         if: always()
         working-directory: /tmp/conformance-suite
-        env:
-          IMAGE_TAG: ${{ steps.suite.outputs.tag }}
-        run: docker compose -f docker-compose-prebuilt.yml down -v || true
+        run: >-
+          docker compose -f docker-compose-prebuilt.yml
+          -f "$GITHUB_WORKSPACE/conformance/scripts/suite-pinned.override.yml"
+          down -v || true

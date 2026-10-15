@@ -130,10 +130,13 @@ configuration). All four pass the create-delete and verification modules
 roles, every variant, every client authentication method — and prints one
 summary.
 `.github/workflows/conformance.yml` runs it daily and on demand, against
-the suite's newest release: it finds the highest `release-v*` tag, checks
-the suite out at that tag and runs the prebuilt image of the same tag.
-The suite's `latest` and `unstable` images are not rebuilt with each
-release, so they can lag it by months.
+a pinned suite release: the workflow names its tag and commit, and
+[`scripts/suite-pinned.override.yml`](scripts/suite-pinned.override.yml)
+its prebuilt images by digest, so only reviewed suite code runs in CI.
+Its `newer-suite` job fails when a newer `release-v*` tag is out; move
+all three pins together once the release is reviewed. The suite's
+`latest` and `unstable` images are not rebuilt with each release, so
+they can lag it by months.
 
 ### Results
 
