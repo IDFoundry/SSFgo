@@ -192,6 +192,10 @@ ssf decode -unverified < set.jwt         # print a SET without checking anything
 `verify` checks a SET's signature against the Transmitter's published
 keys, and its issuer, audience, age, event type and subject, as delivery
 does — through `receiver.Receiver.Verify`, which applications can call too.
+Its JSON says `"verified": true` or `false`, and output escapes control
+characters a SET might carry. `-ca-file` trusts a development
+Transmitter's certificate; `-audience-per-stream` accepts per-stream
+audiences, reading the stream with the token in `SSF_ACCESS_TOKEN`.
 
 ## Design
 
