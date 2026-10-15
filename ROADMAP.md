@@ -104,7 +104,10 @@ Released since: v0.1.0, the first tag; v0.2.0, whose replay store claims
 a SET while it is handled, so a crash or a failure on one instance no
 longer loses it; and v0.3.0, with `Receiver.Verify` and the `ssf`
 command. A review of the changes after the additions review is in
-[docs/security-review-2026-10-delta.md](docs/security-review-2026-10-delta.md).
+[docs/security-review-2026-10-delta.md](docs/security-review-2026-10-delta.md),
+and one of replay claims, `Verify`, the `ssf` command and CI in
+[docs/security-review-2026-10-claims.md](docs/security-review-2026-10-claims.md);
+its fixes ship in v0.4.0.
 
 ## Under consideration
 

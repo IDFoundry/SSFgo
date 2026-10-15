@@ -87,10 +87,13 @@ What SSFgo enforces on its own, so reviewers know where to look:
   durable too (`ssf.KeyCustody`): the library takes keys as
   `crypto.Signer`, so they can stay in a KMS or HSM.
 
-The most recent review, an adversarial one of what was added after the
-[October review](docs/security-review-2026-10.md), is
-[docs/security-review-2026-10-additions.md](docs/security-review-2026-10-additions.md); the
-trust boundaries are set out in
+The most recent review, an adversarial one of replay claims,
+`Receiver.Verify`, the `ssf` command and CI, is
+[docs/security-review-2026-10-claims.md](docs/security-review-2026-10-claims.md).
+It follows the [October review](docs/security-review-2026-10.md), its
+[additions](docs/security-review-2026-10-additions.md) and
+[delta](docs/security-review-2026-10-delta.md) reviews; the trust
+boundaries are set out in
 [docs/security-review-2026-09.md](docs/security-review-2026-09.md).
 
 What stays the application's responsibility: authenticating Receivers
