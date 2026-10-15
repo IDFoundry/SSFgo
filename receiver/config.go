@@ -59,7 +59,9 @@ type Config struct {
 	TokenSource TokenSource
 
 	// ReplayStore records processed SETs, so redelivered ones are
-	// acknowledged without being handled twice.
+	// acknowledged without being handled twice. EnsureStream also holds a
+	// short lock there, under an issuer no Transmitter has, so instances
+	// starting together create one stream.
 	ReplayStore storage.ReplayStore
 
 	// Assurance is the deployment the Receiver is for. Required. Under

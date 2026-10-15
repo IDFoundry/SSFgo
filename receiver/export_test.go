@@ -41,3 +41,7 @@ func SetClaimLease(t *testing.T, d time.Duration) {
 	claimLease = d
 	t.Cleanup(func() { claimLease = old })
 }
+
+// Instances waiting for EnsureStream's lock try again quickly in the
+// package's tests.
+func init() { ensureLockPoll = 10 * time.Millisecond }
