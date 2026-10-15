@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/IDFoundry/SSFgo/compare/storage/sqlstore/v0.2.2...storage/sqlstore/v0.2.3) (2026-10-14)
+
+
+### Bug Fixes
+
+* **sqlstore:** clamp replay leases and records past 2262, so a handled SET is not handled again ([d2a3631](https://github.com/IDFoundry/SSFgo/commit/d2a3631bbe6ca1b23b7a379152e03c915416bc5a))
+
 ## [0.2.2](https://github.com/IDFoundry/SSFgo/compare/storage/sqlstore/v0.2.1...storage/sqlstore/v0.2.2) (2026-10-14)
 
 
