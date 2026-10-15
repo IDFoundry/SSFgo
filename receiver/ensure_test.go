@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -157,5 +159,61 @@ func TestEnsureStreamRetries(t *testing.T) {
 	}
 	if time.Since(start) > 50*time.Millisecond {
 		t.Error("a 403 was retried")
+	}
+}
+
+// Instances of one deployment starting together each call EnsureStream:
+// they must end up sharing one stream, whether the Transmitter allows one
+// stream per Receiver or several. Two streams would deliver every event
+// twice, under different "jti"s no replay store can match.
+func TestEnsureStreamConcurrentStarts(t *testing.T) {
+	for name, multiple := range map[string]bool{"one stream per receiver": false, "several streams per receiver": true} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnvTx(t, func(c *transmitter.Config) { c.MultipleStreamsPerReceiver = multiple })
+			instances := []*receiver.Receiver{e.rx, secondInstance(t, e), secondInstance(t, e), secondInstance(t, e)}
+			ids := make([]string, len(instances))
+			errs := make([]error, len(instances))
+			start := make(chan struct{})
+			var wg sync.WaitGroup
+			for i, rx := range instances {
+				wg.Go(func() {
+					<-start
+					c, err := rx.EnsureStream(context.Background(), receiver.StreamRequest{Description: "orders"})
+					ids[i], errs[i] = c.StreamID, err
+				})
+			}
+			close(start)
+			wg.Wait()
+			for i, err := range errs {
+				if err != nil {
+					t.Errorf("instance %d: %v", i, err)
+				}
+			}
+			if n := streamCount(t, e.rx); n != 1 || len(slices.Compact(slices.Sorted(slices.Values(ids)))) != 1 {
+				t.Errorf("instances got streams %v; the Transmitter holds %d; want one shared stream", ids, n)
+			}
+		})
+	}
+}
+
+// A stream EnsureStream creates and then refuses — its audience is not
+// Config.Audience — is deleted, rather than left on the Transmitter to
+// collect events on every start; the error says which field to correct.
+func TestEnsureStreamDeletesStreamItRefused(t *testing.T) {
+	e := newEnv(t)
+	cfg := e.cfg
+	cfg.Audience = "https://wrong.example"
+	wrong, err := receiver.New(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		_, err := wrong.EnsureStream(context.Background(), receiver.StreamRequest{})
+		if !errors.Is(err, receiver.ErrAudienceMismatch) || !strings.Contains(err.Error(), "Config.Audience") {
+			t.Fatalf("EnsureStream = %v, want ErrAudienceMismatch naming Config.Audience", err)
+		}
+	}
+	if n := streamCount(t, e.rx); n != 0 {
+		t.Errorf("the Transmitter holds %d streams after three refused starts, want 0", n)
 	}
 }

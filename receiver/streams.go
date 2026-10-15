@@ -96,7 +96,7 @@ func (r *Receiver) validateStream(c ssf.StreamConfiguration) error {
 		return errors.New("receiver: stream configuration has no stream_id")
 	}
 	if !slices.Contains(c.Audience, r.cfg.Audience) && !r.perStreamAudience(c) {
-		hint := ""
+		hint := fmt.Sprintf(" (Config.Audience is %q: set it to the audience the Transmitter gives this Receiver)", r.cfg.Audience)
 		if !r.cfg.AudiencePerStream && slices.Contains(c.Audience, r.cfg.Audience+"/"+c.StreamID) {
 			hint = " (the Transmitter gives each stream its own audience: set Config.AudiencePerStream)"
 		}

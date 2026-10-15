@@ -329,8 +329,11 @@ go func() { _ = rx.RunPoller(ctx, stream) }()
 ```
 
 `EnsureStream` creates the stream on the first start and reuses it,
-updating what changed, on later ones, so call it on every start. It
-waits out a Transmitter that is briefly unavailable. If the Transmitter
+updating what changed, on later ones, so call it on every start —
+from every instance, if you run several: instances sharing a replay
+store take turns there, so those starting together share one stream.
+It waits out a Transmitter that is briefly
+unavailable. If the Transmitter
 advertises an `inactivity_timeout`, run `rx.KeepAlive(ctx,
 stream.StreamID)` to keep the stream active.
 
