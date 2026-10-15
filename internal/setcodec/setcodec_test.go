@@ -299,6 +299,16 @@ func TestDecodeRejects(t *testing.T) {
 		"badly named proprietary sub_id": {mutate: func(c map[string]any) {
 			c["sub_id"] = map[string]any{"format": "My Format!", "id": "x"}
 		}, code: CodeInvalidRequest},
+		// PostgreSQL cannot store U+0000: such a SET would fail some
+		// Receivers' stores on every delivery.
+		"NUL in jti": {mutate: func(c map[string]any) { c["jti"] = "a\x00b" }, code: CodeInvalidRequest},
+		"NUL in txn": {mutate: func(c map[string]any) { c["txn"] = "a\x00b" }, code: CodeInvalidRequest},
+		"NUL in sub_id": {mutate: func(c map[string]any) {
+			c["sub_id"] = map[string]any{"format": "email", "email": "a\x00@b.example"}
+		}, code: CodeInvalidRequest},
+		"NUL in nested sub_id": {mutate: func(c map[string]any) {
+			c["sub_id"] = map[string]any{"format": "complex", "user": map[string]any{"format": "opaque", "id": "u\x00"}}
+		}, code: CodeInvalidRequest},
 		"no sub_id":     {mutate: func(c map[string]any) { delete(c, "sub_id") }, code: CodeInvalidRequest},
 		"bad sub_id":    {mutate: func(c map[string]any) { c["sub_id"] = map[string]any{"format": "email"} }, code: CodeInvalidRequest},
 		"legacy sub_id": {mutate: func(c map[string]any) { c["sub_id"] = map[string]any{"subject_type": "email", "email": "a@b"} }, code: CodeInvalidRequest},
