@@ -10,6 +10,7 @@ import (
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/caep"
 	"github.com/idfoundry/ssfgo/receiver"
+	"github.com/idfoundry/ssfgo/storage"
 	"github.com/idfoundry/ssfgo/storage/memstore"
 )
 
@@ -171,5 +172,45 @@ func TestClaimRenewedWhileHandling(t *testing.T) {
 	}
 	if got := push(t, other.PushHandler(receiver.PushOptions{}), "", token); got.status != 202 || otherCalls.Load() != 0 {
 		t.Errorf("retry after the handling succeeded: %d after %d calls, want 202 (a duplicate) after 0", got.status, otherCalls.Load())
+	}
+}
+
+// failingRenewals fails every RenewClaim, as a store in an outage would.
+type failingRenewals struct{ storage.ReplayStore }
+
+func (failingRenewals) RenewClaim(context.Context, string, string, string, time.Time) (bool, error) {
+	return false, errors.New("store unavailable")
+}
+
+// When renewals fail for long enough that another instance may claim the
+// SET, the handler's context is cancelled with ErrClaimLost before the
+// lease ends, so the handling can stop rather than overlap another.
+func TestHandlerToldWhenClaimLost(t *testing.T) {
+	const lease = 300 * time.Millisecond
+	receiver.SetClaimLease(t, lease)
+	e := newEnv(t, func(c *receiver.Config) { c.ReplayStore = failingRenewals{memstore.NewReplayStore()} })
+	cause := make(chan error, 1)
+	var after time.Duration
+	receiver.On(e.rx, func(ctx context.Context, _ ssf.SET, _ caep.SessionRevoked) error {
+		start := time.Now()
+		select {
+		case <-ctx.Done():
+			after = time.Since(start)
+			cause <- context.Cause(ctx)
+			return ctx.Err()
+		case <-time.After(5 * lease):
+			cause <- nil
+			return nil
+		}
+	})
+	got := push(t, e.rx.PushHandler(receiver.PushOptions{}), "", sign(t, e, nil))
+	if err := <-cause; !errors.Is(err, receiver.ErrClaimLost) {
+		t.Fatalf("handler's context ended with %v, want ErrClaimLost", err)
+	}
+	if after >= lease {
+		t.Errorf("handler told after %v, once the lease of %v had ended and another instance could claim the SET", after, lease)
+	}
+	if got.status != 500 {
+		t.Errorf("push = %d, want 500 so the SET is delivered again", got.status)
 	}
 }

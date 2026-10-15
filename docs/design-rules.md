@@ -110,6 +110,10 @@ library's own state is consistent.
 - Every call recovers and logs a panic, so a bug in a hook cannot stop
   the library's own goroutines, such as push delivery, or crash the
   process.
+- The same holds for the other application code the library calls:
+  event handlers, stores and token sources. A panic there fails the
+  piece of work it was part of — a SET's handling, a request — which is
+  then retried as any failure would be.
 - Their docs say:
   - they must not block or panic;
   - which fields may carry untrusted text, to be logged and never
@@ -230,7 +234,7 @@ An unsafe choice needs more code and a name that says what it does.
 | 4 | `ClientCredentials.ClientSecret`, `Delivery.AuthorizationHeader` and `PushOptions.AuthorizationHeader` were plain strings, and `StaticToken` printed itself; a `Secret` still printed with some verbs and from unexported fields, and a JSON log of a `Delivery` showed its header | #51, #66 |
 | 5 | `APIError.Error()` quotes response bodies; SET rejection descriptions carry up to 40 KB of attacker text into logs, responses and hooks; a failed token request quoted the authorization server's body; revocation errors named the user, session or address they concerned | #47, #64, #65 |
 | 6 | SCIM full/notice exclusivity is case-sensitive; SCIM `uri` accepts `\`; proprietary format names accept invisible Unicode; `revocation` folded email with `strings.ToLower` | #45, #47 |
-| 7 | `Hooks.KeysRefreshed` runs on the detached key-refresh goroutine; event handlers, and a stream lookup's `TokenSource`, ran unrecovered | #47, #65 |
+| 7 | `Hooks.KeysRefreshed` runs on the detached key-refresh goroutine; event handlers, and a stream lookup's `TokenSource`, ran unrecovered; so did the Receiver's `ReplayStore`, on the claim-renewal goroutine among others, and its `TokenSource` everywhere else | #47, #65, #101 |
 | 8 | `EnsureStream` retries TLS alerts; push failures are counted per stream | #47 |
 | 9 | `EnsureStream` replaces the only stream on 409 | #47 |
 | 10 | There were no assurance levels or store capabilities; a wrapped `ClientCredentials`, a supplied push `HTTPClient`, loopback addresses spelled `127.1` or `0.0.0.0`, and a SQLite in-memory database escaped the production checks | #52, #65, #66, #67 |
