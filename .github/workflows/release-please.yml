@@ -8,7 +8,8 @@
 # Authenticates with the RELEASE_PLEASE_TOKEN secret rather than
 # GITHUB_TOKEN: events GITHUB_TOKEN causes don't trigger other workflows,
 # so ci.yml would never run on the release pull request. CONTRIBUTING.md
-# says what the token needs.
+# says what the token needs. The job's own GITHUB_TOKEN is therefore
+# unused, and only reads.
 name: release-please
 
 on:
@@ -21,9 +22,6 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
     steps:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
