@@ -132,7 +132,7 @@ func (r *Receiver) checkSETAudience(ctx context.Context, set ssf.SET) error {
 		}
 		break // one lookup per SET
 	}
-	return &rejectedSET{code: setcodec.CodeInvalidAudience, description: "aud names no stream of this Receiver"}
+	return &RejectionError{Code: setcodec.CodeInvalidAudience, Description: "aud names no stream of this Receiver"}
 }
 
 // lookUpStream reports whether id is a stream of this Receiver's with the

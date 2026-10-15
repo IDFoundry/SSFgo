@@ -2,6 +2,7 @@ package receiver_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -39,24 +40,29 @@ func TestVerifyNeitherHandlesNorRecords(t *testing.T) {
 	}
 }
 
+// Verify's rejection carries the error code delivery would report and a
+// description safe to show, so a caller need not parse Error().
 func TestVerifyRejectsWhatDeliveryRejects(t *testing.T) {
 	e := newEnv(t)
 	for name, tc := range map[string]struct {
 		mutate func(*ssf.SET)
+		code   string
 		want   string
 	}{
-		"another audience": {func(s *ssf.SET) { s.Audience = []string{"https://someone-else.example"} }, "aud"},
-		"another issuer":   {func(s *ssf.SET) { s.Issuer = "https://elsewhere.example" }, "iss"},
-		"too old":          {func(s *ssf.SET) { s.IssuedAt = time.Now().Add(-30 * 24 * time.Hour) }, "replay window"},
+		"another audience": {func(s *ssf.SET) { s.Audience = []string{"https://someone-else.example"} }, "invalid_audience", "aud"},
+		"another issuer":   {func(s *ssf.SET) { s.Issuer = "https://elsewhere.example" }, "invalid_issuer", "iss"},
+		"too old":          {func(s *ssf.SET) { s.IssuedAt = time.Now().Add(-30 * 24 * time.Hour) }, "invalid_request", "replay window"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := e.rx.Verify(context.Background(), sign(t, e, tc.mutate))
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("Verify = %v, want an error about %s", err, tc.want)
+			var rej *receiver.RejectionError
+			if !errors.As(err, &rej) || rej.Code != tc.code || !strings.Contains(rej.Description, tc.want) {
+				t.Errorf("Verify = %#v, want a *RejectionError with code %s about %s", err, tc.code, tc.want)
 			}
 		})
 	}
-	if _, err := e.rx.Verify(context.Background(), "not.a.set"); err == nil {
-		t.Error("Verify accepted a malformed token")
+	var rej *receiver.RejectionError
+	if _, err := e.rx.Verify(context.Background(), "not.a.set"); !errors.As(err, &rej) || rej.Code != "invalid_request" {
+		t.Errorf("Verify of a malformed token = %v, want a *RejectionError with code invalid_request", err)
 	}
 }

@@ -54,18 +54,24 @@ const (
 	errCodeInvalidState         = "invalid_state"
 )
 
-// rejectedSET is a SET the Receiver refuses: it is reported to the
-// Transmitter with code and never handled.
 // maxRejectionDescription bounds the description of a rejected SET.
 const maxRejectionDescription = 256
 
-type rejectedSET struct {
-	code        string
-	description string
+// RejectionError is a SET the Receiver refuses, as Verify returns it and
+// delivery reports it to the Transmitter: it is never handled, and a
+// Transmitter must not deliver it again.
+type RejectionError struct {
+	// Code is the error code RFC 8935 §2.4 and RFC 8936 §2.4.4 report it
+	// with, such as "invalid_request" or "invalid_audience".
+	Code string
+	// Description says why, safe to show: text from the SET in it is
+	// reduced to printable ASCII and bounded.
+	Description string
 }
 
-func (e *rejectedSET) Error() string {
-	return "receiver: rejected SET: " + e.code + ": " + e.description
+// Error returns the code and description.
+func (e *RejectionError) Error() string {
+	return "receiver: rejected SET: " + e.Code + ": " + e.Description
 }
 
 // processed is what process learned of a SET: its jti and event type when
@@ -84,7 +90,7 @@ func (r *Receiver) processObserved(ctx context.Context, method ssf.DeliveryMetho
 		info := SETInfo{Delivery: method, JTI: p.jti, EventType: p.eventType, Duration: r.cfg.Now().Sub(start), Err: err}
 		switch rej, ok := isRejection(err); {
 		case ok:
-			info.Outcome, info.ErrorCode = SETRejected, rej.code
+			info.Outcome, info.ErrorCode = SETRejected, rej.Code
 		case err != nil:
 			info.Outcome = SETFailed
 		case p.duplicate:
@@ -98,7 +104,7 @@ func (r *Receiver) processObserved(ctx context.Context, method ssf.DeliveryMetho
 }
 
 // process verifies, de-duplicates and dispatches one SET. The error is a
-// *rejectedSET for a SET that must not be retried, or any other error for
+// *RejectionError for a SET that must not be retried, or any other error for
 // a handler failure that should be.
 func (r *Receiver) process(ctx context.Context, token string) (processed, error) {
 	set, expires, err := r.verify(ctx, token)
@@ -152,9 +158,10 @@ func (r *Receiver) process(ctx context.Context, token string) (processed, error)
 // the SET. It does not handle the SET or record it in the ReplayStore, and
 // it does not check a verification event's "state", which only delivery
 // consumes. Use it to inspect a SET, for example one captured from a
-// Transmitter's logs. The error describes why delivery would reject the
-// SET, or, with Config.AudiencePerStream, why its stream could not be
-// looked up.
+// Transmitter's logs. A SET delivery would reject is a *RejectionError,
+// carrying the error code delivery would report; any other error — with
+// Config.AudiencePerStream, a stream that could not be looked up — says
+// nothing about the SET.
 func (r *Receiver) Verify(ctx context.Context, token string) (ssf.SET, error) {
 	set, _, err := r.verify(ctx, token)
 	if err != nil {
@@ -180,8 +187,8 @@ func (r *Receiver) verify(ctx context.Context, token string) (ssf.SET, time.Time
 	// forgotten.
 	expires := set.IssuedAt.Add(r.cfg.Limits.ReplayWindow)
 	if r.cfg.Now().After(expires) {
-		return set, time.Time{}, &rejectedSET{code: setcodec.CodeInvalidRequest,
-			description: "the SET is older than the Receiver's replay window"}
+		return set, time.Time{}, &RejectionError{Code: setcodec.CodeInvalidRequest,
+			Description: "the SET is older than the Receiver's replay window"}
 	}
 	// Last of the checks, as it may call the Transmitter: only a SET that
 	// is otherwise acceptable can make it.
@@ -260,7 +267,7 @@ func (r *Receiver) decode(ctx context.Context, token string) (ssf.SET, error) {
 	if de, ok := setcodec.IsDecodeError(err); ok {
 		// The description quotes the SET's header, which anyone able to
 		// push writes: it is logged, returned and reported to hooks.
-		return ssf.SET{}, &rejectedSET{code: de.Code, description: peertext.Clean(de.Err.Error(), maxRejectionDescription)}
+		return ssf.SET{}, &RejectionError{Code: de.Code, Description: peertext.Clean(de.Err.Error(), maxRejectionDescription)}
 	}
 	return set, err
 }
@@ -282,8 +289,8 @@ func (r *Receiver) checkCriticalMembers(s ssf.Subject) error {
 			continue
 		}
 		if _, present := complexSubject.Additional[name]; present {
-			return &rejectedSET{code: setcodec.CodeInvalidRequest,
-				description: "the subject has critical member " + peertext.Clean(name, maxRejectionDescription) + ", which this Receiver does not process"}
+			return &RejectionError{Code: setcodec.CodeInvalidRequest,
+				Description: "the subject has critical member " + peertext.Clean(name, maxRejectionDescription) + ", which this Receiver does not process"}
 		}
 	}
 	return nil
@@ -297,7 +304,7 @@ func (r *Receiver) dispatch(ctx context.Context, set ssf.SET) error {
 		// Transmitter-initiated and always acceptable (§8.1.4).
 		streamID, state = set.Subject.(ssf.OpaqueSubject).ID, v.State
 		if !r.hasState(streamID, state) {
-			return &rejectedSET{code: errCodeInvalidState, description: "the verification state does not match an outstanding request"}
+			return &RejectionError{Code: errCodeInvalidState, Description: "the verification state does not match an outstanding request"}
 		}
 	}
 	r.handlersMu.RLock()
@@ -329,8 +336,8 @@ func (r *Receiver) runHandler(ctx context.Context, h HandlerFunc, set ssf.SET) (
 	return h(ctx, set)
 }
 
-// isRejection reports whether err is a *rejectedSET.
-func isRejection(err error) (*rejectedSET, bool) {
-	var rej *rejectedSET
+// isRejection reports whether err is a *RejectionError.
+func isRejection(err error) (*RejectionError, bool) {
+	var rej *RejectionError
 	return rej, errors.As(err, &rej)
 }

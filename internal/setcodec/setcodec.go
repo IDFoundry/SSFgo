@@ -9,6 +9,7 @@
 package setcodec
 
 import (
+	"bytes"
 	"crypto"
 	"encoding/json"
 	"errors"
@@ -310,6 +311,12 @@ func decodeEvent(raw map[string]json.RawMessage, opts VerifyOptions, set *ssf.SE
 	if opts.LegacySubjectType {
 		rawSub = normalizeSubjectType(rawSub)
 	}
+	// Some stores — PostgreSQL's text, for one — cannot hold U+0000, so a
+	// subject carrying it would be accepted by some Receivers and fail
+	// others' stores on every delivery.
+	if containsNUL(rawSub) {
+		return reject(CodeInvalidRequest, "sub_id must not contain U+0000")
+	}
 	var err error
 	if set.Subject, err = ssf.ParseSubject(rawSub); err != nil {
 		return reject(CodeInvalidRequest, "sub_id: %w", err)
@@ -320,6 +327,25 @@ func decodeEvent(raw map[string]json.RawMessage, opts VerifyOptions, set *ssf.SE
 		}
 	}
 	return nil
+}
+
+// containsNUL reports whether any string in the JSON value v, a member
+// name included, contains U+0000. A value that is not valid JSON is left
+// for its parser to refuse.
+func containsNUL(v json.RawMessage) bool {
+	if !bytes.Contains(v, []byte(`\u0000`)) {
+		return false
+	}
+	dec := json.NewDecoder(bytes.NewReader(v))
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return false
+		}
+		if s, ok := tok.(string); ok && strings.ContainsRune(s, 0) {
+			return true
+		}
+	}
 }
 
 // eventSubject returns the "subject" member of the single event object.
@@ -378,6 +404,9 @@ func stringClaim(raw map[string]json.RawMessage, name string, required bool) (st
 	var s string
 	if err := json.Unmarshal(v, &s); err != nil || (required && s == "") || string(v) == "null" {
 		return "", reject(CodeInvalidRequest, "claim %q must be a non-empty string", name)
+	}
+	if strings.ContainsRune(s, 0) {
+		return "", reject(CodeInvalidRequest, "claim %q must not contain U+0000", name)
 	}
 	return s, nil
 }

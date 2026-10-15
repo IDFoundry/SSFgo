@@ -44,8 +44,8 @@ func (r *Receiver) PushHandler(opts PushOptions) http.Handler {
 		}
 		jti, err := r.processObserved(req.Context(), ssf.DeliveryPush, string(body))
 		if rej, ok := isRejection(err); ok {
-			r.cfg.Logger.WarnContext(req.Context(), "ssf receiver: rejected pushed SET", "jti", jti, "err", rej.code, "description", rej.description)
-			pushError(w, http.StatusBadRequest, rej.code, rej.description)
+			r.cfg.Logger.WarnContext(req.Context(), "ssf receiver: rejected pushed SET", "jti", jti, "err", rej.Code, "description", rej.Description)
+			pushError(w, http.StatusBadRequest, rej.Code, rej.Description)
 			return
 		}
 		if errors.Is(err, ErrSETInProgress) {
