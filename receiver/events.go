@@ -145,7 +145,7 @@ func (r *Receiver) process(ctx context.Context, token string) (processed, error)
 		h.err = ErrSETInProgress
 		return p, h.err
 	case outcome != storage.ClaimAcquired:
-		h.err = fmt.Errorf("receiver: replay store: unknown claim outcome %d", outcome)
+		h.err = fmt.Errorf("receiver: replay store: unknown claim outcome %v", outcome)
 		return p, h.err
 	}
 	h.err = r.handleClaimed(ctx, set, c, expires.Add(r.cfg.Limits.MaxClockSkew))
