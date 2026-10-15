@@ -1,0 +1,15 @@
+# Compose override for the OIDF conformance suite's docker-compose-prebuilt.yml
+# that runs its images by digest, for .github/workflows/conformance.yml.
+#
+# The suite release is pinned there (SUITE_TAG and SUITE_COMMIT); these are
+# that release's images. Move them together: a new release's tag, its
+# commit, and the digest of each image below, as the registry reports it
+# (docker buildx imagetools inspect IMAGE). mongo is the version the
+# release's compose file names.
+services:
+  mongodb:
+    image: mongo:6.0.13@sha256:b415b12f638e2685d06c58ab7fb5943577c50fadec6d9340ef67d21aeac72070
+  nginx:
+    image: registry.gitlab.com/openid/conformance-suite/nginx:release-v5.3.3@sha256:d80183af68cb51c72c86b498780d94d6192cbc6adcc70a7d28ac6a01eff0d0db
+  server:
+    image: registry.gitlab.com/openid/conformance-suite:release-v5.3.3@sha256:377ab51f011d821c4b6f7729053e85adf062d691e51a3615f40507fd900a2436

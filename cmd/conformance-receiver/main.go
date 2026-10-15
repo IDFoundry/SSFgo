@@ -53,7 +53,7 @@ func main() {
 	flag.StringVar(&o.auth, "auth", "static", "auth mode variant: static or dynamic")
 	flag.StringVar(&o.clientAuth, "client-auth", "client_secret_basic", "client authentication for dynamic auth: client_secret_basic, client_secret_post, client_secret_jwt or private_key_jwt")
 	flag.StringVar(&o.variant, "variant", "", "extra plan variants, e.g. ssf_profile=default (comma-separated key=value)")
-	flag.StringVar(&o.pushAddr, "push-addr", ":9444", "listen address for the push endpoint")
+	flag.StringVar(&o.pushAddr, "push-addr", ":9444", "listen address for the push endpoint: every interface by default, as the suite's container reaches the host through its gateway on Linux; 127.0.0.1:9444 suffices with Docker Desktop")
 	flag.StringVar(&o.pushBase, "push-base", "https://host.docker.internal:9444", "push endpoint base URL as the suite reaches it")
 	flag.StringVar(&o.audience, "audience", "https://ssfgo-receiver.example", "the Receiver's audience (ssf.stream.audience)")
 	flag.StringVar(&o.subjects, "subjects", "caep", "subjects the suite sends events about: caep (email + iss_sub) or email")
