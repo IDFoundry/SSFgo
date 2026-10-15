@@ -226,6 +226,9 @@ func TestDiscovery(t *testing.T) {
 		"huge replay window":  func(c *receiver.Config) { c.Limits.ReplayWindow = receiver.MaxReplayWindow + 1 },
 		"no key max age":      func(c *receiver.Config) { c.Limits.KeyMaxAge = 0 },
 		"negative clock skew": func(c *receiver.Config) { c.Limits.MaxClockSkew = -1 },
+		// A replay record lasts iat + ReplayWindow + MaxClockSkew: a skew
+		// past any store's range would expire it at once.
+		"huge clock skew": func(c *receiver.Config) { c.Limits.MaxClockSkew = receiver.MaxClockSkewBound + 1 },
 	} {
 		c := e.cfg
 		mutate(&c)
