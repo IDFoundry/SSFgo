@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"strconv"
 	"time"
 )
 
@@ -15,6 +16,13 @@ import (
 // handling that may yet fail. A claim lasts until its lease ends: the
 // holder renews it while handling, and a claim whose holder stopped
 // renewing it, having crashed, can be taken.
+//
+// Leases are judged by each instance's clock, so instances sharing a
+// store must keep their clocks well within the margin a holder renews
+// ahead of its lease's end: SSFgo's Receiver renews every third of a
+// one-minute lease, so seconds apart, not tens of seconds. An instance
+// whose clock runs further ahead takes over a live claim, and the SET is
+// handled twice; it is never lost.
 //
 // Every method is safe for concurrent use, and each is atomic.
 type ReplayStore interface {
@@ -49,3 +57,17 @@ const (
 	// ClaimDone is a SET already handled.
 	ClaimDone
 )
+
+// String returns the outcome's name, such as "ClaimAcquired", or
+// "ClaimOutcome(n)" for none of them.
+func (o ClaimOutcome) String() string {
+	switch o {
+	case ClaimAcquired:
+		return "ClaimAcquired"
+	case ClaimHeld:
+		return "ClaimHeld"
+	case ClaimDone:
+		return "ClaimDone"
+	}
+	return "ClaimOutcome(" + strconv.Itoa(int(o)) + ")"
+}

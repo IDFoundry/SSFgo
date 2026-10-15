@@ -145,7 +145,7 @@ func (r *Receiver) lockEnsure(ctx context.Context, want ssf.Delivery) (func(), e
 			}
 			continue
 		case outcome != storage.ClaimAcquired:
-			return nil, fmt.Errorf("receiver: ensure stream: lock in ReplayStore: unexpected claim outcome %d", outcome)
+			return nil, fmt.Errorf("receiver: ensure stream: lock in ReplayStore: unexpected claim outcome %v", outcome)
 		}
 		return func() {
 			ctx := context.WithoutCancel(ctx)

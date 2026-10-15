@@ -12,5 +12,5 @@
 //	receiver.On(r, func(ctx context.Context, set ssf.SET, e caep.SessionRevoked) error {
 //		return sessions.Revoke(ctx, set.Subject)
 //	})
-//	stream, err := r.CreateStream(ctx, receiver.StreamRequest{...})
+//	stream, err := r.EnsureStream(ctx, receiver.StreamRequest{...}) // on every start
 package receiver

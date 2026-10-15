@@ -75,7 +75,7 @@ func storeErrors(scaled bool, stores []Store) []error {
 			errs = append(errs, fmt.Errorf("under AssuranceProduction, %s must declare itself durable (an in-memory store loses everything on restart)", s.Field))
 		}
 		if scaled && !c.CrossInstanceConsistent {
-			errs = append(errs, fmt.Errorf("with HorizontallyScaled under AssuranceProduction, %s must declare itself consistent across instances", s.Field))
+			errs = append(errs, fmt.Errorf("with HorizontallyScaled under AssuranceProduction, %s must declare itself consistent across instances (storage/sqlstore does on PostgreSQL; memstore and SQLite are local to one process or host)", s.Field))
 		}
 	}
 	return errs
@@ -90,7 +90,7 @@ func keyErrors(scaled bool, keys []Key) []error {
 			errs = append(errs, fmt.Errorf("under AssuranceProduction, %s must be declared durable (ssf.KeyCustody): a key made at each start strands what was signed before a restart", k.Field))
 		}
 		if scaled && !k.Custody.CrossInstanceConsistent {
-			errs = append(errs, fmt.Errorf("with HorizontallyScaled under AssuranceProduction, %s must be declared shared by every instance (ssf.KeyCustody)", k.Field))
+			errs = append(errs, fmt.Errorf("with HorizontallyScaled under AssuranceProduction, %s must be declared shared by every instance (ssf.KeyCustody): load the same key, from a KMS or secret store, in each", k.Field))
 		}
 	}
 	return errs

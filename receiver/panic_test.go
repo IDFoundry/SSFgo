@@ -132,3 +132,30 @@ func TestTokenSourcePanicRecovered(t *testing.T) {
 		t.Errorf("Poll = %v, want an error saying the TokenSource panicked", err)
 	}
 }
+
+// oddOutcome is a ReplayStore whose ClaimSET reports an outcome the
+// contract does not define.
+type oddOutcome struct{ storage.ReplayStore }
+
+func (oddOutcome) ClaimSET(context.Context, string, string, string, time.Time) (storage.ClaimOutcome, error) {
+	return 9, nil
+}
+
+// A store reporting an outcome the contract does not define is an error,
+// named in it: the SET is not acknowledged, and EnsureStream creates no
+// stream.
+func TestReplayStoreUnknownOutcome(t *testing.T) {
+	e := newEnv(t, func(c *receiver.Config) { c.ReplayStore = oddOutcome{memstore.NewReplayStore()} })
+	receiver.On(e.rx, func(context.Context, ssf.SET, caep.SessionRevoked) error { return nil })
+	if got := push(t, e.rx.PushHandler(receiver.PushOptions{}), "", sign(t, e, nil)); got.status != http.StatusInternalServerError {
+		t.Errorf("push = %d, want 500", got.status)
+	}
+	before := streamCount(t, e.rx)
+	_, err := e.rx.EnsureStream(context.Background(), receiver.StreamRequest{Delivery: &ssf.Delivery{Method: ssf.DeliveryPush, EndpointURL: "https://rp.example/other"}})
+	if err == nil || !strings.Contains(err.Error(), "ClaimOutcome(9)") {
+		t.Errorf("EnsureStream = %v, want an error naming ClaimOutcome(9)", err)
+	}
+	if n := streamCount(t, e.rx); n != before {
+		t.Errorf("EnsureStream left %d streams, want %d", n, before)
+	}
+}

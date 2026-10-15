@@ -45,7 +45,7 @@ to `docker compose -f`, which maps it to the host). Set `PLAN` to run
 a plan other than `openid-ssf-transmitter-caep-test-plan`, for example
 `PLAN='openid-ssf-transmitter-test-plan[ssf_profile=default]'`.
 
-### Results — v0.3 (full CAEP Interop Transmitter plan)
+### Results — milestone 3 (full CAEP Interop Transmitter plan)
 
 Run 2026-09-26 against the suite's `latest` prebuilt image. Besides the
 Transmitter, the harness plays the operator the CAEP Interop event test
@@ -122,7 +122,7 @@ Dynamic auth uses `client_secret_basic` by default; `-client-auth` also
 takes `client_secret_post`, `client_secret_jwt` and `private_key_jwt`
 (the driver generates the key and registers its public JWKS in the plan
 configuration). All four pass the create-delete and verification modules
-(v0.5).
+(milestone 5).
 
 ## Running everything
 
@@ -143,7 +143,7 @@ variant and client authentication method, and every module of the base
 Receiver plan below. The tables below record when each plan was first
 run in full.
 
-Transmitter: v0.4, run 2026-09-26 against the suite's `latest` prebuilt
+Transmitter: milestone 4, run 2026-09-26 against the suite's `latest` prebuilt
 image, and still passing every module on both stores on 2026-10-03.
 
 **CAEP Interop Receiver plan** — rerun 2026-10-03 against upstream master

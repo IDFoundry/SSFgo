@@ -54,7 +54,7 @@ auth × delivery variants, on both the in-memory and SQLite stores, and so
 does every module of the CAEP Interop Receiver plan, as of the suite's
 2026-09-30 master. See [conformance/README.md](conformance/README.md).
 
-### Added since v0.5
+### Added since the Hardening milestone
 
 - Documentation: a guide to [other Transmitters](docs/guides/other-transmitters.md)
   — the Receiver settings some need, what each costs, and Keycloak's; a
@@ -302,7 +302,7 @@ each finding was reproduced by a failing test before it was fixed.
   an advisory lock read a snapshot from before it, and concurrent updates
   failed.
 
-### Fixed since v0.5
+### Fixed since the Hardening milestone
 
 - Configuration errors name the Go field they concern, in one style
   across the roles — `Algorithms is required (RecommendedAlgorithms is
@@ -370,7 +370,7 @@ each finding was reproduced by a failing test before it was fixed.
   Verification and stream-updated SETs used to omit it, which the
   conformance suite now warns about; each gets a `txn` of its own.
 
-### Changed since v0.5
+### Changed since the Hardening milestone
 
 API review before the freeze — all breaking, none behavioural:
 
