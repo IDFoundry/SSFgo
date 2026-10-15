@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/IDFoundry/SSFgo/compare/storage/sqlstore/v0.2.3...storage/sqlstore/v0.2.4) (2026-10-15)
+
+
+### Bug Fixes
+
+* **sqlstore:** require the core at v0.4.0 ([b8a18e6](https://github.com/IDFoundry/SSFgo/commit/b8a18e67d1b5f15fbb28af175d65e22bb3f94aed))
+
 ## [0.2.3](https://github.com/IDFoundry/SSFgo/compare/storage/sqlstore/v0.2.2...storage/sqlstore/v0.2.3) (2026-10-14)
 
 
