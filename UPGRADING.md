@@ -15,7 +15,7 @@ Packages added since that milestone — `revocation`, `ssftest`, `scim`, the hoo
 `Receiver.EnsureStream` — have nothing to upgrade from, and are not
 listed.
 
-## v0.4.0 (unreleased)
+## v0.4.0
 
 ### `Limits.MaxClockSkew` is at most an hour (receiver)
 
