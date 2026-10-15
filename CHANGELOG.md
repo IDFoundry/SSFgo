@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0](https://github.com/IDFoundry/SSFgo/compare/v0.3.0...v0.4.0) (2026-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **receiver:** receiver.New refuses a Limits.MaxClockSkew above receiver.MaxClockSkewBound (an hour). See UPGRADING.md.
+
+### Features
+
+* **storage:** add ClaimOutcome.String, say clocks must agree, and name the store HorizontallyScaled needs ([31d4bd3](https://github.com/IDFoundry/SSFgo/commit/31d4bd3b11cec17d586d97ca50cadb6e6ed34ae8))
+
+
+### Bug Fixes
+
+* **receiver:** bound Limits.MaxClockSkew at an hour, so replay records stay representable ([c89ae4b](https://github.com/IDFoundry/SSFgo/commit/c89ae4b6f326b391942360b66fa1b4d6a355ab35))
+* **receiver:** keep a verification's state until it is handled, tell handlers when their claim is lost, and recover store and token-source panics ([6dcc059](https://github.com/IDFoundry/SSFgo/commit/6dcc059d854bfbc09f0dc9a36e19396d99e0a5c6))
+* **receiver:** make EnsureStream safe for instances starting together, and delete a stream it creates and refuses ([8e9d9b7](https://github.com/IDFoundry/SSFgo/commit/8e9d9b7c578d77ced3207753ea8259971712a988))
+* **receiver:** return Verify's rejection as a typed RejectionError, and reject U+0000 in a SET's string claims and subject ([97d0ee9](https://github.com/IDFoundry/SSFgo/commit/97d0ee9ed78f75cbfa498482076d1b0dd92c7cc8))
+* **ssf:** escape terminal controls in output, trust a CA file, and accept per-stream audiences and flags after the token ([a15dc47](https://github.com/IDFoundry/SSFgo/commit/a15dc4700fca503ed13a7672004574757bfdbfc5))
+
 ## [0.3.0](https://github.com/IDFoundry/SSFgo/compare/v0.2.1...v0.3.0) (2026-10-14)
 
 
