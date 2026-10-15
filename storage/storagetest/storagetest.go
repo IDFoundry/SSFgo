@@ -530,6 +530,72 @@ func ReplayStore(t *testing.T, newStore func(t *testing.T) storage.ReplayStore) 
 			}
 		}
 	})
+	t.Run("ConcurrentTakeover", func(t *testing.T) {
+		// Claims racing to take over a lapsed claim, while its old holder
+		// renews or releases it. A store that takes over by reading the
+		// record and then writing it gives one claim to several holders,
+		// which Concurrent, racing on new SETs only, does not see.
+		st := newStore(t)
+		for round := range 20 {
+			jti := fmt.Sprint("takeover-", round)
+			if _, err := st.ClaimSET(ctx, "https://iss", jti, "lapsed", past); err != nil {
+				t.Fatal(err)
+			}
+			renew := round%2 == 0
+			var wg sync.WaitGroup
+			var acquired atomic.Int32
+			var renewed atomic.Bool
+			wg.Go(func() {
+				if renew {
+					held, err := st.RenewClaim(ctx, "https://iss", jti, "lapsed", far)
+					if err != nil {
+						t.Error(err)
+					}
+					renewed.Store(held)
+				} else if err := st.ReleaseClaim(ctx, "https://iss", jti, "lapsed"); err != nil {
+					t.Error(err)
+				}
+			})
+			for i := range 50 {
+				wg.Go(func() {
+					got, err := st.ClaimSET(ctx, "https://iss", jti, fmt.Sprint("holder-", i), far)
+					if err != nil {
+						t.Error(err)
+					}
+					if got == storage.ClaimAcquired {
+						acquired.Add(1)
+					}
+				})
+			}
+			wg.Wait()
+			// The old holder renewing first keeps the claim; otherwise
+			// exactly one claimer takes it over.
+			want := int32(1)
+			if renewed.Load() {
+				want = 0
+			}
+			if n := acquired.Load(); n != want {
+				t.Fatalf("SET %s (old holder renewed: %v): %d claims took it over, want %d", jti, renewed.Load(), n, want)
+			}
+		}
+	})
+	t.Run("FarFuture", func(t *testing.T) {
+		// Leases and records past what a store can represent must not
+		// wrap into the past, where a claim would be taken over and a
+		// handled SET handled again.
+		st := newStore(t)
+		year3000 := time.Date(3000, 1, 1, 0, 0, 0, 0, time.UTC)
+		claim(t, st, "https://iss", "a", year3000)
+		if got := claim(t, st, "https://iss", "b", far); got != storage.ClaimHeld {
+			t.Errorf("claim of a SET leased until 3000 = %v, want held", got)
+		}
+		if err := st.CompleteSET(ctx, "https://iss", "1", year3000); err != nil {
+			t.Fatal(err)
+		}
+		if got := claim(t, st, "https://iss", "b", far); got != storage.ClaimDone {
+			t.Errorf("claim of a SET handled until 3000 = %v, want done", got)
+		}
+	})
 }
 
 // RevocationStore runs the storage.RevocationStore contract against stores
