@@ -14,6 +14,24 @@ Packages added since v0.5 — `revocation`, `ssftest`, `scim`, the hooks,
 `Receiver.EnsureStream` — have nothing to upgrade from, and are not
 listed.
 
+## v0.4.0 (unreleased)
+
+### `Limits.MaxClockSkew` is at most an hour (receiver)
+
+**Affects:** a Receiver whose `receiver.Limits.MaxClockSkew` is more
+than `receiver.MaxClockSkewBound`, an hour. `RecommendedLimits` gives a
+minute.
+
+**Why:** a SET's replay record lasts until its `iat` plus `ReplayWindow`
+and `MaxClockSkew`. With no upper bound, a large enough skew put that
+time beyond what a store can hold, and a SET already handled could be
+handled again. Clocks an hour apart are broken rather than skewed, as
+`revocation.MaxClockSkewBound` already says.
+
+**What to change:** set `MaxClockSkew` to an hour or less, and correct
+the clocks it was covering for. `receiver.New` reports the field until
+you do.
+
 ## v0.2.0
 
 ### `ReplayStore` claims a SET while it is handled (storage, sqlstore)

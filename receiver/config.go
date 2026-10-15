@@ -144,13 +144,19 @@ type Limits struct {
 	KeyMaxAge time.Duration
 
 	// MaxClockSkew is how far in the future a SET's "iat" and "nbf" may
-	// be. Zero allows none; it may not be negative.
+	// be. Zero allows none; it may not be negative or more than
+	// MaxClockSkewBound.
 	MaxClockSkew time.Duration
 }
 
 // MaxReplayWindow bounds Limits.ReplayWindow, so the times computed from
 // it stay representable.
 const MaxReplayWindow = 365 * 24 * time.Hour
+
+// MaxClockSkewBound bounds Limits.MaxClockSkew. Clocks an hour apart are
+// broken, not skewed; and a SET's replay record lasts until its "iat"
+// plus ReplayWindow and MaxClockSkew, which must stay representable.
+const MaxClockSkewBound = time.Hour
 
 // RecommendedAlgorithms returns the SET signature algorithms a Receiver
 // usually accepts: RS256, which the CAEP Interoperability Profile §2.6
@@ -186,8 +192,8 @@ func (l Limits) errors() []error {
 	if l.KeyMaxAge <= 0 {
 		errs = append(errs, errors.New("Limits.KeyMaxAge must be positive"))
 	}
-	if l.MaxClockSkew < 0 {
-		errs = append(errs, errors.New("Limits.MaxClockSkew must not be negative"))
+	if l.MaxClockSkew < 0 || l.MaxClockSkew > MaxClockSkewBound {
+		errs = append(errs, fmt.Errorf("Limits.MaxClockSkew must not be negative or more than %v", MaxClockSkewBound))
 	}
 	return errs
 }
