@@ -9,7 +9,11 @@
 // prints its Transmitter Configuration Metadata, or why a Receiver would
 // refuse it. verify checks a SET against the Transmitter's published keys
 // and the issuer and audience given, as delivery does, and prints its
-// header and claims. decode prints them without checking anything.
+// header and claims. decode prints them without checking anything. The
+// JSON printed has a "verified" member saying which of the two it is.
+//
+// Output escapes control and formatting characters — C0 and C1 controls,
+// DEL, bidirectional overrides — so a SET cannot drive the terminal.
 //
 // Install it with:
 //
@@ -19,6 +23,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -28,8 +34,12 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	ssf "github.com/idfoundry/ssfgo"
 	"github.com/idfoundry/ssfgo/caep"
@@ -42,12 +52,17 @@ import (
 // maxTokenBytes bounds a SET read from a file or standard input.
 const maxTokenBytes = 1 << 20
 
+// tokenEnv names the environment variable holding the access token
+// verify -audience-per-stream reads a stream with.
+const tokenEnv = "SSF_ACCESS_TOKEN"
+
 const usage = `usage:
   ssf metadata [flags] ISSUER
   ssf verify -issuer ISSUER -audience AUDIENCE [flags] [TOKEN | FILE | -]
   ssf decode -unverified [TOKEN | FILE | -]
 
-Run "ssf COMMAND -h" for a command's flags.
+Flags may come before or after the argument. Run "ssf COMMAND -h" for a
+command's flags.
 `
 
 func main() {
@@ -81,7 +96,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, client *http.
 		_, _ = fmt.Fprint(stdout, usage)
 		return 0
 	}
-	_, _ = fmt.Fprintf(stderr, "ssf: unknown command %q\n\n%s", args[0], usage)
+	_, _ = fmt.Fprintf(stderr, "ssf: unknown command %s\n\n%s", terminalSafe(strconv.Quote(args[0])), usage)
 	return 2
 }
 
@@ -91,6 +106,7 @@ type discovery struct {
 	trustedOrigins stringList
 	algorithms     string
 	legacy         bool
+	caFile         string
 	timeout        time.Duration
 }
 
@@ -99,12 +115,27 @@ func (d *discovery) register(fs *flag.FlagSet) {
 	fs.Var(&d.trustedOrigins, "trusted-origin", "an origin besides the issuer's that may serve authenticated endpoints (repeatable)")
 	fs.StringVar(&d.algorithms, "alg", "", "comma-separated signature algorithms to accept (default: receiver.RecommendedAlgorithms)")
 	fs.BoolVar(&d.legacy, "legacy-subjects", false, "accept subjects in the forms CAEP and RISC used before SSF 1.0")
+	fs.StringVar(&d.caFile, "ca-file", "", "a PEM file of CA certificates to trust besides the system's, such as a development Transmitter's")
 	fs.DurationVar(&d.timeout, "timeout", 30*time.Second, "how long to wait for the Transmitter")
 }
 
 // receiver discovers the Transmitter for issuer as an SSFgo Receiver with
-// audience would, registering every event family SSFgo implements.
-func (d *discovery) receiver(ctx context.Context, c cli, issuer, audience string) (*receiver.Receiver, error) {
+// audience would, registering every event family SSFgo implements. With
+// perStream, it accepts per-stream audiences, reading streams with the
+// access token in tokenEnv.
+func (d *discovery) receiver(ctx context.Context, c cli, issuer, audience string, perStream bool) (*receiver.Receiver, error) {
+	client, err := d.client(c.client)
+	if err != nil {
+		return nil, err
+	}
+	// Never sent unless perStream: no other check calls an authenticated
+	// endpoint.
+	token := "unused"
+	if perStream {
+		if token = os.Getenv(tokenEnv); token == "" {
+			return nil, fmt.Errorf("-audience-per-stream reads the SET's stream from the Transmitter: set %s to an access token for its configuration endpoint", tokenEnv)
+		}
+	}
 	registry := ssf.NewRegistry()
 	for _, register := range []func(*ssf.Registry) error{caep.Register, risc.Register, scim.Register} {
 		if err := register(registry); err != nil {
@@ -134,29 +165,52 @@ func (d *discovery) receiver(ctx context.Context, c cli, issuer, audience string
 		Registry:             registry,
 		Algorithms:           algorithms,
 		AcceptLegacySubjects: d.legacy,
-		// Never sent: neither command calls an authenticated endpoint.
-		TokenSource: receiver.StaticToken("unused"),
-		ReplayStore: memstore.NewReplayStore(),
-		HTTPClient:  c.client,
-		Logger:      slog.New(slog.DiscardHandler),
+		AudiencePerStream:    perStream,
+		TokenSource:          receiver.StaticToken(token),
+		ReplayStore:          memstore.NewReplayStore(),
+		HTTPClient:           client,
+		Logger:               slog.New(slog.DiscardHandler),
 	})
+}
+
+// client returns base, or with caFile a client trusting its certificates
+// too.
+func (d *discovery) client(base *http.Client) (*http.Client, error) {
+	if d.caFile == "" {
+		return base, nil
+	}
+	pem, err := os.ReadFile(d.caFile)
+	if err != nil {
+		return nil, err
+	}
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		pool = x509.NewCertPool()
+	}
+	if !pool.AppendCertsFromPEM(pem) {
+		return nil, fmt.Errorf("%s holds no PEM certificates", d.caFile)
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
+	return &http.Client{Transport: transport}, nil
 }
 
 func (c cli) metadata(args []string) int {
 	fs := c.flags("metadata", "ISSUER")
 	var d discovery
 	d.register(fs)
-	if fs.Parse(args) != nil {
+	pos, err := parse(fs, args)
+	if err != nil {
 		return 2
 	}
-	if fs.NArg() != 1 {
+	if len(pos) != 1 {
 		fs.Usage()
 		return 2
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
 	defer cancel()
 	// The audience is required, but discovery does not use it.
-	rx, err := d.receiver(ctx, c, fs.Arg(0), "urn:ssfgo:cli")
+	rx, err := d.receiver(ctx, c, pos[0], "urn:ssfgo:cli", false)
 	if err != nil {
 		return c.fail(err)
 	}
@@ -173,20 +227,22 @@ func (c cli) verify(args []string) int {
 	d.register(fs)
 	issuer := fs.String("issuer", "", "the Transmitter's issuer, which the SET's \"iss\" must equal (required)")
 	audience := fs.String("audience", "", "the Receiver's audience, which the SET's \"aud\" must contain (required)")
-	if fs.Parse(args) != nil {
+	perStream := fs.Bool("audience-per-stream", false, "also accept \"aud\" naming one of the Receiver's streams as AUDIENCE/STREAM_ID, reading the stream with the access token in "+tokenEnv)
+	pos, err := parse(fs, args)
+	if err != nil {
 		return 2
 	}
-	if *issuer == "" || *audience == "" || fs.NArg() > 1 {
+	if *issuer == "" || *audience == "" || len(pos) > 1 {
 		fs.Usage()
 		return 2
 	}
-	token, err := c.readToken(fs.Arg(0))
+	token, err := c.readToken(first(pos))
 	if err != nil {
 		return c.fail(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), d.timeout)
 	defer cancel()
-	rx, err := d.receiver(ctx, c, *issuer, *audience)
+	rx, err := d.receiver(ctx, c, *issuer, *audience, *perStream)
 	if err != nil {
 		return c.fail(err)
 	}
@@ -198,28 +254,31 @@ func (c cli) verify(args []string) int {
 	if err != nil {
 		return c.fail(err)
 	}
+	parts.Verified = true
 	if err := c.printJSON(parts); err != nil {
 		return c.fail(err)
 	}
-	_, _ = fmt.Fprintf(c.stderr, "verified: %s event %s about %s\n", set.JWTID, set.Event.EventType(), set.Subject.Format())
+	line := fmt.Sprintf("verified: %q event %s about %s", set.JWTID, set.Event.EventType(), set.Subject.Format())
+	_, _ = fmt.Fprintln(c.stderr, terminalSafe(line))
 	return 0
 }
 
 func (c cli) decode(args []string) int {
 	fs := c.flags("decode", "-unverified [TOKEN | FILE | -]")
 	unverified := fs.Bool("unverified", false, "confirm that the SET is to be printed without checking its signature or claims (required)")
-	if fs.Parse(args) != nil {
+	pos, err := parse(fs, args)
+	if err != nil {
 		return 2
 	}
 	if !*unverified {
 		_, _ = fmt.Fprintln(c.stderr, `ssf decode: decode checks nothing, so it needs -unverified; "ssf verify" checks a SET`)
 		return 2
 	}
-	if fs.NArg() > 1 {
+	if len(pos) > 1 {
 		fs.Usage()
 		return 2
 	}
-	token, err := c.readToken(fs.Arg(0))
+	token, err := c.readToken(first(pos))
 	if err != nil {
 		return c.fail(err)
 	}
@@ -244,8 +303,35 @@ func (c cli) flags(name, args string) *flag.FlagSet {
 	return fs
 }
 
+// parse parses args with fs, allowing flags after the positional
+// arguments, which it returns. Everything after "--" is positional.
+func parse(fs *flag.FlagSet, args []string) ([]string, error) {
+	var pos []string
+	for {
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		rest := fs.Args()
+		if len(rest) < len(args) && args[len(args)-len(rest)-1] == "--" {
+			return append(pos, rest...), nil
+		}
+		if len(rest) == 0 {
+			return pos, nil
+		}
+		pos, args = append(pos, rest[0]), rest[1:]
+	}
+}
+
+func first(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	return args[0]
+}
+
 func (c cli) fail(err error) int {
-	_, _ = fmt.Fprintln(c.stderr, "ssf:", err)
+	// Errors from the ssf package carry its name already.
+	_, _ = fmt.Fprintln(c.stderr, "ssf:", terminalSafe(strings.TrimPrefix(err.Error(), "ssf: ")))
 	return 1
 }
 
@@ -254,18 +340,49 @@ func (c cli) printJSON(v any) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(c.stdout, "%s\n", out)
+	_, err = fmt.Fprintf(c.stdout, "%s\n", terminalSafe(string(out)))
 	return err
 }
 
-// readToken returns the SET given as arg: the token itself, a file
-// holding it, or, for "-" or no argument, standard input.
+// terminalSafe escapes, as JSON does, what a terminal would act on rather
+// than show: controls other than newline and tab, DEL, C1 controls,
+// formatting characters such as bidirectional overrides, and invalid
+// UTF-8. JSON keeps its meaning, as such characters can only be in its
+// strings.
+func terminalSafe(s string) string {
+	var b strings.Builder
+	for i, r := range s {
+		switch {
+		case r == utf8.RuneError:
+			if _, size := utf8.DecodeRuneInString(s[i:]); size == 1 {
+				b.WriteString(`\ufffd`)
+				continue
+			}
+		case r == '\n' || r == '\t':
+		case r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) || unicode.Is(unicode.Cf, r):
+			if r > 0xffff {
+				hi, lo := utf16.EncodeRune(r)
+				fmt.Fprintf(&b, `\u%04x\u%04x`, hi, lo)
+			} else {
+				fmt.Fprintf(&b, `\u%04x`, r)
+			}
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// readToken returns the SET given as arg: a file holding it, if one has
+// that name, otherwise the token itself; or, for "-" or no argument,
+// standard input.
 func (c cli) readToken(arg string) (string, error) {
 	var r io.Reader
+	_, statErr := os.Stat(arg) //nolint:gosec // G703: the user names the file to read
 	switch {
 	case arg == "" || arg == "-":
 		r = c.stdin
-	case strings.Count(arg, ".") == 2 && !strings.ContainsAny(arg, "/\\"):
+	case statErr != nil && strings.Count(arg, ".") == 2 && !strings.ContainsAny(arg, "/\\"):
 		return arg, nil
 	default:
 		f, err := os.Open(arg) //nolint:gosec // G304: the user names the file to read
@@ -285,10 +402,12 @@ func (c cli) readToken(arg string) (string, error) {
 	return string(bytes.TrimSpace(b)), nil
 }
 
-// tokenParts is a SET's JWS header and claims, as JSON.
+// tokenParts is a SET's JWS header and claims, as JSON, and whether they
+// were verified.
 type tokenParts struct {
-	Header json.RawMessage `json:"header"`
-	Claims json.RawMessage `json:"claims"`
+	Verified bool            `json:"verified"`
+	Header   json.RawMessage `json:"header"`
+	Claims   json.RawMessage `json:"claims"`
 }
 
 // decodeParts splits a compact JWS and decodes its header and payload,
