@@ -50,7 +50,7 @@ itself.
 
 ## Install
 
-Requires Go 1.26.6 or later (per `go.mod`'s `go` directive).
+Requires Go 1.26.9 or later (per `go.mod`'s `go` directive).
 
 ```sh
 go get github.com/idfoundry/ssfgo
