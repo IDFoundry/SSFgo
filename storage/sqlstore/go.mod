@@ -1,6 +1,6 @@
 module github.com/idfoundry/ssfgo/storage/sqlstore
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/idfoundry/ssfgo v0.4.0
