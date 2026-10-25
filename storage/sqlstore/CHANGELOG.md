@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.6](https://github.com/IDFoundry/SSFgo/compare/storage/sqlstore/v0.2.5...storage/sqlstore/v0.2.6) (2026-10-25)
+
+
+### Bug Fixes
+
+* require Go 1.26.10 for GO-2026-6809 ([9ad63a2](https://github.com/IDFoundry/SSFgo/commit/9ad63a24504e1ac8600ef664d48a98dae65662fb))
+
 ## [0.2.5](https://github.com/IDFoundry/SSFgo/compare/storage/sqlstore/v0.2.4...storage/sqlstore/v0.2.5) (2026-10-19)
 
 
