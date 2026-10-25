@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/IDFoundry/SSFgo/compare/v0.4.1...v0.4.2) (2026-10-25)
+
+
+### Bug Fixes
+
+* require Go 1.26.10 for GO-2026-6809 ([9ad63a2](https://github.com/IDFoundry/SSFgo/commit/9ad63a24504e1ac8600ef664d48a98dae65662fb))
+
 ## [0.4.1](https://github.com/IDFoundry/SSFgo/compare/v0.4.0...v0.4.1) (2026-10-19)
 
 
