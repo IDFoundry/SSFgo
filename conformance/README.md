@@ -140,6 +140,10 @@ they can lag it by months.
 
 ### Results
 
+**2026-10-29, suite release-v5.3.4:** the whole matrix passes again on
+the new pin (run 40786754765); the release changed SSF plan metadata
+only.
+
 **2026-10-14, suite release-v5.3.2:** the whole matrix passes — every
 Transmitter variant on memory and SQLite, every CAEP Interop Receiver
 variant and client authentication method, and every module of the base
