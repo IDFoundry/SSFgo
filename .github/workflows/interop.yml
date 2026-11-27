@@ -1,14 +1,21 @@
 name: Interop
 
-# Runs the Receiver against deployed Transmitters — for now Keycloak's,
-# whose SSF support is experimental — at the version
-# interoptest/keycloak/Dockerfile pins (tag and digest). Dependabot
-# proposes a newer Keycloak weekly, and this workflow runs on that pull
-# request, so a release is tested before the pin moves.
+# Runs SSFgo against independent implementations (see
+# interoptest/README.md):
+#
+# - keycloak: the Receiver against Keycloak's Transmitter, whose SSF
+#   support is experimental, at the image interoptest/keycloak/Dockerfile
+#   pins (tag and digest).
+# - easyssf: the Transmitter against easyssf's Receiver, in Go and in
+#   Java, at the versions interoptest/easyssf/go.mod and
+#   interoptest/easyssf/java/pom.xml pin.
+#
+# Dependabot proposes newer releases of each weekly, and this workflow
+# runs on that pull request, so a release is tested before the pin moves.
 #
 # Daily, on demand, and on a pull request that changes these tests or the
-# packages the Receiver builds from. Informational only: not a required
-# check, since it depends on another project's preview feature.
+# packages they build from. Informational only: not a required check,
+# since it depends on other projects' releases.
 on:
   schedule:
     - cron: '0 7 * * *' # daily, 7am UTC
@@ -17,7 +24,7 @@ on:
     paths:
       - interoptest/**
       - .github/workflows/interop.yml
-      # The Receiver and everything the test imports.
+      # The Receiver, the Transmitter and everything the tests import.
       - '*.go'
       - go.mod
       - caep/**
@@ -26,7 +33,9 @@ on:
       - revocation/**
       - risc/**
       - scim/**
+      - ssftest/**
       - storage/**
+      - transmitter/**
 
 permissions:
   contents: read
@@ -93,3 +102,57 @@ jobs:
       - name: Keycloak logs
         if: failure()
         run: docker logs keycloak 2>&1 | tail -300
+
+  easyssf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: interoptest/easyssf
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: interoptest/easyssf/go.mod
+          check-latest: true
+          # Third-party code runs in this job, so it caches no build state
+          # another workflow could restore.
+          cache: false
+
+      # easyssf for Java needs Java 21.
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # The test module's path sits under the library's, so Go would let
+      # it import the library's internal packages, which a real
+      # integrator can't. Keep it to the public API, as ci.yml does for
+      # examples/.
+      - name: public API only
+        run: |
+          internal=$(go list -test -f '{{range .Imports}}{{.}} {{end}}{{range .TestImports}}{{.}} {{end}}' ./... | tr ' ' '\n' | grep '^github.com/idfoundry/ssfgo/internal' || true)
+          if [ -n "$internal" ]; then
+            echo "interoptest/easyssf must use SSFgo's public API only; found: $internal"
+            exit 1
+          fi
+
+      - name: gofmt and vet
+        run: |
+          fmt_out="$(gofmt -l .)"
+          if [ -n "$fmt_out" ]; then
+            echo "The following files are not gofmt-formatted:"
+            echo "$fmt_out"
+            exit 1
+          fi
+          go vet ./...
+
+      - name: Build the Java program
+        working-directory: interoptest/easyssf/java
+        run: mvn -B -q --no-transfer-progress compile dependency:copy-dependencies
+
+      - name: Run easyssf-go and easyssf-java
+        run: EASYSSF_JAVA="$PWD/java" go test -count=1 -race -v ./...

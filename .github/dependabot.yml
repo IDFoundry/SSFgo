@@ -46,3 +46,24 @@ updates:
     directory: /interoptest/keycloak
     schedule:
       interval: weekly
+
+  # The easyssf interop test's Go module (interoptest/easyssf): the
+  # easyssf-go release SSFgo's Transmitter is tested against. A bump is how
+  # the test moves to a new release, so interop.yml runs on its pull
+  # request. Its requirement on this module is left alone: a replace
+  # directive points it at the checkout.
+  - package-ecosystem: gomod
+    directory: /interoptest/easyssf
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: github.com/idfoundry/ssfgo
+
+  # The easyssf interop test's Java program (interoptest/easyssf/java):
+  # the easyssf-receiver release, the logging binding and the Maven
+  # plugins, each pinned in its pom.xml. Test tooling only: nothing here
+  # ships.
+  - package-ecosystem: maven
+    directory: /interoptest/easyssf/java
+    schedule:
+      interval: weekly

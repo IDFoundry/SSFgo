@@ -1,16 +1,19 @@
 # Interoperability tests
 
-Tests of SSFgo against deployed implementations, beyond what the OpenID
-Foundation conformance suite ([../conformance](../conformance)) covers.
-Each is skipped unless pointed at a running peer, and
+Tests of SSFgo against independent implementations, beyond what the
+OpenID Foundation conformance suite ([../conformance](../conformance))
+covers: the Receiver against [Keycloak](#keycloak)'s Transmitter, and the
+Transmitter against [easyssf](#easyssf)'s Receiver, in Go and in Java.
+
 [`interop.yml`](../.github/workflows/interop.yml) runs them daily, on
-demand, and on pull requests that change them or the packages the
-Receiver builds from. It is not a required check, since it depends on
-other projects' releases. Each peer's version is pinned where
-Dependabot can see it — Keycloak's in
-[`keycloak/Dockerfile`](keycloak/Dockerfile), a file that is never
-built — so Dependabot proposes newer releases weekly, and the workflow
-runs on that pull request before the pin moves.
+demand, and on pull requests that change them or the packages they build
+from. It is not a required check, since it depends on other projects'
+releases. Each peer's version is pinned where Dependabot can see it —
+Keycloak's in [`keycloak/Dockerfile`](keycloak/Dockerfile), a file that is
+never built, easyssf's in [`easyssf/go.mod`](easyssf/go.mod) and
+[`easyssf/java/pom.xml`](easyssf/java/pom.xml) — so Dependabot proposes
+newer releases weekly, and the workflow runs on that pull request before
+the pin moves.
 
 ## Keycloak
 
@@ -80,3 +83,55 @@ realm `ssfgo-interop` and deletes it afterwards.
 - **stream-updated** carries `status` as an object rather than a string,
   which a strict Receiver rejects. Keycloak sends it only when a stream's
   status changes, which the test does not do.
+
+## easyssf
+
+[`easyssf`](easyssf) runs [easyssf](https://easyssf.org), an open-source
+SSF Receiver library, against an SSFgo Transmitter
+(`ssftest.NewTransmitter`): easyssf-go 0.7.0 in-process, and
+easyssf-receiver 0.7.0 for Java as a small program
+([`easyssf/java`](easyssf/java)) the Go test drives over stdin and stdout.
+It is its own Go module, using SSFgo's public API only, so that easyssf's
+dependencies stay out of SSFgo's.
+
+For each library and each delivery method, push and poll, the test checks
+that the library:
+
+- registers its own stream through the stream management API, with the
+  delivery method asked for;
+- requests a verification event with a `state` of its own, and accepts
+  the one the Transmitter sends;
+- is handed CAEP session-revoked and RISC account-disabled, verified,
+  about the right subject;
+- deletes its stream when it stops.
+
+The Java program serves no HTTPS of its own: the Go test serves the push
+endpoint, as an application's web framework would, and hands each request
+to easyssf's push handler (`SsfPushHandler.handle`).
+
+### Running it locally
+
+easyssf-go needs nothing but Go, so `go test` runs it; the Java half
+needs Java 21 and Maven, and is skipped unless `EASYSSF_JAVA` names the
+built program:
+
+```sh
+cd interoptest/easyssf
+go test -count=1 -v -run TestEasySSFGo .
+
+(cd java && mvn -B -q compile dependency:copy-dependencies)
+EASYSSF_JAVA=$PWD/java go test -count=1 -v -run TestEasySSFJava .
+```
+
+### What easyssf does that isn't obvious
+
+- **Its own revocation handler.** session-revoked about a subject with no
+  `sid` or `sub` — an email address, say — is handed to the application
+  but logs a warning that no tokens were revoked.
+- **Verification** must have an `opaque` `sub_id` naming the stream (SSF
+  1.0 §8.1.4.1), and its `state` must be one the library is waiting for;
+  a verification event without a `state` is accepted.
+- **Streams it creates** are reused on the next start, by the same
+  credentials, and deleted on shutdown only when asked
+  (`stream.delete-on-shutdown`, `setDeleteOnShutdown`), which the test
+  does.
