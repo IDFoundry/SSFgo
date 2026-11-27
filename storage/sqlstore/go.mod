@@ -5,7 +5,7 @@ go 1.26.10
 require (
 	github.com/idfoundry/ssfgo v0.4.0
 	github.com/jackc/pgx/v5 v5.13.0
-	modernc.org/sqlite v1.62.0
+	modernc.org/sqlite v1.63.0
 )
 
 require (
