@@ -26,7 +26,7 @@ Receiver accepts.
 ## Keycloak
 
 Keycloak 26.8 ships an SSF Transmitter as an experimental feature
-(`--features=ssf`), tested against SSFgo weekly in
+(`--features=ssf`), tested against SSFgo daily in
 [`interoptest`](../../interoptest/README.md). By default it gives each
 stream the audience `<client_id>/<stream_id>`, and revokes every session
 of a user by naming the session `ALL`:

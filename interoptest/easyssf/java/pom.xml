@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The Java half of the easyssf interop test (see ../../README.md): a small
+  program that runs easyssf's plain-Java Receiver against an SSFgo
+  Transmitter, driven by ../java_test.go. Every version is pinned here;
+  Dependabot (the maven ecosystem in .github/dependabot.yml) proposes bumps,
+  and interop.yml runs on that pull request.
+
+  Build it with: mvn -B -q compile dependency:copy-dependencies
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>dev.idfoundry.ssfgo.interop</groupId>
+    <artifactId>easyssf-java-peer</artifactId>
+    <version>0</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.easyssf</groupId>
+            <artifactId>easyssf-receiver</artifactId>
+            <version>0.7.0</version>
+        </dependency>
+        <!-- easyssf logs through SLF4J; the simple binding writes to stderr,
+             which the Go test passes on to its log. -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>2.0.20</version>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.5.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.16.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <includeScope>runtime</includeScope>
+                    <outputDirectory>${project.build.directory}/lib</outputDirectory>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

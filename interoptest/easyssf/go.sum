@@ -1,0 +1,4 @@
+github.com/easyssf/easyssf-go v0.7.0 h1:F9Be/I6b3ZyoB/Q6gxJ4cHqyoxF1S+/ShYKhIsBcFPk=
+github.com/easyssf/easyssf-go v0.7.0/go.mod h1:UnK73DjeMXGj+oJiPgrQC4TQLxu2oxqsdZjRblTzGPQ=
+github.com/go-jose/go-jose/v4 v4.1.6 h1:sNRkftxFJxwsILiQukqp5z83QBSmntVwmgRY7AqBDO4=
+github.com/go-jose/go-jose/v4 v4.1.6/go.mod h1:x4oUasVrzR7071A4TnHLGSPpNOm2a21K9Kf04k1rs08=

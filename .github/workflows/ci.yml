@@ -315,6 +315,12 @@ jobs:
           working-directory: examples/session-revocation
           args: --config ../../.golangci.yml
 
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12
+          working-directory: interoptest/easyssf
+          args: --config ../../.golangci.yml
+
   govulncheck:
     runs-on: ubuntu-latest
     steps:

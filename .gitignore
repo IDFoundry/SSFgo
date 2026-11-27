@@ -31,3 +31,6 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# The easyssf interop test's Maven build output
+interoptest/easyssf/java/target/
