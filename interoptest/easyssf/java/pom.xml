@@ -4,7 +4,7 @@
   program that runs easyssf's plain-Java Receiver against an SSFgo
   Transmitter, driven by ../java_test.go. Every version is pinned here;
   Dependabot (the maven ecosystem in .github/dependabot.yml) proposes bumps,
-  and interop.yml runs on that pull request.
+  and interop-easyssf.yml runs on that pull request.
 
   Build it with: mvn -B -q compile dependency:copy-dependencies
 -->

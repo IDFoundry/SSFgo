@@ -38,9 +38,9 @@ updates:
       interval: weekly
 
   # The Keycloak image the interop test runs (interoptest/keycloak): a
-  # never-built Dockerfile whose FROM line interop.yml reads, so the image
+  # never-built Dockerfile whose FROM line interop-keycloak.yml reads, so the image
   # is pinned (tag and digest) in that one place. A bump is how the test
-  # moves to a new Keycloak release, so interop.yml runs on its pull
+  # moves to a new Keycloak release, so interop-keycloak.yml runs on its pull
   # request.
   - package-ecosystem: docker
     directory: /interoptest/keycloak
@@ -49,7 +49,7 @@ updates:
 
   # The easyssf interop test's Go module (interoptest/easyssf): the
   # easyssf-go release SSFgo's Transmitter is tested against. A bump is how
-  # the test moves to a new release, so interop.yml runs on its pull
+  # the test moves to a new release, so interop-easyssf.yml runs on its pull
   # request. Its requirement on this module is left alone: a replace
   # directive points it at the checkout.
   - package-ecosystem: gomod

@@ -1,0 +1,90 @@
+name: easyssf interop
+
+# SSFgo's Transmitter against easyssf's Receiver, in Go and in Java, at
+# the versions interoptest/easyssf/go.mod and
+# interoptest/easyssf/java/pom.xml pin. Dependabot proposes newer releases
+# weekly, and this workflow runs on that pull request, so a release is
+# tested before the pin moves.
+#
+# Daily, on demand, and on a pull request that changes the test or the
+# packages it builds from. Informational only: not a required check,
+# since it depends on another project's releases. See
+# interoptest/README.md.
+on:
+  schedule:
+    - cron: '15 7 * * *' # daily, 7:15 UTC; the interop workflows are 15 minutes apart
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - interoptest/easyssf/**
+      - .github/workflows/interop-easyssf.yml
+      # The Receiver, the Transmitter and everything the test imports.
+      - '*.go'
+      - go.mod
+      - caep/**
+      - internal/**
+      - receiver/**
+      - revocation/**
+      - risc/**
+      - scim/**
+      - ssftest/**
+      - storage/**
+      - transmitter/**
+
+permissions:
+  contents: read
+
+jobs:
+  easyssf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: interoptest/easyssf
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: interoptest/easyssf/go.mod
+          check-latest: true
+          # Third-party code runs in this job, so it caches no build state
+          # another workflow could restore.
+          cache: false
+
+      # easyssf for Java needs Java 21.
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # The test module's path sits under the library's, so Go would let
+      # it import the library's internal packages, which a real
+      # integrator can't. Keep it to the public API, as ci.yml does for
+      # examples/.
+      - name: public API only
+        run: |
+          internal=$(go list -test -f '{{range .Imports}}{{.}} {{end}}{{range .TestImports}}{{.}} {{end}}' ./... | tr ' ' '\n' | grep '^github.com/idfoundry/ssfgo/internal' || true)
+          if [ -n "$internal" ]; then
+            echo "interoptest/easyssf must use SSFgo's public API only; found: $internal"
+            exit 1
+          fi
+
+      - name: gofmt and vet
+        run: |
+          fmt_out="$(gofmt -l .)"
+          if [ -n "$fmt_out" ]; then
+            echo "The following files are not gofmt-formatted:"
+            echo "$fmt_out"
+            exit 1
+          fi
+          go vet ./...
+
+      - name: Build the Java program
+        working-directory: interoptest/easyssf/java
+        run: mvn -B -q --no-transfer-progress compile dependency:copy-dependencies
+
+      - name: Run easyssf-go and easyssf-java
+        run: EASYSSF_JAVA="$PWD/java" go test -count=1 -race -v ./...

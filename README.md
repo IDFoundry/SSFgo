@@ -3,6 +3,8 @@
 [![Release](https://img.shields.io/github/v/release/IDFoundry/SSFgo?filter=v*)](https://github.com/IDFoundry/SSFgo/releases)
 [![CI](https://github.com/IDFoundry/SSFgo/actions/workflows/ci.yml/badge.svg)](https://github.com/IDFoundry/SSFgo/actions/workflows/ci.yml)
 [![SSF Conformance](https://github.com/IDFoundry/SSFgo/actions/workflows/conformance.yml/badge.svg)](https://github.com/IDFoundry/SSFgo/actions/workflows/conformance.yml)
+[![Keycloak interop](https://github.com/IDFoundry/SSFgo/actions/workflows/interop-keycloak.yml/badge.svg?branch=main)](https://github.com/IDFoundry/SSFgo/actions/workflows/interop-keycloak.yml)
+[![easyssf interop](https://github.com/IDFoundry/SSFgo/actions/workflows/interop-easyssf.yml/badge.svg?branch=main)](https://github.com/IDFoundry/SSFgo/actions/workflows/interop-easyssf.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/idfoundry/ssfgo.svg)](https://pkg.go.dev/github.com/idfoundry/ssfgo)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/IDFoundry/SSFgo/badge)](https://securityscorecards.dev/viewer/?uri=github.com/IDFoundry/SSFgo)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
