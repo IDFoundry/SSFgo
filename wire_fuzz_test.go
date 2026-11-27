@@ -78,7 +78,7 @@ func FuzzWireTypes(f *testing.F) {
 	})
 }
 
-func roundTrip(t *testing.T, name string, v any, into any) {
+func roundTrip(t *testing.T, name string, v, into any) {
 	t.Helper()
 	encoded, err := json.Marshal(v)
 	if err != nil {

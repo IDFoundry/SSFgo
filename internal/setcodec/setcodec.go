@@ -95,7 +95,7 @@ func (e *DecodeError) Error() string { return "setcodec: " + e.Code + ": " + e.E
 
 func (e *DecodeError) Unwrap() error { return e.Err }
 
-func reject(code string, format string, args ...any) error {
+func reject(code, format string, args ...any) error {
 	return &DecodeError{Code: code, Err: fmt.Errorf(format, args...)}
 }
 
