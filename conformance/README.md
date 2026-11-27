@@ -140,6 +140,11 @@ they can lag it by months.
 
 ### Results
 
+**2026-11-27, suite release-v5.3.5:** the whole matrix passes on the
+new pin (run 46010365008); the release changed no SSF module or
+condition, only other specifications' plans and the suite's login
+handling.
+
 **2026-10-29, suite release-v5.3.4:** the whole matrix passes again on
 the new pin (run 40786754765); the release changed SSF plan metadata
 only.
