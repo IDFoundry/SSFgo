@@ -3,9 +3,14 @@
 Tests of SSFgo against deployed implementations, beyond what the OpenID
 Foundation conformance suite ([../conformance](../conformance)) covers.
 Each is skipped unless pointed at a running peer, and
-[`interop.yml`](../.github/workflows/interop.yml) runs them weekly, on
-demand, and on pull requests that change them — not on every pull
-request, since they depend on other projects' releases.
+[`interop.yml`](../.github/workflows/interop.yml) runs them daily, on
+demand, and on pull requests that change them or the packages the
+Receiver builds from. It is not a required check, since it depends on
+other projects' releases. Each peer's version is pinned where
+Dependabot can see it — Keycloak's in
+[`keycloak/Dockerfile`](keycloak/Dockerfile), a file that is never
+built — so Dependabot proposes newer releases weekly, and the workflow
+runs on that pull request before the pin moves.
 
 ## Keycloak
 
