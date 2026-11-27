@@ -5,10 +5,11 @@ OpenID Foundation conformance suite ([../conformance](../conformance))
 covers: the Receiver against [Keycloak](#keycloak)'s Transmitter, and the
 Transmitter against [easyssf](#easyssf)'s Receiver, in Go and in Java.
 
-[`interop.yml`](../.github/workflows/interop.yml) runs them daily, on
-demand, and on pull requests that change them or the packages they build
-from. It is not a required check, since it depends on other projects'
-releases. Each peer's version is pinned where Dependabot can see it —
+[`interop-keycloak.yml`](../.github/workflows/interop-keycloak.yml) and
+[`interop-easyssf.yml`](../.github/workflows/interop-easyssf.yml) run them
+daily, on demand, and on pull requests that change them or the packages
+they build from. Neither is a required check, since they depend on other
+projects' releases; each has a badge in the top-level README. Each peer's version is pinned where Dependabot can see it —
 Keycloak's in [`keycloak/Dockerfile`](keycloak/Dockerfile), a file that is
 never built, easyssf's in [`easyssf/go.mod`](easyssf/go.mod) and
 [`easyssf/java/pom.xml`](easyssf/java/pom.xml) — so Dependabot proposes

@@ -1,4 +1,4 @@
-# Never built. .github/workflows/interop.yml runs this image with docker
+# Never built. .github/workflows/interop-keycloak.yml runs this image with docker
 # run, reading the reference from the FROM line below, so the pin lives in
 # one place and Dependabot (the docker ecosystem in .github/dependabot.yml)
 # can move it. A bump also updates the version in interoptest/README.md.
