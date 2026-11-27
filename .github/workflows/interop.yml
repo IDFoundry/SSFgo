@@ -1,17 +1,32 @@
 name: Interop
 
 # Runs the Receiver against deployed Transmitters — for now Keycloak's,
-# whose SSF support is experimental — so it runs weekly, on demand, and on
-# pull requests that change these tests, rather than gating every pull
-# request on another project's preview feature.
+# whose SSF support is experimental — at the version
+# interoptest/keycloak/Dockerfile pins (tag and digest). Dependabot
+# proposes a newer Keycloak weekly, and this workflow runs on that pull
+# request, so a release is tested before the pin moves.
+#
+# Daily, on demand, and on a pull request that changes these tests or the
+# packages the Receiver builds from. Informational only: not a required
+# check, since it depends on another project's preview feature.
 on:
   schedule:
-    - cron: '0 7 * * 1' # Mondays, 7am UTC
+    - cron: '0 7 * * *' # daily, 7am UTC
   workflow_dispatch: {}
   pull_request:
     paths:
       - interoptest/**
       - .github/workflows/interop.yml
+      # The Receiver and everything the test imports.
+      - '*.go'
+      - go.mod
+      - caep/**
+      - internal/**
+      - receiver/**
+      - revocation/**
+      - risc/**
+      - scim/**
+      - storage/**
 
 permissions:
   contents: read
@@ -20,9 +35,6 @@ jobs:
   keycloak:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      # Pinned by digest, so the tag cannot be moved under the test.
-      KEYCLOAK_IMAGE: quay.io/keycloak/keycloak:26.8.0@sha256:b0f60d489d51c5d113390bdf5461d4c06e6051be026c05549f2e1e10ec352bcc
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -46,8 +58,15 @@ jobs:
             -keyout "$RUNNER_TEMP/certs/tls.key" -out "$RUNNER_TEMP/certs/tls.crt"
           chmod 644 "$RUNNER_TEMP/certs/tls.key"
 
+      # The image is pinned by digest, so the tag cannot be moved under the
+      # test.
       - name: Start Keycloak
         run: |
+          KEYCLOAK_IMAGE="$(awk '/^FROM /{print $2}' interoptest/keycloak/Dockerfile)"
+          case "$KEYCLOAK_IMAGE" in
+            quay.io/keycloak/keycloak:*@sha256:*) ;;
+            *) echo "interoptest/keycloak/Dockerfile must pin the image by digest: '$KEYCLOAK_IMAGE'"; exit 1 ;;
+          esac
           docker run -d --name keycloak -p 8443:8443 \
             -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
             -v "$RUNNER_TEMP/certs:/opt/keycloak/conf/certs:ro" \
