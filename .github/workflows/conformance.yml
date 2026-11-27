@@ -17,8 +17,8 @@ permissions:
 # release's images; move all three together. The newer-suite job says
 # when a newer release is out.
 env:
-  SUITE_TAG: release-v5.3.4
-  SUITE_COMMIT: 23353b36957d6466010de767c812d2c91ed37638
+  SUITE_TAG: release-v5.3.5
+  SUITE_COMMIT: 246b2c14b8562012b02d0ac462d667fe49e1a937
 
 jobs:
   newer-suite:
